@@ -1,5 +1,12 @@
+# pnpm 11 fails the install if a package with an install script is neither
+# allowed nor blocked here. embedded-postgres (test/dev database) ships one
+# binary package per platform; Netlify builds on linux-x64.
 allowBuilds:
   '@embedded-postgres/windows-x64': true
+  '@embedded-postgres/linux-x64': true
+  '@embedded-postgres/linux-arm64': true
+  '@embedded-postgres/darwin-arm64': true
+  '@embedded-postgres/darwin-x64': true
   esbuild: true
   sharp: false
   unrs-resolver: false
