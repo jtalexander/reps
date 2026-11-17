@@ -1,0 +1,260 @@
+"use client";
+/**
+ * The one play renderer. Draws a play from its data (never the crop), so it
+ * can hide routes, flip, animate, and overlay a defensive look.
+ * Units are yards: x from the ball (right +), y downfield (+). SVG y = TOP - y.
+ */
+import { useId } from "react";
+import { buildLook, defenderForKey, playSideSign, type DefensiveLook, type Front } from "@/domain/defense";
+import { flipPlay, type Coverage, type PlayData, type Player, type Point } from "@/domain/play";
+import { ROUTE_BY_KEY, outsideSign, routePath } from "@/domain/routes";
+
+const TOP = 22;
+const BOTTOM = -12;
+const HALF = 27;
+
+export interface PlaySvgProps {
+  data: PlayData;
+  flip?: boolean;
+  /** "all": no assignments drawn; "player": hide only `highlight`'s assignment */
+  hide?: "none" | "all" | "player";
+  highlight?: string | null;
+  coverage?: Coverage | null;
+  front?: Front;
+  readKey?: { key: string; reaction?: string } | null;
+  routeOnly?: { route: string; side: "left" | "right" } | null;
+  /** progression order badges: player id -> 1, 2, 3 */
+  order?: Record<string, number>;
+  animate?: boolean;
+  onPlayerTap?: (id: string) => void;
+  onDefenderTap?: (roles: string[], id: string) => void;
+  selectedDefender?: string | null;
+  className?: string;
+  /** clip the vertical extent for compact cards */
+  compact?: boolean;
+}
+
+const sy = (y: number) => TOP - y;
+const toPath = (pts: Point[], ox: number, oy: number) =>
+  pts.map(([x, y], i) => `${i ? "L" : "M"}${(ox + x).toFixed(2)} ${sy(oy + y).toFixed(2)}`).join(" ");
+
+function zigzag(from: Point, to: Point): string {
+  const [x0, y0] = from;
+  const [x1, y1] = to;
+  const len = Math.hypot(x1 - x0, y1 - y0);
+  const n = Math.max(4, Math.round(len / 0.8));
+  const nx = -(y1 - y0) / (len || 1);
+  const ny = (x1 - x0) / (len || 1);
+  let d = `M${x0} ${sy(y0)}`;
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    const amp = i === n ? 0 : (i % 2 ? 0.35 : -0.35);
+    d += ` L${(x0 + (x1 - x0) * t + nx * amp).toFixed(2)} ${sy(y0 + (y1 - y0) * t + ny * amp).toFixed(2)}`;
+  }
+  return d;
+}
+
+/** Path for the read key's reaction, relative to the defender. */
+function reactionVector(reaction: string, def: { x: number; y: number }, play: PlayData): Point[] {
+  const inside = def.x > 0 ? -1 : 1;
+  const qb = play.players.find((p) => p.id === "QB");
+  switch (reaction) {
+    case "crashes":
+    case "tackles_dive":
+      return [[0, 0], [inside * 2.5, -1.5]];
+    case "stays_home":
+      return [[0, 0], [-inside * 0.6, 1.2]];
+    case "attacks_qb":
+      return qb ? [[0, 0], [(qb.x - def.x) * 0.6, (qb.y - def.y) * 0.6]] : [[0, 0], [inside, -2.5]];
+    case "takes_pitch":
+      return [[0, 0], [-inside * 3, -0.5]];
+    case "fits_run":
+      return [[0, 0], [inside * 1.5, -3]];
+    case "drops":
+      return [[0, 0], [-inside * 1, 4]];
+    default:
+      return [[0, 0], [0, 1]];
+  }
+}
+
+export function PlaySvg(props: PlaySvgProps) {
+  const uid = useId().replace(/:/g, "");
+  const data = props.flip ? flipPlay(props.data) : props.data;
+  const hide = props.hide ?? "none";
+  const look: DefensiveLook | null = props.coverage || props.readKey ? buildLook(data, props.coverage ?? "cover_3", props.front ?? "4-3") : null;
+  const keyDef = props.readKey && look ? defenderForKey(look, props.readKey.key) : undefined;
+  const strength = data.formation.strength === "left" ? "left" : "right";
+
+  const showAssignment = (p: Player) => {
+    if (props.routeOnly) return false;
+    if (hide === "all") return false;
+    if (hide === "player" && p.id === props.highlight) return false;
+    return true;
+  };
+
+  const lines: React.ReactNode[] = [];
+  data.players.forEach((p, i) => {
+    if (!showAssignment(p)) return;
+    const start: Point = data.motion && data.motion.player === p.id && data.motion.end ? data.motion.end : [p.x, p.y];
+    const dim = props.highlight && p.id !== props.highlight && hide !== "player";
+    const op = dim ? 0.35 : 1;
+    if (p.route) {
+      const pts = routePath(p.route, p, strength);
+      if (pts) {
+        lines.push(
+          <path key={`r${i}`} d={toPath(pts, start[0], start[1])} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.28} fill="none" markerEnd={`url(#arrow-${uid})`} opacity={op} style={{ animationDelay: data.motion ? "0.9s" : "0s" }} />,
+        );
+      }
+    } else if (p.block) {
+      const pts = p.block.path && p.block.path.length >= 2 ? p.block.path : ([[0, 0], [0, 1.2]] as Point[]);
+      lines.push(
+        <path key={`b${i}`} d={toPath(pts, start[0], start[1])} stroke="currentColor" strokeWidth={0.24} fill="none" markerEnd={`url(#block-${uid})`} opacity={op} />,
+      );
+    } else if (p.path && p.path.length >= 2) {
+      const carry = p.assignment_type === "carry";
+      lines.push(
+        <path key={`c${i}`} d={toPath(p.path, start[0], start[1])} className={props.animate ? "draw" : undefined} stroke={carry ? "var(--carry)" : "currentColor"} strokeWidth={0.3} strokeDasharray={p.assignment_type === "fake" ? "0.6 0.5" : undefined} fill="none" markerEnd={`url(#${carry ? "arrowc" : "arrow"}-${uid})`} opacity={op} />,
+      );
+    }
+  });
+
+  // motion
+  if (data.motion && data.motion.end && !props.routeOnly && hide !== "all") {
+    const p = data.players.find((x) => x.id === data.motion!.player);
+    if (p) lines.push(<path key="motion" d={zigzag([p.x, p.y], data.motion.end)} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.2} fill="none" />);
+  } else if (data.motion && !data.motion.end && !props.routeOnly && hide !== "all") {
+    const p = data.players.find((x) => x.id === data.motion!.player);
+    if (p) {
+      const dir = data.motion.direction === "left" ? -1 : data.motion.direction === "right" ? 1 : -Math.sign(p.x || 1);
+      lines.push(<path key="motion" d={zigzag([p.x, p.y], [p.x + dir * 6, p.y])} stroke="currentColor" strokeWidth={0.2} fill="none" />);
+    }
+  }
+
+  // route-only mode: one route from a lone receiver
+  let lone: React.ReactNode = null;
+  if (props.routeOnly) {
+    const x = props.routeOnly.side === "left" ? -12 : 12;
+    const def = ROUTE_BY_KEY.get(props.routeOnly.route);
+    const pts = def?.shape(def.depth).map(([dx, dy]) => [dx * outsideSign({ x, side: props.routeOnly!.side }), dy] as Point);
+    lone = (
+      <g>
+        {pts && <path d={toPath(pts, x, 0)} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.3} fill="none" markerEnd={`url(#arrow-${uid})`} />}
+        <circle cx={x} cy={sy(0)} r={0.9} fill="var(--card)" stroke="currentColor" strokeWidth={0.2} />
+        <rect x={-0.7} y={sy(0) - 0.7} width={1.4} height={1.4} fill="var(--card)" stroke="currentColor" strokeWidth={0.2} />
+      </g>
+    );
+  }
+
+  const yMin = props.compact ? -9 : BOTTOM;
+  const yMax = props.compact ? 16 : TOP;
+  const viewBox = `${-HALF} ${sy(yMax)} ${HALF * 2} ${yMax - yMin}`;
+
+  return (
+    <svg viewBox={viewBox} className={props.className} role="img" aria-label={data.name} style={{ color: "var(--ink)" }}>
+      <defs>
+        <marker id={`arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+        </marker>
+        <marker id={`arrowc-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--carry)" />
+        </marker>
+        <marker id={`block-${uid}`} viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M5 0 L5 10" stroke="currentColor" strokeWidth="2" />
+        </marker>
+      </defs>
+      <rect x={-HALF} y={sy(yMax)} width={HALF * 2} height={yMax - yMin} fill="var(--field)" />
+      {Array.from({ length: Math.floor((yMax - yMin) / 5) + 1 }, (_, i) => Math.ceil(yMin / 5) * 5 + i * 5).map((y) => (
+        <line key={y} x1={-HALF} x2={HALF} y1={sy(y)} y2={sy(y)} stroke="var(--yard)" strokeWidth={0.12} />
+      ))}
+      {Array.from({ length: yMax - yMin }, (_, i) => yMin + i).map((y) => (
+        <g key={`h${y}`}>
+          <line x1={-3.1} x2={-2.5} y1={sy(y)} y2={sy(y)} stroke="var(--yard)" strokeWidth={0.1} />
+          <line x1={2.5} x2={3.1} y1={sy(y)} y2={sy(y)} stroke="var(--yard)" strokeWidth={0.1} />
+        </g>
+      ))}
+      <line x1={-HALF} x2={HALF} y1={sy(0)} y2={sy(0)} stroke="var(--los)" strokeWidth={0.2} />
+
+      {look && (
+        <g>
+          {look.zones.map((z, i) => (
+            <g key={i}>
+              <ellipse cx={z.x} cy={sy(z.y)} rx={z.rx} ry={z.ry} fill="var(--zone)" stroke="var(--zone-line)" strokeWidth={0.08} />
+              <text x={z.x} y={sy(z.y) + 0.35} fontSize={0.9} textAnchor="middle" fill="var(--muted)">
+                {z.label}
+              </text>
+            </g>
+          ))}
+          {Object.entries(look.man).map(([d, o]) => {
+            const def = look.defenders.find((x) => x.id === d);
+            const off = data.players.find((x) => x.id === o);
+            if (!def || !off) return null;
+            return <line key={d} x1={def.x} y1={sy(def.y)} x2={off.x} y2={sy(off.y)} stroke="var(--zone-line)" strokeWidth={0.1} strokeDasharray="0.4 0.4" />;
+          })}
+          {look.defenders.map((d) => {
+            const isKey = keyDef?.id === d.id;
+            const sel = props.selectedDefender === d.id;
+            return (
+              <g
+                key={d.id}
+                onClick={props.onDefenderTap ? () => props.onDefenderTap!(d.roles, d.id) : undefined}
+                style={props.onDefenderTap ? { cursor: "pointer" } : undefined}
+              >
+                {(isKey || sel) && <circle cx={d.x} cy={sy(d.y)} r={1.5} fill="var(--key)" opacity={0.35} />}
+                {props.onDefenderTap && <circle cx={d.x} cy={sy(d.y)} r={1.4} fill="transparent" />}
+                <text x={d.x} y={sy(d.y) + 0.45} fontSize={1.3} fontWeight={700} textAnchor="middle" fill={isKey || sel ? "var(--key-ink)" : "var(--def)"}>
+                  {d.label}
+                </text>
+                {look.blitzers.includes(d.id) && <path d={toPath([[0, 0], [0, -2.5]], d.x, d.y - 0.6)} stroke="var(--def)" strokeWidth={0.15} fill="none" markerEnd={`url(#arrow-${uid})`} />}
+              </g>
+            );
+          })}
+          {keyDef && props.readKey?.reaction && (
+            <path
+              d={toPath(reactionVector(props.readKey.reaction, keyDef, data), keyDef.x, keyDef.y - 0.4)}
+              stroke="var(--key-ink)"
+              strokeWidth={0.3}
+              fill="none"
+              markerEnd={`url(#arrow-${uid})`}
+              className={props.animate ? "draw" : undefined}
+            />
+          )}
+        </g>
+      )}
+
+      {!props.routeOnly && lines}
+      {!props.routeOnly &&
+        data.players.map((p) => {
+          const isC = p.id === "C";
+          const hl = props.highlight === p.id;
+          const tap = props.onPlayerTap ? () => props.onPlayerTap!(p.id) : undefined;
+          const r = 0.9;
+          return (
+            <g key={p.id + p.x} onClick={tap} style={tap ? { cursor: "pointer" } : undefined}>
+              {tap && <circle cx={p.x} cy={sy(p.y)} r={1.6} fill="transparent" />}
+              {isC ? (
+                <rect x={p.x - r * 0.8} y={sy(p.y) - r * 0.8} width={r * 1.6} height={r * 1.6} fill={hl ? "var(--hl)" : "var(--card)"} stroke="currentColor" strokeWidth={0.18} />
+              ) : (
+                <circle cx={p.x} cy={sy(p.y)} r={r} fill={hl ? "var(--hl)" : "var(--card)"} stroke="currentColor" strokeWidth={0.18} />
+              )}
+              {!/^(LT|LG|C|RG|RT)$/.test(p.id) && (
+                <text x={p.x} y={sy(p.y) + 0.38} fontSize={p.id.length > 1 ? 0.8 : 1.05} fontWeight={700} textAnchor="middle" fill={hl ? "var(--hl-ink)" : "currentColor"}>
+                  {p.id}
+                </text>
+              )}
+              {props.order?.[p.id] && (
+                <g>
+                  <circle cx={p.x + 1.1} cy={sy(p.y) - 1.1} r={0.65} fill="var(--accent)" />
+                  <text x={p.x + 1.1} y={sy(p.y) - 0.85} fontSize={0.8} fontWeight={700} textAnchor="middle" fill="var(--accent-ink)">
+                    {props.order[p.id]}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+      {lone}
+    </svg>
+  );
+}
+
+export { playSideSign };

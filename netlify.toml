@@ -1,0 +1,12 @@
+# Netlify build configuration for Reps.
+
+[build]
+  command = "pnpm build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Production deploys apply pending migrations before building.
+[context.production]
+  command = "pnpm db:migrate && pnpm build"
