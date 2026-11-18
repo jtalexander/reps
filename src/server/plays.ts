@@ -3,7 +3,7 @@
  * plays in step with the team's concept library. Callers authorize the team
  * first (requireCoach); every query here is scoped by teamId.
  */
-import "server-only";
+// No "server-only": the Netlify background reader imports this module.
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { plays, teamConcepts, teams } from "@/db/schema";
@@ -25,7 +25,10 @@ export async function conceptsForTeam(teamId: string, database: Db = db): Promis
 
 export async function getPlay(teamId: string, playId: string, database: Db = db): Promise<PlayRow | null> {
   if (!/^[0-9a-f-]{36}$/i.test(playId)) return null;
-  const [row] = await database.select().from(plays).where(and(eq(plays.teamId, teamId), eq(plays.id, playId)));
+  const [row] = await database
+    .select()
+    .from(plays)
+    .where(and(eq(plays.teamId, teamId), eq(plays.id, playId), inArray(plays.kind, ["play", "page"])));
   return row ?? null;
 }
 
@@ -33,7 +36,7 @@ export async function listPlays(teamId: string, database: Db = db): Promise<Play
   return database
     .select()
     .from(plays)
-    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false)))
+    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false), eq(plays.kind, "play")))
     .orderBy(asc(plays.sourcePage), asc(plays.boxIndex), asc(plays.createdAt));
 }
 
@@ -157,7 +160,7 @@ export async function restatusAll(teamId: string, level: Level, database: Db = d
 }
 
 export async function approvedPlays(teamId: string, ids?: string[], database: Db = db) {
-  const where = [eq(plays.teamId, teamId), eq(plays.status, "approved"), eq(plays.archived, false)];
+  const where = [eq(plays.teamId, teamId), eq(plays.status, "approved"), eq(plays.archived, false), eq(plays.kind, "play")];
   if (ids?.length) where.push(inArray(plays.id, ids));
   return database.select().from(plays).where(and(...where)).orderBy(asc(plays.sourcePage), asc(plays.boxIndex));
 }

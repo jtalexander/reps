@@ -1,0 +1,1 @@
+ALTER TABLE "teams" ADD COLUMN "call_system" jsonb DEFAULT '{}'::jsonb NOT NULL;

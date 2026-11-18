@@ -4,18 +4,17 @@
  *   startUpload -> appendChunk (4 MB pieces) -> finishUpload -> renderPages (a few at a time) -> [coach adjusts boxes]
  *   -> cropPage (one play row per box) -> extractPlayRow (parallel, 4 at once)
  */
-import "server-only";
+// No "server-only": the Netlify background reader imports this module.
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { plays, teams, uploadPages, uploads } from "@/db/schema";
 import { emptyPlay, PlayDataSchema, UNKNOWN } from "@/domain/play";
 import { detectBoxes, type Box } from "@/ingest/boxes";
-import { extractPlay, hasApiKey, askModel } from "@/ingest/extract";
 import { pdfInfo, renderDocPage, textIn, withPdf } from "@/ingest/pdf";
 import { MAX_UPLOAD_BYTES, UPLOAD_CHUNK_BYTES } from "@/domain/limits";
 import { media } from "@/media/store";
-import { conceptsForTeam, statusFor, withConcept } from "./plays";
+import { statusFor } from "./plays";
 
 const DPI = 144;
 
@@ -206,57 +205,6 @@ export async function pendingPlays(teamId: string, uploadId: string, database: D
     .from(plays)
     .where(and(eq(plays.teamId, teamId), eq(plays.uploadId, uploadId)))
     .orderBy(asc(plays.sort));
-}
-
-type Reader = typeof askModel;
-
-/** Read one play crop with the model and store the draft. */
-export async function extractPlayRow(teamId: string, playId: string, opts: { database?: Db; reader?: Reader } = {}) {
-  const database = opts.database ?? db;
-  const [row] = await database.select().from(plays).where(and(eq(plays.teamId, teamId), eq(plays.id, playId)));
-  if (!row || !row.cropKey) throw new Error("Play not found.");
-  if (row.status === "approved") return row;
-  const [team] = await database.select().from(teams).where(eq(teams.id, teamId));
-  if (!opts.reader && !hasApiKey()) {
-    await database
-      .update(plays)
-      .set({ extraction: "failed", extractionError: "No ANTHROPIC_API_KEY on the server — fill this play in by hand." })
-      .where(eq(plays.id, playId));
-    return null;
-  }
-  await database.update(plays).set({ extraction: "running", extractionError: null }).where(eq(plays.id, playId));
-  try {
-    const crop = await media().get(row.cropKey);
-    if (!crop) throw new Error("Crop image missing.");
-    const result = await extractPlay(crop.bytes, row.cropWidth ?? 0, row.cropHeight ?? 0, row.sourceText, opts.reader);
-    if (!result.isPlay || !result.data) {
-      await database.update(plays).set({ extraction: "not_a_play", aiRaw: result.raw, archived: true }).where(eq(plays.id, playId));
-      return null;
-    }
-    const data = withConcept(result.data, await conceptsForTeam(teamId, database));
-    const { status, qbReady } = statusFor(data, team!.level, false);
-    const [saved] = await database
-      .update(plays)
-      .set({
-        data,
-        aiRaw: result.raw,
-        name: data.name,
-        playType: String(data.play_type),
-        conceptKey: data.concept_key,
-        extraction: "done",
-        status,
-        qbReady,
-      })
-      .where(eq(plays.id, playId))
-      .returning();
-    return saved!;
-  } catch (err) {
-    await database
-      .update(plays)
-      .set({ extraction: "failed", extractionError: err instanceof Error ? err.message.slice(0, 300) : String(err) })
-      .where(eq(plays.id, playId));
-    return null;
-  }
 }
 
 /** Start a play by hand (no model, or the model failed). */

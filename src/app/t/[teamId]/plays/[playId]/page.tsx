@@ -20,7 +20,7 @@ export default async function PlayPage({ params }: PageProps<"/t/[teamId]/plays/
   const siblings = await db
     .select({ id: plays.id, status: plays.status })
     .from(plays)
-    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false)))
+    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false), eq(plays.kind, "play")))
     .orderBy(asc(plays.sourcePage), asc(plays.boxIndex), asc(plays.createdAt));
   const idx = siblings.findIndex((s) => s.id === playId);
   const nextNeeding = [...siblings.slice(idx + 1), ...siblings.slice(0, idx)].find((s) => s.status !== "approved");

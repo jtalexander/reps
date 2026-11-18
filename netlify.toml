@@ -10,3 +10,9 @@
 # Production deploys apply pending migrations before building.
 [context.production]
   command = "pnpm db:migrate && pnpm build"
+
+# The background reader (netlify/functions/read-box-background.mts) imports
+# app code; the canvas library is native and must ship as a module, not bundled.
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@napi-rs/canvas"]

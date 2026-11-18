@@ -8,6 +8,20 @@
       "when": 1794928388807,
       "tag": "0000_right_ultimates",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794967768322,
+      "tag": "0001_remarkable_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794968341772,
+      "tag": "0002_dark_princess_powerful",
+      "breakpoints": true
     }
   ]
 }

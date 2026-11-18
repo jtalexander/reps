@@ -21,7 +21,9 @@ import {
   date,
 } from "drizzle-orm/pg-core";
 import type { Box } from "@/ingest/boxes";
+import type { CallSystem } from "@/domain/calls";
 import type { Concept } from "@/domain/concepts";
+import type { LibraryItem, LibraryKind } from "@/domain/library";
 import type { PlayData } from "@/domain/play";
 import type { Terms } from "@/domain/terms";
 
@@ -108,6 +110,8 @@ export const teams = pgTable("teams", {
   terms: jsonb().$type<Terms>().notNull().default(sql`'{}'::jsonb`),
   /** flip diagrams in quizzes so players learn both sides */
   allowFlip: boolean().notNull().default(true),
+  /** how this team calls plays (src/domain/calls.ts) */
+  callSystem: jsonb().$type<CallSystem>().notNull().default(sql`'{}'::jsonb`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -211,8 +215,19 @@ export const plays = pgTable(
     playType: text().notNull().default("unknown"),
     conceptKey: text(),
     data: jsonb().$type<PlayData>(),
+    /**
+     * What this row is. "play": a drawn play (data). "page": a box whose
+     * content became library items (its children). concept / formation /
+     * term / reading: a library item (item), keyed by name_key per team.
+     */
+    kind: text().$type<"play" | "page" | "calls" | LibraryKind>().notNull().default("play"),
+    item: jsonb().$type<LibraryItem["data"]>(),
+    nameKey: text(),
+    /** the box (kind "page") this item was first read from */
+    parentId: uuid(),
+    sourcePages: integer().array().notNull().default(sql`'{}'::int[]`),
     aiRaw: jsonb(),
-    extraction: text().$type<"pending" | "running" | "done" | "failed" | "not_a_play">().notNull().default("pending"),
+    extraction: text().$type<"pending" | "queued" | "running" | "done" | "failed" | "not_a_play">().notNull().default("pending"),
     extractionError: text(),
     status: text().$type<"draft" | "needs_coach_input" | "approved">().notNull().default("draft"),
     qbReady: boolean().notNull().default(false),
@@ -226,6 +241,8 @@ export const plays = pgTable(
   (t) => [
     index("plays_team_idx").on(t.teamId, t.status),
     index("plays_upload_idx").on(t.uploadId),
+    index("plays_team_kind_idx").on(t.teamId, t.kind),
+    uniqueIndex("plays_library_name").on(t.teamId, t.kind, t.nameKey).where(sql`kind not in ('play', 'page')`),
   ],
 );
 

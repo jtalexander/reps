@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { plays, uploadPages, uploads } from "@/db/schema";
@@ -31,7 +31,7 @@ export default async function UploadPage({ params }: PageProps<"/t/[teamId]/uplo
       archived: plays.archived,
     })
     .from(plays)
-    .where(and(eq(plays.teamId, teamId), eq(plays.uploadId, uploadId)))
+    .where(and(eq(plays.teamId, teamId), eq(plays.uploadId, uploadId), inArray(plays.kind, ["play", "page"])))
     .orderBy(asc(plays.sort));
   return (
     <UploadReview

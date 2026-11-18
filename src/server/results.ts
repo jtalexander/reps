@@ -16,7 +16,7 @@ export async function completeness(teamId: string, database: Db = db) {
       pending: sql<number>`count(*) filter (where ${plays.data} is null)::int`,
     })
     .from(plays)
-    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false)));
+    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false), eq(plays.kind, "play")));
   return r!;
 }
 

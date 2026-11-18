@@ -20,6 +20,7 @@ import {
 import { ROUTES, ROUTE_BY_KEY, normalizeRouteName } from "./routes";
 import { assignmentLabel, blockLabel, reactionLabel, term, title, type Terms } from "./terms";
 import type { Level } from "./readiness";
+import type { LibraryQuizType } from "./library-quiz";
 
 export const QUIZ_TYPES = [
   "formation_id",
@@ -69,9 +70,12 @@ export interface DiagramSpec {
   routeOnly?: { route: string; side: "left" | "right" };
 }
 
+/** Any quiz type: drawn-play quizzes plus library and call-system quizzes. */
+export type AnyQuizType = QuizType | LibraryQuizType;
+
 export interface Question {
   id: string;
-  type: QuizType;
+  type: AnyQuizType;
   playId: string;
   prompt: string;
   /** "choice": pick one; "order": put choices in order */

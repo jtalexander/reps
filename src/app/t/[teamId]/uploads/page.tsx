@@ -14,7 +14,7 @@ export default async function Uploads({ params }: PageProps<"/t/[teamId]/uploads
   const list = await db
     .select({
       upload: uploads,
-      plays: sql<number>`(select count(*)::int from ${plays} where ${plays.uploadId} = ${uploads.id} and not ${plays.archived})`,
+      plays: sql<number>`(select count(*)::int from ${plays} where ${plays.uploadId} = ${uploads.id} and not ${plays.archived} and ${plays.kind} <> 'page')`,
     })
     .from(uploads)
     .where(eq(uploads.teamId, teamId))

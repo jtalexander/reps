@@ -8,9 +8,13 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { answers, plays, quizSessions, srsItems, studySets, teams } from "@/db/schema";
 import type { PlayData } from "@/domain/play";
-import { isCorrect, type QuizContext, type QuizPlay, type QuizType, type Question } from "@/domain/quiz";
+import { isCorrect, type AnyQuizType, type QuizContext, type QuizPlay, type Question } from "@/domain/quiz";
 import { buildQuiz, nextState, type QuizMode, type SrsState } from "@/domain/srs";
 import { TermsSchema } from "@/domain/terms";
+import { formationAsPlay, type LibraryItem } from "@/domain/library";
+import type { LibEntry } from "@/domain/library-quiz";
+import { callsForQuiz } from "./calls";
+import { approvedItems, rowItem } from "./library";
 import { approvedPlays } from "./plays";
 
 export type Team = typeof teams.$inferSelect;
@@ -29,11 +33,24 @@ export async function quizPlays(teamId: string, ids?: string[], database: Db = d
   return rows.filter((r) => r.data).map((r) => ({ id: r.id, data: r.data!, qbReady: r.qbReady }));
 }
 
+/** Approved library items as quiz entries. */
+export async function quizLibrary(teamId: string, database: Db = db): Promise<LibEntry[]> {
+  const rows = await approvedItems(teamId, database);
+  return rows.map((r) => ({ id: r.id, item: rowItem(r) })).filter((e): e is LibEntry => e.item !== null);
+}
+
+/** What the diagram of an item shows: a drawn play, or a formation drawn as one. */
+export function itemDiagram(row: { data: PlayData | null; kind: string; item: unknown }): PlayData | null {
+  if (row.data) return row.data;
+  if (row.kind === "formation" && row.item) return formationAsPlay((rowItem(row as never) as Extract<LibraryItem, { kind: "formation" }>).data);
+  return null;
+}
+
 export async function srsFor(playerId: string, database: Db = db): Promise<SrsState[]> {
   const rows = await database.select().from(srsItems).where(eq(srsItems.playerId, playerId));
   return rows.map((r) => ({
     playId: r.playId,
-    type: r.quizType as QuizType,
+    type: r.quizType as AnyQuizType,
     box: r.box,
     dueAt: r.dueAt,
     seen: r.seen,
@@ -94,10 +111,14 @@ export async function startSession(
     playIds = set.playIds;
   }
   const all = await quizPlays(team.id, undefined, database);
+  const library = await quizLibrary(team.id, database);
+  const calls = await callsForQuiz(team, database);
   const ctx = contextFor(team, position);
   const seed = Math.floor(Math.random() * 2 ** 31);
   const questions = buildQuiz({
     plays: all,
+    library,
+    calls,
     ctx,
     state: await srsFor(playerId, database),
     now: args.now ?? new Date(),
@@ -178,8 +199,12 @@ export async function answerQuestion(
   if (args.index === questions.length - 1) {
     await database.update(quizSessions).set({ finishedAt: now }).where(eq(quizSessions.id, s.id));
   }
-  const [play] = await database.select({ data: plays.data }).from(plays).where(and(eq(plays.teamId, args.teamId), eq(plays.id, q.playId)));
-  const reveal = play?.data && q.diagram ? diagramData(play.data, q, true) : null;
+  const [row] = await database
+    .select({ data: plays.data, kind: plays.kind, item: plays.item })
+    .from(plays)
+    .where(and(eq(plays.teamId, args.teamId), eq(plays.id, q.playId)));
+  const shown = row ? itemDiagram(row) : null;
+  const reveal = shown && q.diagram ? diagramData(shown, q, true) : null;
   return { correct, answer: q.answer, explanation: q.explanation, reveal };
 }
 
