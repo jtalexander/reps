@@ -12,7 +12,7 @@ import { plays, teams, uploadPages, uploads } from "@/db/schema";
 import { emptyPlay, PlayDataSchema, UNKNOWN } from "@/domain/play";
 import { detectBoxes, type Box } from "@/ingest/boxes";
 import { extractPlay, hasApiKey, askModel } from "@/ingest/extract";
-import { pdfInfo, renderPage, textIn } from "@/ingest/pdf";
+import { pdfInfo, renderDocPage, textIn, withPdf } from "@/ingest/pdf";
 import { MAX_UPLOAD_BYTES, UPLOAD_CHUNK_BYTES } from "@/domain/limits";
 import { media } from "@/media/store";
 import { conceptsForTeam, statusFor, withConcept } from "./plays";
@@ -107,19 +107,22 @@ export async function renderPages(teamId: string, uploadId: string, from: number
   const file = await media().get(upload.mediaKey);
   if (!file) throw new Error("The PDF is missing from storage.");
   const last = Math.min(to, upload.pageCount);
-  for (let n = from; n <= last; n++) {
-    const page = await renderPage(file.bytes, n, DPI);
-    const boxes = detectBoxes(page.gray, page.pixelWidth, page.pixelHeight, page.scale);
-    const imageKey = `${teamId}/pages/${uploadId}/${n}.png`;
-    await media().put(imageKey, page.png, "image/png");
-    await database
-      .insert(uploadPages)
-      .values({ teamId, uploadId, pageNo: n, width: page.width, height: page.height, imageKey, boxes, text: page.text })
-      .onConflictDoUpdate({
-        target: [uploadPages.uploadId, uploadPages.pageNo],
-        set: { imageKey, boxes, text: page.text, width: page.width, height: page.height, boxesConfirmed: false },
-      });
-  }
+  // Parse the PDF once per batch, not once per page.
+  await withPdf(file.bytes, async (doc) => {
+    for (let n = from; n <= last; n++) {
+      const page = await renderDocPage(doc, n, DPI);
+      const boxes = detectBoxes(page.gray, page.pixelWidth, page.pixelHeight, page.scale);
+      const imageKey = `${teamId}/pages/${uploadId}/${n}.png`;
+      await media().put(imageKey, page.png, "image/png");
+      await database
+        .insert(uploadPages)
+        .values({ teamId, uploadId, pageNo: n, width: page.width, height: page.height, imageKey, boxes, text: page.text })
+        .onConflictDoUpdate({
+          target: [uploadPages.uploadId, uploadPages.pageNo],
+          set: { imageKey, boxes, text: page.text, width: page.width, height: page.height, boxesConfirmed: false },
+        });
+    }
+  });
   if (last >= upload.pageCount) await database.update(uploads).set({ status: "ready" }).where(eq(uploads.id, uploadId));
   return { rendered: last - from + 1, done: last >= upload.pageCount };
 }

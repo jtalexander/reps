@@ -12,10 +12,22 @@ async function lib(): Promise<PdfJs> {
   return pdfjs;
 }
 
-async function open(bytes: Uint8Array) {
+type PdfDoc = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
+
+/**
+ * Open a PDF, run `fn`, and always destroy the loading task afterwards.
+ * Destroying the task (not just doc.cleanup()) is what frees the parsed
+ * document; without it a warm server function grows by the whole PDF per call.
+ */
+export async function withPdf<T>(bytes: Uint8Array, fn: (doc: PdfDoc) => Promise<T>): Promise<T> {
   const { getDocument } = await lib();
   // A fresh buffer: Node Buffers share a pool and cannot be transferred to the worker port.
-  return getDocument({ data: Uint8Array.from(bytes), useSystemFonts: true }).promise;
+  const task = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: true });
+  try {
+    return await fn(await task.promise);
+  } finally {
+    await task.destroy();
+  }
 }
 
 export interface PageSize {
@@ -24,17 +36,16 @@ export interface PageSize {
 }
 
 export async function pdfInfo(bytes: Uint8Array): Promise<{ pages: PageSize[] }> {
-  const doc = await open(bytes);
-  try {
+  return withPdf(bytes, async (doc) => {
     const pages: PageSize[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
-      const vp = (await doc.getPage(i)).getViewport({ scale: 1 });
+      const page = await doc.getPage(i);
+      const vp = page.getViewport({ scale: 1 });
       pages.push({ width: vp.width, height: vp.height });
+      page.cleanup();
     }
     return { pages };
-  } finally {
-    await doc.cleanup?.();
-  }
+  });
 }
 
 export interface TextItem {
@@ -61,14 +72,14 @@ export interface RenderedPage {
 }
 
 /** Render one page (1-based) at `dpi`, with its text layer. */
-export async function renderPage(
-  bytes: Uint8Array,
-  pageNo: number,
-  dpi = 144,
-): Promise<RenderedPage> {
-  const doc = await open(bytes);
+export async function renderPage(bytes: Uint8Array, pageNo: number, dpi = 144): Promise<RenderedPage> {
+  return withPdf(bytes, (doc) => renderDocPage(doc, pageNo, dpi));
+}
+
+/** Render a page of an already-open document (use with withPdf for batches). */
+export async function renderDocPage(doc: PdfDoc, pageNo: number, dpi = 144): Promise<RenderedPage> {
+  const page = await doc.getPage(pageNo);
   try {
-    const page = await doc.getPage(pageNo);
     const base = page.getViewport({ scale: 1 });
     const scale = dpi / 72;
     const viewport = page.getViewport({ scale });
@@ -109,7 +120,7 @@ export async function renderPage(
       text,
     };
   } finally {
-    await doc.cleanup?.();
+    page.cleanup();
   }
 }
 
