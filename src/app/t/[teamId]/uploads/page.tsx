@@ -42,7 +42,11 @@ export default async function Uploads({ params }: PageProps<"/t/[teamId]/uploads
                 <Link href={`/t/${teamId}/uploads/${upload.id}`} className="card flex items-center justify-between gap-3 p-3 hover:border-ink">
                   <span className="truncate font-medium">{upload.filename}</span>
                   <span className="shrink-0 text-sm text-muted">
-                    {upload.pageCount} pages · {n} plays{upload.status === "rendering" ? " · not finished" : ""}
+                    {upload.status === "uploading"
+                      ? "upload didn't finish"
+                      : upload.status === "failed"
+                        ? upload.error ?? "failed"
+                        : `${upload.pageCount} pages · ${n} plays${upload.status === "rendering" ? " · not finished" : ""}`}
                   </span>
                 </Link>
               </li>

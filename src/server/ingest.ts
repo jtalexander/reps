@@ -1,7 +1,7 @@
 /**
  * The upload pipeline, in steps the browser drives one call at a time (so
  * no single request runs long and the coach sees progress):
- *   createUpload -> renderPages (a few at a time) -> [coach adjusts boxes]
+ *   startUpload -> appendChunk (4 MB pieces) -> finishUpload -> renderPages (a few at a time) -> [coach adjusts boxes]
  *   -> cropPage (one play row per box) -> extractPlayRow (parallel, 4 at once)
  */
 import "server-only";
@@ -13,22 +13,86 @@ import { emptyPlay, PlayDataSchema, UNKNOWN } from "@/domain/play";
 import { detectBoxes, type Box } from "@/ingest/boxes";
 import { extractPlay, hasApiKey, askModel } from "@/ingest/extract";
 import { pdfInfo, renderPage, textIn } from "@/ingest/pdf";
+import { MAX_UPLOAD_BYTES, UPLOAD_CHUNK_BYTES } from "@/domain/limits";
 import { media } from "@/media/store";
 import { conceptsForTeam, statusFor, withConcept } from "./plays";
 
 const DPI = 144;
 
-export async function createUpload(teamId: string, userId: string | null, filename: string, bytes: Uint8Array, database: Db = db) {
-  if (bytes.length < 5 || Buffer.from(bytes.subarray(0, 5)).toString() !== "%PDF-") throw new Error("That file is not a PDF.");
-  const { pages } = await pdfInfo(bytes);
+const MAX_CHUNKS = Math.ceil(MAX_UPLOAD_BYTES / UPLOAD_CHUNK_BYTES);
+const partKey = (teamId: string, uploadId: string, i: number) => `${teamId}/uploads/${uploadId}.part${i}`;
+
+/**
+ * Chunked upload, step 1: create the upload row. The browser then sends the
+ * file in UPLOAD_CHUNK_BYTES pieces (appendChunk) and calls finishUpload.
+ */
+export async function startUpload(teamId: string, userId: string | null, filename: string, size: number, database: Db = db) {
+  if (!Number.isFinite(size) || size <= 0) throw new Error("That file is empty.");
+  if (size > MAX_UPLOAD_BYTES) throw new Error("That PDF is over 150 MB. Split it into smaller files.");
   const [upload] = await database
     .insert(uploads)
-    .values({ teamId, filename, mediaKey: "pending", pageCount: pages.length, createdBy: userId })
+    .values({ teamId, filename: filename.slice(0, 200), mediaKey: "pending", pageCount: 0, status: "uploading", createdBy: userId })
     .returning();
-  const key = `${teamId}/uploads/${upload!.id}.pdf`;
+  return upload!;
+}
+
+export async function appendChunk(teamId: string, uploadId: string, index: number, bytes: Uint8Array, database: Db = db) {
+  const upload = await getUpload(teamId, uploadId, database);
+  if (upload.status !== "uploading") throw new Error("This upload is already finished.");
+  if (!Number.isInteger(index) || index < 0 || index >= MAX_CHUNKS) throw new Error("Bad chunk.");
+  if (bytes.length > UPLOAD_CHUNK_BYTES) throw new Error("Chunk too large.");
+  await media().put(partKey(teamId, uploadId, index), bytes, "application/octet-stream");
+}
+
+/** Chunked upload, last step: join the pieces, check it's a readable PDF, count pages. */
+export async function finishUpload(teamId: string, uploadId: string, chunks: number, database: Db = db) {
+  const upload = await getUpload(teamId, uploadId, database);
+  if (upload.status !== "uploading") throw new Error("This upload is already finished.");
+  if (!Number.isInteger(chunks) || chunks < 1 || chunks > MAX_CHUNKS) throw new Error("Bad chunk count.");
+  const parts: Uint8Array[] = [];
+  for (let i = 0; i < chunks; i++) {
+    const part = await media().get(partKey(teamId, uploadId, i));
+    if (!part) throw new Error(`Piece ${i + 1} of ${chunks} is missing. Upload the file again.`);
+    parts.push(part.bytes);
+  }
+  const bytes = new Uint8Array(Buffer.concat(parts));
+  try {
+    const page = await storeUploadedPdf(teamId, uploadId, bytes, database);
+    return page;
+  } catch (err) {
+    await database
+      .update(uploads)
+      .set({ status: "failed", error: err instanceof Error ? err.message.slice(0, 300) : String(err) })
+      .where(eq(uploads.id, uploadId));
+    throw err;
+  } finally {
+    for (let i = 0; i < chunks; i++) await media().remove(partKey(teamId, uploadId, i)).catch(() => undefined);
+  }
+}
+
+async function storeUploadedPdf(teamId: string, uploadId: string, bytes: Uint8Array, database: Db) {
+  if (bytes.length < 5 || Buffer.from(bytes.subarray(0, 5)).toString() !== "%PDF-") throw new Error("That file is not a PDF.");
+  let pages;
+  try {
+    ({ pages } = await pdfInfo(bytes));
+  } catch {
+    throw new Error("That PDF couldn't be opened. If it's password-protected, save an unprotected copy and upload that.");
+  }
+  if (pages.length === 0) throw new Error("That PDF has no pages.");
+  const key = `${teamId}/uploads/${uploadId}.pdf`;
   await media().put(key, bytes, "application/pdf");
-  await database.update(uploads).set({ mediaKey: key }).where(eq(uploads.id, upload!.id));
-  return { ...upload!, mediaKey: key };
+  const [row] = await database
+    .update(uploads)
+    .set({ mediaKey: key, pageCount: pages.length, status: "rendering", error: null })
+    .where(eq(uploads.id, uploadId))
+    .returning();
+  return row!;
+}
+
+/** One-shot upload (scripts and tests): same checks as the chunked path. */
+export async function createUpload(teamId: string, userId: string | null, filename: string, bytes: Uint8Array, database: Db = db) {
+  const upload = await startUpload(teamId, userId, filename, bytes.length, database);
+  return storeUploadedPdf(teamId, upload.id, bytes, database);
 }
 
 async function getUpload(teamId: string, uploadId: string, database: Db) {

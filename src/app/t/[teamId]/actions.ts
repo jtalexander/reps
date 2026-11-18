@@ -12,7 +12,16 @@ import { ConceptSchema } from "@/domain/concepts";
 import { LEVELS, readiness, type Level } from "@/domain/readiness";
 import { TermsSchema } from "@/domain/terms";
 import type { Box } from "@/ingest/boxes";
-import { cropPage, createUpload, extractPlayRow, renderPages, setPageBoxes, startBlank } from "@/server/ingest";
+import {
+  appendChunk,
+  cropPage,
+  extractPlayRow,
+  finishUpload,
+  renderPages,
+  setPageBoxes,
+  startBlank,
+  startUpload,
+} from "@/server/ingest";
 import {
   approvePlay,
   getPlay,
@@ -31,14 +40,34 @@ const fail = (err: unknown): { ok: false; error: string } => ({
 });
 
 // ---------- upload pipeline ----------
-export async function uploadPdfAction(teamId: string, fd: FormData): Promise<Result<{ uploadId: string; pages: number }>> {
+// The browser sends the PDF in pieces: one request can't exceed ~6 MB on Netlify.
+export async function startUploadAction(teamId: string, filename: string, size: number): Promise<Result<{ uploadId: string }>> {
   try {
     const { user } = await requireCoach(teamId);
-    const file = fd.get("file");
-    if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Pick a PDF first." };
-    if (file.size > 60 * 1024 * 1024) return { ok: false, error: "That PDF is over 60 MB." };
-    const upload = await createUpload(teamId, user.id, file.name, new Uint8Array(await file.arrayBuffer()));
-    return { ok: true, uploadId: upload.id, pages: upload.pageCount };
+    const upload = await startUpload(teamId, user.id, filename, size);
+    return { ok: true, uploadId: upload.id };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function uploadChunkAction(teamId: string, uploadId: string, index: number, fd: FormData): Promise<Result> {
+  try {
+    await requireCoach(teamId);
+    const chunk = fd.get("chunk");
+    if (!(chunk instanceof Blob)) return { ok: false, error: "Missing file piece." };
+    await appendChunk(teamId, uploadId, index, new Uint8Array(await chunk.arrayBuffer()));
+    return { ok: true };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function finishUploadAction(teamId: string, uploadId: string, chunks: number): Promise<Result<{ pages: number }>> {
+  try {
+    await requireCoach(teamId);
+    const upload = await finishUpload(teamId, uploadId, chunks);
+    return { ok: true, pages: upload.pageCount };
   } catch (err) {
     return fail(err);
   }

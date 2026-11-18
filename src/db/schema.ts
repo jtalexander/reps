@@ -157,7 +157,7 @@ export const uploads = pgTable(
     filename: text().notNull(),
     mediaKey: text().notNull(),
     pageCount: integer().notNull().default(0),
-    status: text().$type<"rendering" | "ready" | "failed">().notNull().default("rendering"),
+    status: text().$type<"uploading" | "rendering" | "ready" | "failed">().notNull().default("rendering"),
     error: text(),
     createdBy: uuid().references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),

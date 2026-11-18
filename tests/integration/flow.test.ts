@@ -9,7 +9,7 @@ import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { createDb, type Db } from "@/db";
-import { plays, players, uploadPages, users } from "@/db/schema";
+import { plays, players, uploadPages, uploads, users } from "@/db/schema";
 import type { Extracted } from "@/domain/extraction";
 
 import type { Pool } from "pg";
@@ -83,6 +83,27 @@ describe("upload pipeline", () => {
     expect(hp.every((p) => p.boxes.length === 2)).toBe(true);
     const made = await cropPage(teamA.id, hp[0]!.id, db);
     expect(made).toHaveLength(2);
+  });
+
+  it("accepts a large PDF in 4 MB pieces and rejects non-PDFs cleanly", { timeout: 120_000 }, async () => {
+    const { startUpload, appendChunk, finishUpload } = await import("@/server/ingest");
+    const { UPLOAD_CHUNK_BYTES } = await import("@/domain/limits");
+    const bytes = new Uint8Array(readFileSync(HAWKS));
+    expect(bytes.length).toBeGreaterThan(UPLOAD_CHUNK_BYTES);
+    const up = await startUpload(teamA.id, coach.id, "hawks.pdf", bytes.length, db);
+    const n = Math.ceil(bytes.length / UPLOAD_CHUNK_BYTES);
+    for (let i = 0; i < n; i++) await appendChunk(teamA.id, up.id, i, bytes.subarray(i * UPLOAD_CHUNK_BYTES, (i + 1) * UPLOAD_CHUNK_BYTES), db);
+    const done = await finishUpload(teamA.id, up.id, n, db);
+    expect(done.pageCount).toBe(101);
+    expect(done.status).toBe("rendering");
+    // another team can't add to this upload
+    await expect(appendChunk(teamB.id, up.id, 0, bytes.subarray(0, 10), db)).rejects.toThrow(/not found/i);
+
+    const bad = await startUpload(teamA.id, coach.id, "notes.pdf", 11, db);
+    await appendChunk(teamA.id, bad.id, 0, new TextEncoder().encode("hello world"), db);
+    await expect(finishUpload(teamA.id, bad.id, 1, db)).rejects.toThrow(/not a PDF/);
+    const [row] = await db.select().from(uploads).where(eq(uploads.id, bad.id));
+    expect(row!.status).toBe("failed");
   });
 
   it("reads a crop, fills reads from the library, and refuses approval until complete", { timeout: 120_000 }, async () => {

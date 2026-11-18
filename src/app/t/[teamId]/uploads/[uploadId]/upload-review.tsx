@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { gridBoxes, type Box } from "@/ingest/boxes";
+import { safeCall } from "@/lib/safe-call";
 import { cropPageAction, extractAction, renderPagesAction, setBoxesAction } from "../../actions";
 
 interface PageInfo {
@@ -56,8 +57,12 @@ export function UploadReview(props: {
     const start = props.pages.length + 1;
     for (let from = start; from <= props.upload.pageCount; from += 3) {
       setRun({ label: "Splitting pages", done: from - 1, total: props.upload.pageCount });
-      const r = await renderPagesAction(props.teamId, props.upload.id, from, from + 2);
-      if (!r.ok) return setError(r.error);
+      const r = await safeCall(() => renderPagesAction(props.teamId, props.upload.id, from, from + 2), `Splitting page ${from}`);
+      if (!r.ok) {
+        setRun(null);
+        router.refresh();
+        return setError(r.error);
+      }
     }
     setRun(null);
     router.refresh();
@@ -70,8 +75,12 @@ export function UploadReview(props: {
     let made: string[] = [];
     for (const [i, p] of pending.entries()) {
       setRun({ label: "Cutting out plays", done: i, total: pending.length });
-      const r = await cropPageAction(props.teamId, p.id);
-      if (!r.ok) return setError(r.error);
+      const r = await safeCall(() => cropPageAction(props.teamId, p.id), `Cutting out page ${p.pageNo}`);
+      if (!r.ok) {
+        setRun(null);
+        router.refresh();
+        return setError(r.error);
+      }
       made = made.concat(r.playIds);
     }
     router.refresh();
@@ -86,10 +95,11 @@ export function UploadReview(props: {
     const worker = async () => {
       while (queue.length) {
         const id = queue.shift()!;
-        const r = await extractAction(props.teamId, id);
+        // One slow or failed play must not stop the rest; it is marked failed and can be retried.
+        const r = await safeCall(() => extractAction(props.teamId, id), "Reading a play");
         done++;
         setRun({ label: "Reading plays", done, total: done + queue.length });
-        if (r.ok) setPlays(id, { extraction: r.extraction, extractionError: r.error });
+        setPlays(id, r.ok ? { extraction: r.extraction, extractionError: r.error } : { extraction: "failed", extractionError: r.error });
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
@@ -103,7 +113,7 @@ export function UploadReview(props: {
         page={editing}
         onCancel={() => setEditing(null)}
         onSave={async (boxes) => {
-          const r = await setBoxesAction(props.teamId, editing.id, boxes);
+          const r = await safeCall(() => setBoxesAction(props.teamId, editing.id, boxes), "Saving the boxes");
           if (!r.ok) return r.error;
           setEditing(null);
           router.refresh();
