@@ -10,6 +10,10 @@ export async function safeCall<T extends object>(fn: () => Promise<ActionResult<
     return await fn();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    // The page was loaded from an older deploy than the server now runs.
+    if (/Server Action .* was not found|failed-to-find-server-action/i.test(msg)) {
+      return { ok: false, error: `${what} didn't go through because Reps was just updated. Reload this page and try again.` };
+    }
     const hint = /413|too large|payload/i.test(msg)
       ? "the file piece was too large for the server"
       : /timeout|timed out|504|502/i.test(msg)
