@@ -47,7 +47,7 @@ export function UploadForm({ teamId }: { teamId: string }) {
         return;
       }
     }
-    router.push(`/t/${teamId}/uploads/${start.uploadId}`);
+    router.push(`/t/${teamId}/teach?upload=${start.uploadId}&pages=1-${fin.pages}`);
   }
 
   const busy = state.phase !== "idle";

@@ -35,7 +35,7 @@ export default async function Playbook({ params, searchParams }: PageProps<"/t/[
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Playbook</h1>
+          <h1 className="text-4xl">Playbook</h1>
           <p className="text-sm text-muted">
             {stats.qbReady} of {stats.qbPlays} QB plays QB-ready · {stats.approved} of {stats.total} plays approved
           </p>
@@ -49,7 +49,7 @@ export default async function Playbook({ params, searchParams }: PageProps<"/t/[
           <Link
             key={key}
             href={`/t/${teamId}/plays?f=${key}${upload ? `&upload=${upload}` : ""}`}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${filter === key ? "bg-brand text-brand-ink" : "border border-line bg-card"}`}
+            className={`shrink-0 px-3 py-1.5 font-label text-xs font-bold tracking-widest uppercase ${filter === key ? "bg-brand text-brand-ink" : "border border-line bg-card"}`}
           >
             {label} · {counts[key]}
           </Link>
@@ -57,7 +57,17 @@ export default async function Playbook({ params, searchParams }: PageProps<"/t/[
       </div>
       {shown.length === 0 ? (
         <p className="card p-6 text-center text-muted">
-          {all.length === 0 ? "No plays yet. Upload a playbook PDF to start." : "Nothing here."}
+          {all.length === 0 ? (
+            <>
+              No drawn plays here. Your playbook&apos;s content is in{" "}
+              <Link className="font-semibold text-ink underline" href={`/t/${teamId}/teach`}>
+                Teach
+              </Link>
+              .
+            </>
+          ) : (
+            "Nothing here."
+          )}
         </p>
       ) : (
         <ul className="grid gap-2 sm:grid-cols-2">

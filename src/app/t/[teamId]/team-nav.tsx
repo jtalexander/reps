@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 const ITEMS = [
   ["", "Home"],
+  ["/teach", "Teach"],
   ["/plays", "Playbook"],
   ["/uploads", "Upload"],
   ["/concepts", "Concepts"],
@@ -17,7 +18,7 @@ export function TeamNav({ teamId }: { teamId: string }) {
   const path = usePathname();
   const base = `/t/${teamId}`;
   return (
-    <nav className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-2 pb-2 text-sm">
+    <nav className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-2 font-label text-xs font-bold tracking-widest uppercase">
       {ITEMS.map(([href, label]) => {
         const full = base + href;
         const active = href === "" ? path === base : path.startsWith(full);
@@ -25,7 +26,7 @@ export function TeamNav({ teamId }: { teamId: string }) {
           <Link
             key={href}
             href={full}
-            className={`shrink-0 rounded-md px-3 py-1.5 ${active ? "bg-white/15 font-semibold" : "opacity-80 hover:opacity-100"}`}
+            className={`shrink-0 border-b-2 px-3 py-2.5 ${active ? "border-brand text-brand" : "border-transparent text-muted hover:text-ink"}`}
           >
             {label}
           </Link>

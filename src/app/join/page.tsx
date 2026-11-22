@@ -19,7 +19,7 @@ export default async function Join({ searchParams }: PageProps<"/join">) {
   const { e } = await searchParams;
   return (
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 px-4 py-12">
-      <h1 className="text-2xl font-bold">Join your team</h1>
+      <h1 className="text-4xl">Join your team</h1>
       <form action={go} className="flex flex-col gap-3">
         <label className="label" htmlFor="code">
           Team code from your coach

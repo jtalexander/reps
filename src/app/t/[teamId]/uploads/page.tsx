@@ -22,7 +22,7 @@ export default async function Uploads({ params }: PageProps<"/t/[teamId]/uploads
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold">Upload a playbook</h1>
+        <h1 className="text-4xl">Upload a playbook</h1>
         <p className="mt-1 text-sm text-muted">
           A PDF from Hudl or similar. Each page can hold 1 to 8 plays. Reps splits the pages, you check the boxes, then it reads every play.
         </p>

@@ -26,7 +26,7 @@ export default async function Concepts({ params }: PageProps<"/t/[teamId]/concep
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Concepts</h1>
+        <h1 className="text-4xl">Concepts</h1>
         <p className="mt-1 text-sm text-muted">
           Standard reads Reps suggests when it recognizes a concept. Edit any of them to match how you teach it — the change flows into every play that uses the concept. Values you typed on a play stay as you wrote them.
         </p>

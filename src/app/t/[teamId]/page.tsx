@@ -6,6 +6,7 @@ import { QUIZ_TYPE_LABEL, type QuizType } from "@/domain/quiz";
 import { listPlays } from "@/server/plays";
 import { completeness, pct, resultsByPlay, resultsByType } from "@/server/results";
 import { requireCoach } from "@/server/teams";
+import { topicOverview } from "@/teach/service";
 
 export default async function Dashboard({ params }: PageProps<"/t/[teamId]">) {
   const { teamId } = await params;
@@ -17,6 +18,11 @@ export default async function Dashboard({ params }: PageProps<"/t/[teamId]">) {
   const teamMisses = byPlay.filter((r) => (pct(r.correct, r.total) ?? 100) < 70).slice(0, 6);
   const byType = await resultsByType(teamId);
   const roster = await db.select({ id: players.id }).from(players).where(and(eq(players.teamId, teamId), eq(players.active, true)));
+  const teach = await topicOverview(teamId);
+  const teachTotals = teach.reduce(
+    (a, t) => ({ gaps: a.gaps + t.gapsOpen, drafts: a.drafts + t.lessonsDraft + t.questionsDraft, live: a.live + t.lessonsApproved + t.questionsApproved }),
+    { gaps: 0, drafts: 0, live: 0 },
+  );
 
   const steps = [
     { done: plays.length > 0, label: "Upload your playbook PDF", href: `/t/${teamId}/uploads` },
@@ -27,6 +33,15 @@ export default async function Dashboard({ params }: PageProps<"/t/[teamId]">) {
 
   return (
     <div className="flex flex-col gap-6">
+      {teach.length > 0 && (
+        <Link href={`/t/${teamId}/teach`} className="card flex flex-col gap-1 border-accent p-4 hover:border-ink">
+          <span className="text-xs font-semibold text-muted uppercase">Teach — your playbook</span>
+          <span className="text-lg font-semibold">
+            {teach.length} topics · {teachTotals.gaps} questions for you · {teachTotals.drafts} to approve · {teachTotals.live} live
+          </span>
+          <span className="text-sm text-muted">Answer Reps&apos; questions, then approve lessons and questions. →</span>
+        </Link>
+      )}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="QB-ready" value={`${stats.qbReady} / ${stats.qbPlays}`} note="pass, RPO & option plays" />
         <Stat label="Approved" value={`${stats.approved} / ${stats.total}`} note="plays in quizzes" />

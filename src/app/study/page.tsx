@@ -7,6 +7,7 @@ import { QUIZ_TYPE_LABEL, typesForPositions } from "@/domain/quiz";
 import { requirePlayer } from "@/server/player-session";
 import { quizPlays } from "@/server/quiz";
 import { leaveAction, startQuizAction, switchPositionAction } from "./actions";
+import { TeachSection } from "./teach-section";
 
 export const metadata = { title: "Study" };
 
@@ -32,9 +33,9 @@ export default async function StudyHome({ searchParams }: PageProps<"/study">) {
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-6">
       <header className="flex items-start justify-between">
         <div>
-          <div className="text-sm text-muted">{me.team.name}</div>
-          <h1 className="text-2xl font-bold">
-            {me.player.name} <span className="rounded bg-brand px-2 py-0.5 align-middle text-sm text-brand-ink">{me.position}</span>
+          <div className="eyebrow">{me.team.name}</div>
+          <h1 className="mt-1 text-4xl">
+            {me.player.name} <span className="bg-brand px-2 py-0.5 align-middle font-label text-sm font-bold tracking-widest text-brand-ink">{me.position}</span>
           </h1>
         </div>
         <form action={leaveAction}>
@@ -46,18 +47,18 @@ export default async function StudyHome({ searchParams }: PageProps<"/study">) {
         <form action={switchPositionAction} className="flex items-center gap-2 text-sm">
           <span className="text-muted">Study as:</span>
           {otherPositions.map((p) => (
-            <button key={p} name="position" value={p} className="rounded-full border border-line bg-card px-3 py-1">
+            <button key={p} name="position" value={p} className="border border-line bg-card px-3 py-1 font-label text-xs font-bold tracking-widest uppercase hover:border-brand">
               {p}
             </button>
           ))}
         </form>
       )}
 
+      <TeachSection teamId={me.team.id} playerId={me.player.id} position={me.position} />
+
       {empty && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">No questions for that yet. Your coach may still be approving plays.</p>}
 
-      {plays.length === 0 ? (
-        <p className="card p-4 text-sm text-muted">Your coach hasn&apos;t approved any plays yet. Check back soon.</p>
-      ) : (
+      {plays.length === 0 ? null : (
         <>
           <div className="grid grid-cols-2 gap-3">
             <div className="card p-3">

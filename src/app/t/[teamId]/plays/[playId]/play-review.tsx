@@ -169,7 +169,7 @@ export function PlayReview(props: {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-2xl font-bold">{data.name === UNKNOWN ? "Unnamed play" : data.name}</h1>
+        <h1 className="text-4xl">{data.name === UNKNOWN ? "Unnamed play" : data.name}</h1>
         <StatusChip status={status} dirty={dirty} />
       </div>
 

@@ -23,7 +23,7 @@ export default async function CoachHome() {
   return (
     <main className="mx-auto w-full max-w-xl flex-1 px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Your teams</h1>
+        <h1 className="text-4xl">Your teams</h1>
         <SignOut />
       </div>
       {teams.length > 0 && (

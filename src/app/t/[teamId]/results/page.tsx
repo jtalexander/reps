@@ -11,7 +11,7 @@ export default async function Results({ params }: PageProps<"/t/[teamId]/results
   const byPlay = await resultsByPlay(teamId);
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">Results</h1>
+      <h1 className="text-4xl">Results</h1>
       <section>
         <h2 className="mb-2 font-semibold">Players</h2>
         {byPlayer.length === 0 ? (

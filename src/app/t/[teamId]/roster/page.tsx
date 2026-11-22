@@ -18,7 +18,7 @@ export default async function Roster({ params }: PageProps<"/t/[teamId]/roster">
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold">Roster</h1>
+        <h1 className="text-4xl">Roster</h1>
         <p className="mt-1 text-sm text-muted">
           Players join at <strong>/join</strong> with code <span className="font-mono font-bold tracking-widest">{team.joinCode}</span>, then pick their name. First name and last initial is enough — nothing else is collected.
         </p>

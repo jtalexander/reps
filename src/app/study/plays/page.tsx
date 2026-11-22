@@ -14,7 +14,7 @@ export default async function MyPlays() {
       <Link href="/study" className="text-sm text-muted underline">
         Back
       </Link>
-      <h1 className="text-xl font-bold">My plays · {me.position}</h1>
+      <h1 className="text-3xl">My plays · {me.position}</h1>
       {plays.length === 0 ? (
         <p className="card p-4 text-sm text-muted">No approved plays yet.</p>
       ) : (

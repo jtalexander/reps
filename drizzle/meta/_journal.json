@@ -8,6 +8,27 @@
       "when": 1794928388807,
       "tag": "0000_right_ultimates",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794969808747,
+      "tag": "0001_dear_tinkerer",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795208272960,
+      "tag": "0002_triage_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795372987175,
+      "tag": "0003_job_result",
+      "breakpoints": true
     }
   ]
 }

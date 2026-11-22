@@ -37,7 +37,7 @@ export default async function Pick({ params }: PageProps<"/join/[code]">) {
       <Link href="/join" className="text-sm text-muted underline">
         Different code
       </Link>
-      <h1 className="mt-2 text-2xl font-bold">{team.name}</h1>
+      <h1 className="mt-2 text-4xl">{team.name}</h1>
       <p className="mb-4 text-muted">Tap your name, then your position.</p>
       {roster.length === 0 && <p className="card p-4 text-sm text-muted">Your coach hasn&apos;t added players yet.</p>}
       <ul className="flex flex-col gap-2">

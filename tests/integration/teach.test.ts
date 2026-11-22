@@ -1,0 +1,287 @@
+/**
+ * Teach, end to end on a real Postgres with Claude mocked: decode a page,
+ * find gaps, coach answers, write drafts, coach approves, players answer in
+ * every format, mastery, ask-the-playbook, and team separation.
+ */
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { and, eq, sql } from "drizzle-orm";
+import type { Pool } from "pg";
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
+import { createDb, type Db } from "@/db";
+import { players, users } from "@/db/schema";
+import { gaps, jobs, lessons, questionFlags, questions, teachPages, topics } from "@/db/teach-schema";
+
+const askedWith: string[] = [];
+vi.mock("@/teach/ai", () => ({
+  MODEL: "mock",
+  decodePage: vi.fn(async (page: { pageNo: number; width: number; height: number }) => ({
+    is_playbook_content: true,
+    section: "SMASH",
+    topic: "Smash",
+    summary: "Smash: #1 hitch, #2 corner.",
+    facts: [
+      { text: "#1 runs a Hitch at 6 yards.", applies_to: ["#1"], kind: "rule" },
+      { text: "#2 runs a Corner, break at 10.", applies_to: ["#2"], kind: "rule" },
+      { text: "QB reads the cornerback.", applies_to: ["QB"], kind: "read" },
+    ],
+    diagrams: [{ label: "SMASH RIGHT", x: page.width * 0.1, y: page.height * 0.1, w: page.width * 0.5, h: page.height * 0.3 }],
+  })),
+  findGaps: vi.fn(async () => ({
+    gaps: [
+      { question: "What's the QB drop?", why: "Timing.", applies_to: ["QB"], page_no: 1, suggestion: "3-step" },
+      { question: "Where does #2 align?", why: "Spacing.", applies_to: ["#2"], page_no: 1, suggestion: null },
+    ],
+  })),
+  writeTopic: vi.fn(async (_t: string, _f: string, answered: string) => ({
+    lessons: [
+      { audience: "ALL", title: "Smash basics", body: `- #1 Hitch\n- #2 Corner\n${answered ? "Coach says: " + answered : ""}`, source_pages: [1] },
+      { audience: "QB", title: "QB on Smash", body: "Read the corner.", source_pages: [1] },
+    ],
+    questions: [
+      { audience: ["WR"], format: "choice", prompt: "#2 runs?", choices: ["Corner", "Hitch", "Go"], order_items: [], tap: null, model_answer: null, key_points: [], explanation: "Corner.", source_pages: [1], show_page: null, show_diagram_label: null },
+      { audience: ["QB"], format: "order", prompt: "Order the reads", choices: [], order_items: ["Corner", "Hitch"], tap: null, model_answer: null, key_points: [], explanation: "Corner then hitch.", source_pages: [1], show_page: null, show_diagram_label: null },
+      { audience: ["WR"], format: "tap", prompt: "Tap #2", choices: [], order_items: [], tap: { page_no: 1, diagram_label: "SMASH RIGHT", target_label: "#2", x: 200, y: 200, w: 40, h: 40 }, model_answer: null, key_points: [], explanation: "#2 is the slot.", source_pages: [1], show_page: null, show_diagram_label: null },
+      { audience: ["ALL"], format: "open", prompt: "What is Smash?", choices: [], order_items: [], tap: null, model_answer: "Hitch and corner", key_points: ["hitch", "corner"], explanation: "It's a high-low.", source_pages: [1], show_page: null, show_diagram_label: null },
+      { audience: ["ALL"], format: "choice", prompt: "Draft that stays a draft", choices: ["a", "b"], order_items: [], tap: null, model_answer: null, key_points: [], explanation: "x", source_pages: [1], show_page: null, show_diagram_label: null },
+    ],
+  })),
+  // key: the first open question of each topic; same: questions with identical wording
+  triageGaps: vi.fn(async (list: string) => {
+    const lines = list.split("\n").map((l) => {
+      const m = l.match(/^(\d+)\. \[(.+?)\]( \(already answered\))? (.*?)(?: \(why: .*\))?$/)!;
+      return { n: Number(m[1]), topic: m[2]!, open: !m[3], q: m[4]! };
+    });
+    const key = lines.filter((l, i) => l.open && lines.findIndex((x) => x.open && x.topic === l.topic) === i).map((l) => l.n);
+    const firstOf = new Map<string, number>();
+    const same: Array<{ keep: number; also: number[] }> = [];
+    for (const l of lines) {
+      const k = firstOf.get(l.q);
+      if (k === undefined) firstOf.set(l.q, l.n);
+      else (same.find((g) => g.keep === k) ?? same[same.push({ keep: k, also: [] }) - 1]!).also.push(l.n);
+    }
+    return { key, same };
+  }),
+  gradeOpen: vi.fn(async (_p: string, _m: string, _k: string[], answer: string) => ({ score: /hitch/i.test(answer) && /corner/i.test(answer) ? 1 : 0.3, feedback: "ok" })),
+  askPlaybook: vi.fn(async (_q: string, _pos: string, material: string) => {
+    askedWith.push(material);
+    return { answered: true, answer: "From the lesson.", source_pages: [1] };
+  }),
+}));
+
+const SPARTANS = path.resolve(__dirname, "../../../chalk/reference/Spartans Purple -Abram.pdf");
+let db: Db;
+let pool: Pool;
+let teamA: { id: string };
+let teamB: { id: string };
+let coachId: string;
+
+beforeAll(async () => {
+  process.env.DATABASE_URL = inject("dbUrl");
+  process.env.MEDIA_DIR = mkdtempSync(path.join(tmpdir(), "reps-teach-media-"));
+  ({ db, pool } = createDb(inject("dbUrl")));
+  const [u] = await db.insert(users).values({ name: "Coach", email: `t${Date.now()}@x.test` }).returning();
+  coachId = u!.id;
+  const { createTeam } = await import("@/server/teams");
+  teamA = await createTeam(db, coachId, "Teach A", "high_school");
+  teamB = await createTeam(db, coachId, "Teach B", "high_school");
+});
+afterAll(async () => {
+  await pool?.end();
+});
+
+describe("teach loop", () => {
+  let topicId = "";
+  it("decodes a page into a topic with facts and diagram regions in page points", { timeout: 120_000 }, async () => {
+    const { createUpload, renderPages } = await import("@/server/ingest");
+    const svc = await import("@/teach/service");
+    const up = await createUpload(teamA.id, coachId, "s.pdf", new Uint8Array(readFileSync(SPARTANS)), db);
+    await renderPages(teamA.id, up.id, 1, 1, db);
+    const [id] = await svc.prepareDecode(teamA.id, up.id, [1], db);
+    const job = await svc.newJob(teamA.id, "decode_page", id!, db);
+    expect((await svc.runJob(job.id, db))?.status).toBe("done");
+    const [page] = await db.select().from(teachPages).where(eq(teachPages.id, id!));
+    expect(page!.status).toBe("decoded");
+    expect(page!.facts).toHaveLength(3);
+    // a box at 10% of the image width is 10% of the page width in points
+    expect(page!.diagrams[0]!.box.x).toBeCloseTo(page!.diagrams[0]!.box.x, 1);
+    expect(page!.diagrams[0]!.box.x).toBeGreaterThan(70);
+    expect(page!.diagrams[0]!.box.x).toBeLessThan(90);
+    const [t] = await db.select().from(topics).where(eq(topics.teamId, teamA.id));
+    expect(t!.name).toBe("Smash");
+    expect(t!.pageNos).toEqual([1]);
+    topicId = t!.id;
+  });
+
+  it("finds gaps; the coach answers one, approves none, skips one", async () => {
+    const svc = await import("@/teach/service");
+    await svc.runJob((await svc.newJob(teamA.id, "find_gaps", topicId, db)).id, db);
+    const gs = await db.select().from(gaps).where(eq(gaps.topicId, topicId));
+    expect(gs).toHaveLength(2);
+    const drop = gs.find((g) => g.suggestion)!;
+    const align = gs.find((g) => !g.suggestion)!;
+    await expect(svc.answerGap(teamA.id, align.id, { kind: "approve" }, coachId, db)).rejects.toThrow(/no suggestion/);
+    await svc.answerGap(teamA.id, drop.id, { kind: "answer", text: "5-step from gun" }, coachId, db);
+    await svc.answerGap(teamA.id, align.id, { kind: "skip" }, coachId, db);
+    // another team can't answer this team's questions
+    await svc.answerGap(teamB.id, drop.id, { kind: "skip" }, coachId, db).catch(() => undefined);
+    const [after] = await db.select().from(gaps).where(eq(gaps.id, drop.id));
+    expect(after!.status).toBe("answered");
+  });
+
+  it("writes drafts that include the coach's answers; nothing is live until approved", async () => {
+    const svc = await import("@/teach/service");
+    await svc.runJob((await svc.newJob(teamA.id, "write_topic", topicId, db)).id, db);
+    const ls = await db.select().from(lessons).where(eq(lessons.topicId, topicId));
+    expect(ls.every((l) => l.status === "draft")).toBe(true);
+    expect(ls[0]!.body).toContain("5-step from gun");
+    const qs = await db.select().from(questions).where(eq(questions.topicId, topicId));
+    expect(qs.map((q) => q.format).sort()).toEqual(["choice", "choice", "open", "order", "tap"]);
+    const tap = qs.find((q) => q.format === "tap")!;
+    expect(tap.image?.box).not.toBeNull();
+    const before = await svc.approvedFor(teamA.id, "WR", db);
+    expect(before.questions).toHaveLength(0);
+    expect(before.lessons).toHaveLength(0);
+  });
+
+  it("approved items reach the right positions; players are graded in every format", async () => {
+    const svc = await import("@/teach/service");
+    const qs = await db.select().from(questions).where(eq(questions.topicId, topicId));
+    const ls = await db.select().from(lessons).where(eq(lessons.topicId, topicId));
+    for (const q of qs.filter((x) => x.prompt !== "Draft that stays a draft")) await svc.reviewQuestion(teamA.id, q.id, { status: "approved" }, coachId, db);
+    for (const l of ls) await svc.reviewLesson(teamA.id, l.id, { status: "approved" }, coachId, db);
+
+    const wr = await svc.approvedFor(teamA.id, "WR", db);
+    expect(wr.questions.map((q) => q.format).sort()).toEqual(["choice", "open", "tap"]);
+    expect(wr.lessons.map((l) => l.audience)).toEqual(["ALL"]);
+    const qb = await svc.approvedFor(teamA.id, "QB", db);
+    expect(qb.questions.map((q) => q.format).sort()).toEqual(["open", "order"]);
+
+    const [p] = await db.insert(players).values({ teamId: teamA.id, name: "W", positions: ["X"] }).returning();
+    const choice = qs.find((q) => q.prompt === "#2 runs?")!;
+    const answerId = choice.data.kind === "choice" ? choice.data.answer : "";
+    const pub = svc.publicQuestion(choice);
+    expect(pub).not.toHaveProperty("data");
+    const r1 = await svc.gradeAttempt({ teamId: teamA.id, playerId: p!.id, questionId: choice.id, given: answerId, responseMs: 900, mode: "learn" }, db);
+    expect(r1.correct).toBe(true);
+    const tap = qs.find((q) => q.format === "tap")!;
+    const t = tap.data.kind === "tap" ? tap.data.target : { x: 0, y: 0, w: 0, h: 0 };
+    expect((await svc.gradeAttempt({ teamId: teamA.id, playerId: p!.id, questionId: tap.id, given: { x: t.x + t.w / 2, y: t.y + t.h / 2 }, responseMs: 1, mode: "practice" }, db)).correct).toBe(true);
+    expect((await svc.gradeAttempt({ teamId: teamA.id, playerId: p!.id, questionId: tap.id, given: { x: 0, y: 0 }, responseMs: 1, mode: "practice" }, db)).correct).toBe(false);
+    const open = qs.find((q) => q.format === "open")!;
+    const o = await svc.gradeAttempt({ teamId: teamA.id, playerId: p!.id, questionId: open.id, given: "hitch and corner", responseMs: 1, mode: "practice" }, db);
+    expect(o.correct).toBe(true);
+    const order = qs.find((q) => q.format === "order")!;
+    expect((await svc.gradeAttempt({ teamId: teamA.id, playerId: p!.id, questionId: order.id, given: ["Corner", "Hitch"], responseMs: 1, mode: "practice" }, db)).correct).toBe(true);
+
+    // a draft can't be answered, and another team can't use these questions
+    const draft = qs.find((q) => q.prompt === "Draft that stays a draft")!;
+    await expect(svc.gradeAttempt({ teamId: teamA.id, playerId: p!.id, questionId: draft.id, given: "c0", responseMs: 1, mode: "practice" }, db)).rejects.toThrow(/not found/i);
+    const [pb] = await db.insert(players).values({ teamId: teamB.id, name: "Other" }).returning();
+    await expect(svc.gradeAttempt({ teamId: teamB.id, playerId: pb!.id, questionId: choice.id, given: answerId, responseMs: 1, mode: "practice" }, db)).rejects.toThrow(/not found/i);
+
+    const m = (await svc.mastery(teamA.id, db)).find((x) => x.playerId === p!.id && x.topicId === topicId)!;
+    // latest scores: choice 1, tap 0 (second try missed), open 1, order 1
+    expect(m.score).toBeCloseTo(0.75, 2);
+  });
+
+  it("ask the playbook only sees approved material", async () => {
+    const svc = await import("@/teach/service");
+    const [p] = await db.select().from(players).where(and(eq(players.teamId, teamA.id), eq(players.name, "W")));
+    await svc.ask(teamA.id, p!.id, "WR", "X", "What is Smash?", db);
+    const material = askedWith.at(-1)!;
+    expect(material).toContain("Smash basics");
+    expect(material).toContain("5-step from gun");
+    expect(material).not.toContain("Draft that stays a draft");
+    expect(material).not.toContain("QB on Smash");
+  });
+
+  it("ranks the coach's questions and links repeats across topics; one answer covers both", async () => {
+    const svc = await import("@/teach/service");
+    const [other] = await db.insert(topics).values({ teamId: teamA.id, name: "Smash-In", nameKey: "SMASH-IN", sort: 9 }).returning();
+    await db.insert(gaps).values([
+      { teamId: teamA.id, topicId: other!.id, question: "Who calls the side?", suggestion: "QB", sort: 0 },
+      { teamId: teamA.id, topicId: other!.id, question: "What's the nod on the corner?", suggestion: "Head fake inside", sort: 1 },
+      { teamId: teamA.id, topicId: other!.id, question: "How deep is #1?", sort: 2 },
+    ]);
+    const [smash] = await db.insert(gaps).values({ teamId: teamA.id, topicId, question: "What's the nod on the corner?", suggestion: "Head fake inside", sort: 5 }).returning();
+    const r = await svc.triageTeamGaps(teamA.id, db);
+    expect(r.repeats).toBe(1);
+    const after = await db.select().from(gaps).where(eq(gaps.teamId, teamA.id));
+    const dup = after.find((g) => g.topicId === other!.id && g.question.includes("nod"))!;
+    expect(dup.dupOf).toBe(smash!.id);
+    expect(after.find((g) => g.id === smash!.id)!.priority).toBe("key");
+    expect(after.find((g) => g.question === "How deep is #1?")!.priority).toBe("optional");
+    // answering the original answers the repeat; reopening reopens it
+    await svc.answerGap(teamA.id, smash!.id, { kind: "answer", text: "Two steps at the post" }, coachId, db);
+    let [d] = await db.select().from(gaps).where(eq(gaps.id, dup.id));
+    expect(d!.status).toBe("answered");
+    expect(d!.answer).toBe("Two steps at the post");
+    await svc.answerGap(teamA.id, smash!.id, { kind: "reopen" }, coachId, db);
+    [d] = await db.select().from(gaps).where(eq(gaps.id, dup.id));
+    expect(d!.status).toBe("open");
+    // accept all: only the topic's open main questions with a suggestion
+    expect(await svc.acceptSuggestions(teamB.id, other!.id, coachId, db)).toBe(0);
+    expect(await svc.acceptSuggestions(teamA.id, other!.id, coachId, db)).toBe(1);
+    const who = (await db.select().from(gaps).where(eq(gaps.topicId, other!.id))).find((g) => g.question === "Who calls the side?")!;
+    expect(who.status).toBe("approved");
+    expect(who.answer).toBe("QB");
+  });
+
+  it("approves a whole topic at once, except items still being edited, and only for its own team", async () => {
+    const svc = await import("@/teach/service");
+    const drafts = await db.select().from(questions).where(and(eq(questions.topicId, topicId), eq(questions.status, "draft")));
+    expect(drafts).toHaveLength(1);
+    expect(await svc.approveTopic(teamA.id, topicId, coachId, [drafts[0]!.id], db)).toEqual({ lessons: 0, questions: 0 });
+    expect(await svc.approveTopic(teamB.id, topicId, coachId, [], db)).toEqual({ lessons: 0, questions: 0 });
+    expect(await svc.approveTopic(teamA.id, topicId, coachId, [], db)).toEqual({ lessons: 0, questions: 1 });
+    const [q] = await db.select().from(questions).where(eq(questions.id, drafts[0]!.id));
+    expect(q!.status).toBe("approved");
+    expect(q!.approvedBy).toBe(coachId);
+  });
+
+  it("players flag a question; the coach sees it and resolves it", async () => {
+    const svc = await import("@/teach/service");
+    const [p] = await db.select().from(players).where(and(eq(players.teamId, teamA.id), eq(players.name, "W")));
+    const [pb] = await db.select().from(players).where(eq(players.teamId, teamB.id));
+    const [q] = await db.select().from(questions).where(and(eq(questions.topicId, topicId), eq(questions.format, "choice")));
+    await svc.flagQuestion(teamA.id, p!.id, q!.id, "The hitch is at 5, not 6", db);
+    await expect(svc.flagQuestion(teamB.id, pb!.id, q!.id, "x", db)).rejects.toThrow(/not found/i);
+    expect(await svc.openFlags(teamB.id, db)).toHaveLength(0);
+    const open = await svc.openFlags(teamA.id, db);
+    expect(open).toHaveLength(1);
+    expect(open[0]!.flag.note).toBe("The hitch is at 5, not 6");
+    await svc.resolveFlags(teamA.id, q!.id, coachId, db);
+    expect(await svc.openFlags(teamA.id, db)).toHaveLength(0);
+    const [f] = await db.select().from(questionFlags).where(eq(questionFlags.questionId, q!.id));
+    expect(f!.status).toBe("resolved");
+  });
+  it("runs each AI job once, reports status only to its own team, and fails stuck jobs", async () => {
+    const svc = await import("@/teach/service");
+    process.env.BETTER_AUTH_SECRET ??= "test-secret-test-secret-test-secret-00";
+    const { signJob, verifyJob } = await import("@/teach/dispatch");
+    const job = await svc.newJob(teamA.id, "triage", teamA.id, db);
+    expect((await svc.jobStatus(teamA.id, job.id, db)).status).toBe("queued");
+    await expect(svc.jobStatus(teamB.id, job.id, db)).rejects.toThrow();
+    const done = await svc.runJob(job.id, db);
+    expect(done?.status).toBe("done");
+    expect(done?.result).toMatchObject({ key: expect.any(Number), optional: expect.any(Number), repeats: expect.any(Number) });
+    // a repeated or replayed call doesn't run it again
+    const { triageGaps } = await import("@/teach/ai");
+    const calls = vi.mocked(triageGaps).mock.calls.length;
+    await svc.runJob(job.id, db);
+    expect(vi.mocked(triageGaps).mock.calls.length).toBe(calls);
+    // a job that never started, and one that ran past the 15-minute limit, end as failed
+    const lost = await svc.newJob(teamA.id, "find_gaps", topicId, db);
+    const hung = await svc.newJob(teamA.id, "write_topic", topicId, db);
+    await db.update(jobs).set({ status: "running" }).where(eq(jobs.id, hung.id));
+    await db.execute(sql`update jobs set updated_at = now() - interval '20 minutes' where id in (${lost.id}, ${hung.id})`);
+    expect((await svc.jobStatus(teamA.id, lost.id, db)).status).toBe("failed");
+    expect((await svc.jobStatus(teamA.id, hung.id, db)).status).toBe("failed");
+    // only signed job ids reach the background runner
+    expect(verifyJob(job.id, signJob(job.id))).toBe(true);
+    expect(verifyJob(lost.id, signJob(job.id))).toBe(false);
+    expect(verifyJob(job.id, "nope")).toBe(false);
+  });
+});

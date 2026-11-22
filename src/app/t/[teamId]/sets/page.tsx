@@ -18,7 +18,7 @@ export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold">Study sets</h1>
+        <h1 className="text-4xl">Study sets</h1>
         <p className="mt-1 text-sm text-muted">Assign a group of approved plays — this week&apos;s game plan — with a due date. Players see it first on their home screen.</p>
       </div>
       {approved.length === 0 ? (

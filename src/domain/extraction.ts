@@ -18,27 +18,32 @@ import {
 } from "./play";
 import { normalizeRouteName } from "./routes";
 
-const U = z.literal(UNKNOWN);
+/**
+ * An enum that also allows "unknown". Written as one enum rather than a
+ * union with a literal: Claude's structured output allows at most 16
+ * union-typed fields per schema.
+ */
+const oneOf = <T extends string>(values: readonly T[]) => z.enum([...values, UNKNOWN] as unknown as [T | typeof UNKNOWN, ...(T | typeof UNKNOWN)[]]);
 const px = z.object({ x: z.number(), y: z.number() });
 
 export const ExtractedSchema = z.object({
   is_play: z.boolean().describe("false for title pages, blank fields, legends, logos"),
   name: z.string().describe("play name / call exactly as printed; 'unknown' if none"),
-  play_type: z.union([z.enum(PLAY_TYPES), U]),
+  play_type: oneOf(PLAY_TYPES),
   concept_name: z.string().describe("pass/run/option concept if recognizable (Smash, Inside Zone, Zone Read...), else 'unknown'"),
   ball: px.describe("center of the ball / center's marker, pixels"),
   formation: z.object({
     name: z.string(),
     personnel: z.string().describe("e.g. 11, 12, 21; 'unknown' if unsure"),
-    strength: z.union([z.enum(["left", "right", "balanced"]), U]),
+    strength: oneOf(["left", "right", "balanced"]),
     backfield_alignment: z.string().describe("e.g. 'gun, RB right', 'I', 'pistol', 'offset left'; 'unknown'"),
   }),
   motion: z
     .object({
       player: z.string(),
-      type: z.union([z.enum(MOTION_TYPES), U]),
-      direction: z.union([z.enum(["left", "right"]), U]),
-      timing: z.union([z.enum(["at_snap", "set"]), U]),
+      type: oneOf(MOTION_TYPES),
+      direction: oneOf(["left", "right"]),
+      timing: oneOf(["at_snap", "set"]),
       end: px.nullable().describe("where the motion ends, pixels"),
     })
     .nullable(),
@@ -49,12 +54,12 @@ export const ExtractedSchema = z.object({
       x: z.number().describe("marker center, pixels"),
       y: z.number().describe("marker center, pixels"),
       on_ball: z.boolean(),
-      assignment_type: z.union([z.enum(ASSIGNMENT_TYPES), U]),
+      assignment_type: oneOf(ASSIGNMENT_TYPES),
       route: z
         .object({
           name: z.string().describe("standard route name (go, slant, hitch, out, quick out, curl, dig, post, corner, flat, wheel, drag, seam, swing, bubble, stick...) or 'unknown'"),
           depth_yards: z.number().nullable(),
-          break_direction: z.union([z.enum(["in", "out", "none"]), U]),
+          break_direction: oneOf(["in", "out", "none"]),
           notes: z.string().nullable(),
         })
         .nullable(),
@@ -68,7 +73,7 @@ export const ExtractedSchema = z.object({
     .nullable(),
   option_details: z
     .object({
-      option_type: z.union([z.enum(OPTION_TYPES), U]),
+      option_type: oneOf(OPTION_TYPES),
       read_key: z.string().describe("one of backside_de, playside_de, playside_olb, backside_olb, mike, playside_dt, playside_safety, playside_corner, flat_defender, or 'unknown'"),
       give_rule: z.string(),
       keep_rule: z.string(),
@@ -78,7 +83,7 @@ export const ExtractedSchema = z.object({
   pass_details: z
     .object({
       protection: z.string(),
-      qb_drop: z.union([z.enum(QB_DROPS), U]),
+      qb_drop: oneOf(QB_DROPS),
       presnap_read: z.string(),
       progression: z.array(z.object({ player: z.string(), trigger: z.string() })),
       hot_or_sight_adjustment: z.string().nullable(),

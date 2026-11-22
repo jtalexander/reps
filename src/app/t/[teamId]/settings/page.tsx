@@ -11,7 +11,7 @@ export default async function Settings({ params }: PageProps<"/t/[teamId]/settin
   const { team } = await requireCoach(teamId);
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <h1 className="text-4xl">Settings</h1>
       <section className="card flex flex-col gap-2 p-4">
         <h2 className="font-semibold">Join code</h2>
         <p className="font-mono text-3xl font-bold tracking-[0.3em]">{team.joinCode}</p>

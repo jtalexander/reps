@@ -2,7 +2,6 @@ import { and, asc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { plays, uploadPages, uploads } from "@/db/schema";
-import { hasApiKey } from "@/ingest/extract";
 import { requireCoach } from "@/server/teams";
 import { UploadReview } from "./upload-review";
 
@@ -39,7 +38,7 @@ export default async function UploadPage({ params }: PageProps<"/t/[teamId]/uplo
       upload={{ id: upload.id, filename: upload.filename, pageCount: upload.pageCount, status: upload.status }}
       pages={pages.map((p) => ({ id: p.id, pageNo: p.pageNo, width: p.width, height: p.height, imageKey: p.imageKey, boxes: p.boxes, confirmed: p.boxesConfirmed }))}
       plays={rows}
-      canRead={hasApiKey()}
+      canRead={false}
     />
   );
 }

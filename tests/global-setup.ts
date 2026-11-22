@@ -8,7 +8,7 @@
  */
 import EmbeddedPostgres from "embedded-postgres";
 import { execSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { TestProject } from "vitest/node";
@@ -50,6 +50,16 @@ export default async function setup(project: TestProject) {
   if (existsSync(PID_FILE)) {
     for (const pid of readFileSync(PID_FILE, "utf8").split(",").map(Number)) kill(pid);
     rmSync(PID_FILE, { force: true });
+  }
+  // Leftovers from earlier runs (databases and media copies) add up fast; clear them.
+  for (const name of readdirSync(tmpdir())) {
+    if (/^reps-(test-pg|media|teach-media)-/.test(name)) {
+      try {
+        rmSync(path.join(tmpdir(), name), { recursive: true, force: true });
+      } catch {
+        /* still locked; next run */
+      }
+    }
   }
   const dir = mkdtempSync(path.join(tmpdir(), "reps-test-pg-"));
   const pg = new EmbeddedPostgres({

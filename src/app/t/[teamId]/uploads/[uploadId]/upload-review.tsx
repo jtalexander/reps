@@ -129,7 +129,7 @@ export function UploadReview(props: {
         <Link href={`/t/${props.teamId}/uploads`} className="text-sm text-muted underline">
           Uploads
         </Link>
-        <h1 className="mt-1 truncate text-2xl font-bold">{props.upload.filename}</h1>
+        <h1 className="mt-1 truncate text-4xl">{props.upload.filename}</h1>
         <p className="mt-1 text-sm text-muted">
           {props.pages.length} of {props.upload.pageCount} pages split · {boxCount} plays found · {readDone} read
         </p>
@@ -141,7 +141,17 @@ export function UploadReview(props: {
         </button>
       )}
 
+      <div className="card flex flex-col gap-2 border-accent p-4">
+        <p className="text-sm">
+          <strong>To teach this playbook, you don&apos;t need boxes.</strong> Reps reads whole pages and finds each play and section itself.
+        </p>
+        <Link className="btn btn-primary" href={`/t/${props.teamId}/teach?upload=${props.upload.id}&pages=1-${props.upload.pageCount}`}>
+          Read this playbook in Teach
+        </Link>
+      </div>
+
       <div className="card flex flex-col gap-3 p-4">
+        <p className="text-xs font-semibold text-muted uppercase">Optional: drawn plays entered by hand</p>
         <p className="text-sm">
           <strong>Check the boxes.</strong> Each box should hold one play. Tap a page to fix it — drag boxes, pick a grid, add or delete. Then cut out the plays
           {props.canRead ? " and let Reps read them." : "."}
@@ -275,7 +285,7 @@ function BoxEditor({ page, onCancel, onSave }: { page: PageInfo; onCancel: () =>
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Page {page.pageNo}</h1>
+        <h1 className="text-3xl">Page {page.pageNo}</h1>
         <button className="text-sm text-muted underline" onClick={onCancel}>
           Back
         </button>

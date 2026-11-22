@@ -28,7 +28,7 @@ export default async function PlayerResults({ params }: PageProps<"/t/[teamId]/r
         <Link href={`/t/${teamId}/results`} className="text-sm text-muted underline">
           Results
         </Link>
-        <h1 className="mt-1 text-2xl font-bold">
+        <h1 className="mt-1 text-4xl">
           {player.name} <span className="text-base font-normal text-muted">{player.positions.join(" ")}</span>
         </h1>
       </div>

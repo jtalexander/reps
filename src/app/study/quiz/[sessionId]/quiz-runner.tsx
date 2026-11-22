@@ -97,7 +97,7 @@ export function QuizRunner({ sessionId, mode, questions }: { sessionId: string; 
         </div>
       )}
 
-      <h1 className="text-lg leading-snug font-semibold">{q.prompt}</h1>
+      <h1 className="font-sans text-lg leading-snug font-semibold normal-case">{q.prompt}</h1>
 
       {q.diagram && diagramData && (
         <div className="card overflow-hidden">
