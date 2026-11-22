@@ -320,5 +320,31 @@ describe("teach loop", () => {
     expect(await run.runProgress(teamC.id, db)).toBeNull();
     await run.workTeam(teamC.id, null, 60_000, db);
     expect(calls()[0]! - before[0]!).toBe(2);
+    expect((await run.lastRun(teamC.id, db))?.error).toBeNull(); // a coach's Stop needs no explaining
+  });
+  it("stops a whole-playbook run when the Anthropic account runs out of credits, and picks up where it stopped", { timeout: 180_000 }, async () => {
+    const { createUpload, renderPages } = await import("@/server/ingest");
+    const run = await import("@/teach/playbook-run");
+    const svc = await import("@/teach/service");
+    const ai = await import("@/teach/ai");
+    const { createTeam } = await import("@/server/teams");
+    const teamD = await createTeam(db, coachId, "Teach D", "high_school");
+    const up = await createUpload(teamD.id, coachId, "d.pdf", new Uint8Array(readFileSync(SPARTANS)), db);
+    await renderPages(teamD.id, up.id, 1, 2, db);
+    const broke = new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}}');
+    vi.mocked(ai.decodePage).mockRejectedValueOnce(broke);
+    const decodes = vi.mocked(ai.decodePage).mock.calls.length;
+    await run.startPlaybookRun(teamD.id, up.id, db);
+    await run.workTeam(teamD.id, null, 60_000, db);
+    // one call hit the wall; the other page was not tried
+    expect(vi.mocked(ai.decodePage).mock.calls.length - decodes).toBe(1);
+    expect(await run.runProgress(teamD.id, db)).toBeNull();
+    expect(await run.lastRun(teamD.id, db)).toEqual({ status: "failed", error: svc.OUT_OF_CREDITS, failedSteps: 2 });
+    expect(svc.accountProblem("Overloaded")).toBeNull();
+    // credits back: the next tap does both pages and finishes
+    await run.startPlaybookRun(teamD.id, up.id, db);
+    await run.workTeam(teamD.id, null, 120_000, db);
+    expect(vi.mocked(ai.decodePage).mock.calls.length - decodes).toBe(3);
+    expect(await run.lastRun(teamD.id, db)).toEqual({ status: "done", error: null, failedSteps: 0 });
   });
 });

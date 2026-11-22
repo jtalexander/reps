@@ -91,6 +91,22 @@ export async function claimNextJob(teamId: string, database: Db = db) {
   return null;
 }
 
+/**
+ * Errors from the Anthropic account itself (no credits, key turned down).
+ * Every job after one of these fails the same way, so a whole-playbook run
+ * stops instead of burning through its queue. Returns what to tell the coach.
+ */
+export const OUT_OF_CREDITS = "Reps' Anthropic account ran out of credits. Add credits at console.anthropic.com (Plans & Billing), then pick up where it stopped.";
+export const KEY_TURNED_DOWN = "Anthropic turned down Reps' API key. Check ANTHROPIC_API_KEY on Netlify, then pick up where it stopped.";
+
+export function accountProblem(message: string | null | undefined): string | null {
+  if (!message) return null;
+  if (message === OUT_OF_CREDITS || message === KEY_TURNED_DOWN) return message;
+  if (/credit balance is too low/i.test(message)) return OUT_OF_CREDITS;
+  if (/authentication_error|invalid x-api-key|permission_error/i.test(message)) return KEY_TURNED_DOWN;
+  return null;
+}
+
 export async function executeJob(job: typeof jobs.$inferSelect, database: Db = db) {
   const jobId = job.id;
   try {
@@ -102,7 +118,8 @@ export async function executeJob(job: typeof jobs.$inferSelect, database: Db = d
     else throw new Error(`Unknown job kind ${job.kind}`);
     await setJob(job.id, { status: "done", result }, database);
   } catch (err) {
-    await failJob(job, err instanceof Error ? err.message.slice(0, 400) : String(err), database);
+    const raw = err instanceof Error ? err.message : String(err);
+    await failJob(job, accountProblem(raw) ?? raw.slice(0, 400), database);
   }
   const [after] = await database.select().from(jobs).where(eq(jobs.id, jobId));
   return after;

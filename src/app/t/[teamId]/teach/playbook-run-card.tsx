@@ -21,12 +21,15 @@ export function PlaybookRunCard({
   progress,
   pagesLeft,
   topicsLeft,
+  last,
 }: {
   teamId: string;
   uploads: Array<{ id: string; filename: string; pageCount: number }>;
   progress: RunProgress | null;
   pagesLeft: number;
   topicsLeft: number;
+  /** How the last finished run ended (null while one is going). */
+  last: { status: "done" | "failed"; error: string | null; failedSteps: number } | null;
 }) {
   const router = useRouter();
   const [uploadId, setUploadId] = useState(uploads[0]?.id ?? "");
@@ -51,16 +54,26 @@ export function PlaybookRunCard({
 
   if (!progress) {
     if (!uploads.length || (pagesLeft === 0 && topicsLeft === 0)) return null;
+    const resume = !!last && (!!last.error || last.failedSteps > 0);
     return (
       <section className="card flex flex-col gap-3 border-brand/60 p-4">
         <p className="eyebrow">
           <span className="h-px w-6 bg-brand" />
-          One tap
+          {resume ? "Not finished" : "One tap"}
         </p>
-        <h2 className="text-2xl">Read the whole playbook</h2>
+        <h2 className="text-2xl">{resume ? "Finish reading the playbook" : "Read the whole playbook"}</h2>
+        {last?.error ? (
+          <p className="bg-warn-bg px-3 py-2 text-sm text-warn">The last run stopped: {last.error}</p>
+        ) : resume ? (
+          <p className="bg-warn-bg px-3 py-2 text-sm text-warn">
+            The last run finished, but {last!.failedSteps} step{last!.failedSteps === 1 ? "" : "s"} didn&apos;t work. Tap below to redo just those.
+          </p>
+        ) : null}
         <p className="text-sm text-muted">
-          Reps reads {pagesLeft ? `the ${pagesLeft} pages it hasn't read yet` : "your playbook"}, finds its questions for every topic, sorts them, and writes draft lessons and
-          quiz questions. It runs on Reps&apos; server, so you can close this page. A full playbook takes about an hour. Nothing reaches players until you approve it.
+          {pagesLeft
+            ? `Reps reads the ${pagesLeft} pages it hasn't read yet, finds its questions for every topic, sorts them, and writes draft lessons and quiz questions.`
+            : `Everything is read. Reps finishes the ${topicsLeft} topic${topicsLeft === 1 ? "" : "s"} still missing questions or drafts, re-sorts the questions, and writes what's left.`}{" "}
+          It runs on Reps&apos; server, so you can close this page. Anything already done is kept. Nothing reaches players until you approve it.
         </p>
         {uploads.length > 1 && (
           <select className="input" value={uploadId} onChange={(e) => setUploadId(e.target.value)}>
@@ -72,7 +85,7 @@ export function PlaybookRunCard({
           </select>
         )}
         <button className="btn btn-primary self-start" disabled={busy || !uploadId} onClick={() => act("Starting", () => startPlaybookRunAction(teamId, uploadId))}>
-          {busy ? "Starting…" : "Read the whole playbook"}
+          {busy ? "Starting…" : resume ? "Pick up where it stopped" : "Read the whole playbook"}
         </button>
         {error && <p className="bg-bad-bg px-3 py-2 text-sm text-bad">{error}</p>}
       </section>

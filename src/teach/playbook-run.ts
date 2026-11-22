@@ -15,7 +15,7 @@ import { db, type Db } from "@/db";
 import { uploadPages } from "@/db/schema";
 import { jobs, teachPages, topics } from "@/db/teach-schema";
 import { BACKGROUND_PATH, onNetlify, signWorker } from "./dispatch";
-import { claimNextJob, executeJob, failJob, prepareDecode } from "./service";
+import { accountProblem, claimNextJob, executeJob, failJob, prepareDecode } from "./service";
 
 export const WORKERS = 3;
 /** Stop taking new jobs after this long, leaving room for the last one inside 15 minutes. */
@@ -66,7 +66,11 @@ export async function startPlaybookRun(teamId: string, uploadId: string, databas
     .map((p) => p.n)
     .filter((n) => !read.has(n))
     .sort((a, b) => a - b);
-  const [run] = await database.insert(jobs).values({ teamId, kind: "playbook", ref: uploadId, status: "running", result: { stage: 0 } }).returning();
+  // Stamped from the same clock as the jobs `enqueue` adds, so "this run's jobs" (createdAt >= run's) never misses one.
+  const [run] = await database
+    .insert(jobs)
+    .values({ teamId, kind: "playbook", ref: uploadId, status: "running", result: { stage: 0 }, createdAt: new Date(Date.now() - 1) })
+    .returning();
   await enqueue(teamId, "decode_page", await prepareDecode(teamId, uploadId, todo, database), database);
   return run!;
 }
@@ -113,7 +117,13 @@ export async function workTeam(teamId: string, origin: string | null, budgetMs =
   while (Date.now() < until) {
     const job = await claimNextJob(teamId, database);
     if (job) {
-      await executeJob(job, database);
+      const after = await executeJob(job, database);
+      const problem = accountProblem(after?.error);
+      if (problem) {
+        // every job after this would fail the same way: stop and say why
+        await stopPlaybookRun(teamId, database, problem);
+        return "idle";
+      }
       continue;
     }
     const queued = await advanceRun(teamId, database);
@@ -146,13 +156,40 @@ export async function dispatchWorkers(teamId: string, origin: string | null, n: 
   );
 }
 
+export const STOPPED_BY_COACH = "Stopped by the coach.";
+
 /** Stop a run: queued work is dropped, whatever is mid-way finishes. */
-export async function stopPlaybookRun(teamId: string, database: Db = db) {
+export async function stopPlaybookRun(teamId: string, database: Db = db, reason = STOPPED_BY_COACH) {
   const run = await activeRun(teamId, database);
   if (!run) return;
-  await database.update(jobs).set({ status: "failed", error: "Stopped by the coach." }).where(eq(jobs.id, run.id));
+  await database.update(jobs).set({ status: "failed", error: reason }).where(eq(jobs.id, run.id));
   const queued = await database.select().from(jobs).where(and(eq(jobs.teamId, teamId), eq(jobs.status, "queued"), ne(jobs.kind, "playbook")));
-  for (const j of queued) await failJob(j, "Stopped by the coach.", database);
+  for (const j of queued) await failJob(j, reason, database);
+}
+
+/**
+ * How the most recent finished run ended, so the Teach page can say why it
+ * stopped or how many steps didn't work. Null while a run is going or if
+ * there never was one.
+ */
+export async function lastRun(teamId: string, database: Db = db) {
+  const [run] = await database
+    .select()
+    .from(jobs)
+    .where(and(eq(jobs.teamId, teamId), eq(jobs.kind, "playbook")))
+    .orderBy(desc(jobs.createdAt))
+    .limit(1);
+  if (!run || run.status === "running") return null;
+  const [f] = await database
+    .select({ n: sql<number>`count(*)::int` })
+    .from(jobs)
+    .where(and(eq(jobs.teamId, teamId), eq(jobs.status, "failed"), ne(jobs.kind, "playbook"), sql`${jobs.createdAt} >= ${run.createdAt}`));
+  return {
+    status: run.status as "done" | "failed",
+    // the coach pressed Stop themself: nothing to explain
+    error: run.error === STOPPED_BY_COACH ? null : run.error,
+    failedSteps: f?.n ?? 0,
+  };
 }
 
 /** What the Teach page shows while a run is going. */

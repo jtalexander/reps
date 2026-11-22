@@ -5,7 +5,7 @@ import { uploads } from "@/db/schema";
 import { teachPages } from "@/db/teach-schema";
 import { hasApiKey } from "@/ingest/extract";
 import { requireCoach } from "@/server/teams";
-import { runProgress } from "@/teach/playbook-run";
+import { lastRun, runProgress } from "@/teach/playbook-run";
 import { openFlags, topicOverview } from "@/teach/service";
 import { TriageButton } from "./triage-button";
 import { DecodePanel } from "./decode-panel";
@@ -45,6 +45,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
   const flagged = new Set((await openFlags(teamId)).map((f) => f.question.id)).size;
   const optional = topics.reduce((a, t) => a + t.gapsOptional, 0);
   const run = await runProgress(teamId);
+  const last = run ? null : await lastRun(teamId);
   const lead = ups[0];
   const leadRead = lead
     ? (
@@ -81,6 +82,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
         progress={run && { stage: run.stage, pages: run.pages, topics: run.topics, running: run.running, stalled: run.stalled }}
         pagesLeft={pagesLeft}
         topicsLeft={topicsLeft}
+        last={last}
       />
 
       {firstTodo && (
