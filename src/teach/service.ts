@@ -51,7 +51,7 @@ async function setJob(id: string, patch: Partial<typeof jobs.$inferInsert>, data
   await database.update(jobs).set(patch).where(eq(jobs.id, id));
 }
 
-async function failJob(job: typeof jobs.$inferSelect, msg: string, database: Db) {
+export async function failJob(job: typeof jobs.$inferSelect, msg: string, database: Db) {
   await setJob(job.id, { status: "failed", error: msg }, database);
   if (job.kind === "decode_page") await database.update(teachPages).set({ status: "failed", error: msg }).where(eq(teachPages.id, job.ref));
 }
@@ -65,15 +65,41 @@ export async function runJob(jobId: string, database: Db = db) {
   const [job] = await database
     .update(jobs)
     .set({ status: "running", error: null })
-    .where(and(eq(jobs.id, jobId), eq(jobs.status, "queued")))
+    .where(and(eq(jobs.id, jobId), eq(jobs.status, "queued"), sql`${jobs.kind} <> 'playbook'`))
     .returning();
   if (!job) return (await database.select().from(jobs).where(eq(jobs.id, jobId)))[0];
+  return executeJob(job, database);
+}
+
+/** Claim the oldest queued job of a team (whole-playbook runs work through these). */
+export async function claimNextJob(teamId: string, database: Db = db) {
+  for (let tries = 0; tries < 5; tries++) {
+    const [next] = await database
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(and(eq(jobs.teamId, teamId), eq(jobs.status, "queued"), sql`${jobs.kind} <> 'playbook'`))
+      .orderBy(asc(jobs.createdAt), asc(jobs.id))
+      .limit(1);
+    if (!next) return null;
+    const [job] = await database
+      .update(jobs)
+      .set({ status: "running", error: null })
+      .where(and(eq(jobs.id, next.id), eq(jobs.status, "queued")))
+      .returning();
+    if (job) return job; // else another worker took it; try the next one
+  }
+  return null;
+}
+
+export async function executeJob(job: typeof jobs.$inferSelect, database: Db = db) {
+  const jobId = job.id;
   try {
     let result: Record<string, number> | null = null;
     if (job.kind === "decode_page") await runDecode(job.teamId, job.ref, database);
     else if (job.kind === "find_gaps") await runGaps(job.teamId, job.ref, database);
     else if (job.kind === "triage") result = await triageTeamGaps(job.teamId, database);
-    else await runWrite(job.teamId, job.ref, database);
+    else if (job.kind === "write_topic") await runWrite(job.teamId, job.ref, database);
+    else throw new Error(`Unknown job kind ${job.kind}`);
     await setJob(job.id, { status: "done", result }, database);
   } catch (err) {
     await failJob(job, err instanceof Error ? err.message.slice(0, 400) : String(err), database);

@@ -155,8 +155,8 @@ export const jobs = pgTable(
   {
     id: id(),
     teamId: team(),
-    kind: text().$type<"decode_page" | "find_gaps" | "write_topic" | "triage">().notNull(),
-    /** what the job works on: a teach page, a topic, or (triage) the team */
+    kind: text().$type<"decode_page" | "find_gaps" | "write_topic" | "triage" | "playbook">().notNull(),
+    /** what the job works on: a teach page, a topic, the team (triage), or the upload (playbook = a whole-playbook run) */
     ref: uuid().notNull(),
     status: text().$type<"queued" | "running" | "done" | "failed">().notNull().default("queued"),
     error: text(),

@@ -30,13 +30,26 @@ export function signJob(jobId: string) {
   return createHmac("sha256", secret()).update(`teach-job:${jobId}`).digest("hex");
 }
 
+const same = (want: string, got: string) => {
+  const a = Buffer.from(want);
+  const b = Buffer.from(got);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
 export function verifyJob(jobId: string, sig: string) {
-  const want = Buffer.from(signJob(jobId));
-  const got = Buffer.from(sig);
-  return want.length === got.length && timingSafeEqual(want, got);
+  return same(signJob(jobId), sig);
 }
 
-const onNetlify = () => !!(process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT);
+/** Workers for a whole-playbook run carry the team and the site address they call back to. */
+export function signWorker(teamId: string, origin: string) {
+  return createHmac("sha256", secret()).update(`teach-worker:${teamId}:${origin}`).digest("hex");
+}
+
+export function verifyWorker(teamId: string, origin: string, sig: string) {
+  return same(signWorker(teamId, origin), sig);
+}
+
+export const onNetlify = () => !!(process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT);
 
 /** Hand a queued job to whatever can run it. Never throws. */
 export async function dispatchJob(jobId: string, origin: string | null, database: Db = db) {

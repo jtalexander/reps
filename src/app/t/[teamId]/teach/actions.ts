@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { uploadPages } from "@/db/schema";
 import { renderPages } from "@/server/ingest";
 import { dispatchJob } from "@/teach/dispatch";
+import { WORKERS, dispatchWorkers, startPlaybookRun, stopPlaybookRun } from "@/teach/playbook-run";
 import { requireCoach } from "@/server/teams";
 import {
   acceptSuggestions,
@@ -214,6 +215,42 @@ export async function resolveFlagsAction(teamId: string, questionId: string): Pr
   try {
     const { user } = await requireCoach(teamId);
     await resolveFlags(teamId, questionId, user.id);
+    revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** One tap: read every page, find questions, sort, write drafts, all on the server. */
+export async function startPlaybookRunAction(teamId: string, uploadId: string): Promise<R> {
+  try {
+    await requireCoach(teamId);
+    if (!/^[0-9a-f-]{36}$/i.test(uploadId)) throw new Error("Pick a playbook.");
+    await startPlaybookRun(teamId, uploadId);
+    await dispatchWorkers(teamId, await origin(), WORKERS);
+    revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Restart the workers of a run that stopped moving (extra workers just find nothing to do). */
+export async function keepGoingAction(teamId: string): Promise<R> {
+  try {
+    await requireCoach(teamId);
+    await dispatchWorkers(teamId, await origin(), WORKERS);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function stopPlaybookRunAction(teamId: string): Promise<R> {
+  try {
+    await requireCoach(teamId);
+    await stopPlaybookRun(teamId);
     revalidatePath(`/t/${teamId}/teach`);
     return { ok: true };
   } catch (e) {

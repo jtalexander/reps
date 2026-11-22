@@ -284,4 +284,41 @@ describe("teach loop", () => {
     expect(verifyJob(lost.id, signJob(job.id))).toBe(false);
     expect(verifyJob(job.id, "nope")).toBe(false);
   });
+  it("reads a whole playbook on the server: every step once, in order, even with two workers at once", { timeout: 180_000 }, async () => {
+    const { createUpload, renderPages } = await import("@/server/ingest");
+    const run = await import("@/teach/playbook-run");
+    const ai = await import("@/teach/ai");
+    const { createTeam } = await import("@/server/teams");
+    const teamC = await createTeam(db, coachId, "Teach C", "high_school");
+    const up = await createUpload(teamC.id, coachId, "c.pdf", new Uint8Array(readFileSync(SPARTANS)), db);
+    await renderPages(teamC.id, up.id, 1, 2, db);
+    const calls = () => [ai.decodePage, ai.findGaps, ai.triageGaps, ai.writeTopic].map((f) => vi.mocked(f).mock.calls.length);
+    const before = calls();
+    const r = await run.startPlaybookRun(teamC.id, up.id, db);
+    expect((await run.startPlaybookRun(teamC.id, up.id, db)).id).toBe(r.id); // one run at a time
+    expect((await run.runProgress(teamC.id, db))?.stage).toBe("reading");
+    await Promise.all([run.workTeam(teamC.id, null, 120_000, db), run.workTeam(teamC.id, null, 120_000, db)]);
+    // 2 pages read, 1 topic asked, 1 sort, 1 topic written: nothing twice
+    expect(calls().map((n, i) => n - before[i]!)).toEqual([2, 1, 1, 1]);
+    expect(await run.runProgress(teamC.id, db)).toBeNull();
+    const [done] = await db.select().from(jobs).where(eq(jobs.id, r.id));
+    expect(done!.status).toBe("done");
+    const [t] = await db.select().from(topics).where(eq(topics.teamId, teamC.id));
+    expect(t!.gapsFoundAt).not.toBeNull();
+    expect(t!.generatedAt).not.toBeNull();
+    // running it again only does what's missing (here: nothing)
+    const again = await run.startPlaybookRun(teamC.id, up.id, db);
+    await run.workTeam(teamC.id, null, 60_000, db);
+    expect(calls().map((n, i) => n - before[i]!)).toEqual([2, 1, 2, 1]); // just the cheap re-sort
+    expect((await db.select().from(jobs).where(eq(jobs.id, again.id)))[0]!.status).toBe("done");
+    // stop drops queued work; other teams' runs are untouched
+    await renderPages(teamC.id, up.id, 3, 3, db);
+    await run.startPlaybookRun(teamC.id, up.id, db);
+    await run.stopPlaybookRun(teamA.id, db);
+    expect(await run.runProgress(teamC.id, db)).not.toBeNull();
+    await run.stopPlaybookRun(teamC.id, db);
+    expect(await run.runProgress(teamC.id, db)).toBeNull();
+    await run.workTeam(teamC.id, null, 60_000, db);
+    expect(calls()[0]! - before[0]!).toBe(2);
+  });
 });

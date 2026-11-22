@@ -5,9 +5,11 @@ import { uploads } from "@/db/schema";
 import { teachPages } from "@/db/teach-schema";
 import { hasApiKey } from "@/ingest/extract";
 import { requireCoach } from "@/server/teams";
+import { runProgress } from "@/teach/playbook-run";
 import { openFlags, topicOverview } from "@/teach/service";
 import { TriageButton } from "./triage-button";
 import { DecodePanel } from "./decode-panel";
+import { PlaybookRunCard } from "./playbook-run-card";
 import { TopicRow } from "./topic-row";
 
 export const metadata = { title: "Teach" };
@@ -42,6 +44,18 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
   const decoded = pageStats.find((s) => s.status === "decoded")?.n ?? 0;
   const flagged = new Set((await openFlags(teamId)).map((f) => f.question.id)).size;
   const optional = topics.reduce((a, t) => a + t.gapsOptional, 0);
+  const run = await runProgress(teamId);
+  const lead = ups[0];
+  const leadRead = lead
+    ? (
+        await db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(teachPages)
+          .where(and(eq(teachPages.teamId, teamId), eq(teachPages.uploadId, lead.id), inArray(teachPages.status, ["decoded", "not_playbook"])))
+      )[0]!.n
+    : 0;
+  const pagesLeft = lead ? Math.max(0, lead.pageCount - leadRead) : 0;
+  const topicsLeft = topics.filter((t) => !t.gapsFoundAt || !t.generatedAt).length;
   const firstTodo = topics.find((t) => t.gapsOpen > 0 || t.lessonsDraft + t.questionsDraft > 0);
 
   return (
@@ -60,6 +74,14 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
           Players flagged {flagged} question{flagged === 1 ? "" : "s"} as wrong. Take a look →
         </Link>
       )}
+
+      <PlaybookRunCard
+        teamId={teamId}
+        uploads={ups.map((u) => ({ id: u.id, filename: u.filename, pageCount: u.pageCount }))}
+        progress={run && { stage: run.stage, pages: run.pages, topics: run.topics, running: run.running, stalled: run.stalled }}
+        pagesLeft={pagesLeft}
+        topicsLeft={topicsLeft}
+      />
 
       {firstTodo && (
         <div className="card flex flex-wrap items-center gap-3 p-4">
