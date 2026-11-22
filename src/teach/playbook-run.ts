@@ -10,10 +10,10 @@
  * next stage, queues its jobs and calls in more workers. A worker hands off to
  * a fresh one before Netlify's 15-minute limit.
  */
-import { and, asc, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { uploadPages } from "@/db/schema";
-import { jobs, teachPages, topics } from "@/db/teach-schema";
+import { jobs, questions, teachPages, topics } from "@/db/teach-schema";
 import { BACKGROUND_PATH, onNetlify, signWorker } from "./dispatch";
 import { accountProblem, claimNextJob, executeJob, failJob, prepareDecode } from "./service";
 
@@ -22,7 +22,7 @@ export const WORKERS = 3;
 const BUDGET_MS = 8 * 60 * 1000;
 const STUCK_MS = 16 * 60 * 1000;
 
-export const STAGES = ["reading", "questions", "sorting", "writing", "done"] as const;
+export const STAGES = ["reading", "questions", "sorting", "writing", "picking", "done"] as const;
 export type Stage = (typeof STAGES)[number];
 
 type Job = typeof jobs.$inferSelect;
@@ -38,7 +38,7 @@ export async function activeRun(teamId: string, database: Db = db): Promise<Job 
 }
 
 /** Queue jobs in this order (claims go oldest first). */
-async function enqueue(teamId: string, kind: "decode_page" | "find_gaps" | "write_topic" | "triage", refs: string[], database: Db) {
+async function enqueue(teamId: string, kind: "decode_page" | "find_gaps" | "write_topic" | "triage" | "pick_core", refs: string[], database: Db) {
   if (!refs.length) return 0;
   const base = Date.now();
   await database.insert(jobs).values(refs.map((ref, i) => ({ teamId, kind, ref, createdAt: new Date(base + i) })));
@@ -107,6 +107,17 @@ async function advanceRun(teamId: string, database: Db): Promise<number | null> 
   if (next === "questions") return enqueue(teamId, "find_gaps", ts.filter((t) => !t.gapsFoundAt).map((t) => t.id), database);
   if (next === "sorting") return enqueue(teamId, "triage", [teamId], database);
   if (next === "writing") return enqueue(teamId, "write_topic", ts.filter((t) => !t.generatedAt).map((t) => t.id), database);
+  if (next === "picking") {
+    // writing sorts its own drafts; this catches drafts written before the core set existed, or a sort that failed
+    const unsorted = await database
+      .selectDistinct({ topicId: questions.topicId })
+      .from(questions)
+      .where(and(eq(questions.teamId, teamId), eq(questions.status, "draft"), isNull(questions.tier)));
+    const ids = new Set(unsorted.map((u) => u.topicId));
+    const n = await enqueue(teamId, "pick_core", ts.filter((t) => ids.has(t.id)).map((t) => t.id), database);
+    if (n) return n;
+    return advanceRun(teamId, database); // nothing to sort: finish now
+  }
   await database.update(jobs).set({ status: "done" }).where(eq(jobs.id, run.id));
   return null;
 }

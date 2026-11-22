@@ -65,6 +65,8 @@ export const topics = pgTable(
     /** gap finding and lesson/question writing, see jobs */
     gapsFoundAt: timestamp({ withTimezone: true }),
     generatedAt: timestamp({ withTimezone: true }),
+    /** in the install the team is learning now: first in line for the coach and the players */
+    inInstall: boolean().notNull().default(false),
     archived: boolean().notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -140,6 +142,12 @@ export const questions = pgTable(
     image: jsonb().$type<QuestionImage | null>(),
     sourcePages: integer().array().notNull().default(sql`'{}'::int[]`),
     status: text().$type<"draft" | "approved" | "rejected">().notNull().default("draft"),
+    /**
+     * "core": the few must-know questions per topic the coach reviews first;
+     * "reserve": the rest, kept out of the review until the coach wants more.
+     * null = not sorted yet (treated as core so nothing is hidden).
+     */
+    tier: text().$type<"core" | "reserve">(),
     approvedBy: uuid().references(() => users.id, { onDelete: "set null" }),
     approvedAt: timestamp({ withTimezone: true }),
     sort: integer().notNull().default(0),
@@ -155,7 +163,7 @@ export const jobs = pgTable(
   {
     id: id(),
     teamId: team(),
-    kind: text().$type<"decode_page" | "find_gaps" | "write_topic" | "triage" | "playbook">().notNull(),
+    kind: text().$type<"decode_page" | "find_gaps" | "write_topic" | "triage" | "pick_core" | "playbook">().notNull(),
     /** what the job works on: a teach page, a topic, the team (triage), or the upload (playbook = a whole-playbook run) */
     ref: uuid().notNull(),
     status: text().$type<"queued" | "running" | "done" | "failed">().notNull().default("queued"),

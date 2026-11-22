@@ -9,7 +9,7 @@ import { db, type Db } from "@/db";
 import { players, uploadPages } from "@/db/schema";
 import { askLog, attempts, gaps, jobs, lessonProgress, lessons, questionFlags, questionSrs, questions, teachPages, topics } from "@/db/teach-schema";
 import { media } from "@/media/store";
-import { askPlaybook, decodePage, findGaps, gradeOpen, triageGaps, writeTopic, type PageImage } from "./ai";
+import { askPlaybook, decodePage, findGaps, gradeOpen, pickCore, triageGaps, writeTopic, type PageImage } from "./ai";
 import { QuestionDataSchema, type Audience, type Box, type DiagramRegion, type Fact, type QuestionData, type QuestionImage } from "./types";
 
 export const topicKey = (name: string) => name.toUpperCase().replace(/[^A-Z0-9#&' -]+/g, " ").replace(/\s+/g, " ").trim();
@@ -115,6 +115,7 @@ export async function executeJob(job: typeof jobs.$inferSelect, database: Db = d
     else if (job.kind === "find_gaps") await runGaps(job.teamId, job.ref, database);
     else if (job.kind === "triage") result = await triageTeamGaps(job.teamId, database);
     else if (job.kind === "write_topic") await runWrite(job.teamId, job.ref, database);
+    else if (job.kind === "pick_core") result = await pickCoreQuestions(job.teamId, job.ref, database);
     else throw new Error(`Unknown job kind ${job.kind}`);
     await setJob(job.id, { status: "done", result }, database);
   } catch (err) {
@@ -329,19 +330,25 @@ export async function acceptSuggestions(teamId: string, topicId: string, userId:
   return open.length;
 }
 
-/** Approve every lesson and question still in draft on a topic. */
-export async function approveTopic(teamId: string, topicId: string, userId: string, except: string[] = [], database: Db = db) {
+/**
+ * Approve what the coach just skimmed on a topic: "core" = its draft lessons
+ * and core questions; "reserve" = its reserve questions only.
+ */
+export async function approveTopic(teamId: string, topicId: string, userId: string, except: string[] = [], database: Db = db, pile: "core" | "reserve" = "core") {
   const set = { status: "approved" as const, approvedBy: userId, approvedAt: new Date() };
   const skip = except.length ? except : ["00000000-0000-0000-0000-000000000000"];
-  const ls = await database
-    .update(lessons)
-    .set(set)
-    .where(and(eq(lessons.teamId, teamId), eq(lessons.topicId, topicId), eq(lessons.status, "draft"), notInArray(lessons.id, skip)))
-    .returning({ id: lessons.id });
+  const ls =
+    pile === "core"
+      ? await database
+          .update(lessons)
+          .set(set)
+          .where(and(eq(lessons.teamId, teamId), eq(lessons.topicId, topicId), eq(lessons.status, "draft"), notInArray(lessons.id, skip)))
+          .returning({ id: lessons.id })
+      : [];
   const qs = await database
     .update(questions)
     .set(set)
-    .where(and(eq(questions.teamId, teamId), eq(questions.topicId, topicId), eq(questions.status, "draft"), notInArray(questions.id, skip)))
+    .where(and(eq(questions.teamId, teamId), eq(questions.topicId, topicId), eq(questions.status, "draft"), inPile(pile), notInArray(questions.id, skip)))
     .returning({ id: questions.id });
   return { lessons: ls.length, questions: qs.length };
 }
@@ -488,9 +495,65 @@ async function runWrite(teamId: string, topicId: string, database: Db) {
   }
   if (rows.length) await database.insert(questions).values(rows);
   await database.update(topics).set({ generatedAt: new Date() }).where(eq(topics.id, topicId));
+  // Unsorted drafts show as core, and a whole-playbook run sorts them later, so a failure here is not fatal.
+  await pickCoreQuestions(teamId, topicId, database).catch((err) => console.error("pick core", topicId, err));
+}
+
+// ---------------- core set ----------------
+
+/** How many must-know questions per topic the coach reviews first; the rest wait in reserve. */
+export const CORE_PER_TOPIC = 5;
+
+const answerText = (d: QuestionData) =>
+  d.kind === "choice" ? (d.choices.find((c) => c.id === d.answer)?.text ?? "") : d.kind === "tap" ? `tap ${d.targetLabel}` : d.kind === "order" ? d.items.join(" > ") : d.modelAnswer;
+
+/**
+ * Sort a topic's draft questions into core and reserve. Questions already
+ * approved count toward the core, so after a rewrite only the gap is filled.
+ */
+export async function pickCoreQuestions(teamId: string, topicId: string, database: Db = db) {
+  const [topic] = await database.select().from(topics).where(and(eq(topics.teamId, teamId), eq(topics.id, topicId)));
+  if (!topic) throw new Error("Topic not found.");
+  const all = await database.select().from(questions).where(and(eq(questions.teamId, teamId), eq(questions.topicId, topicId))).orderBy(asc(questions.sort));
+  const drafts = all.filter((q) => q.status === "draft");
+  const live = all.filter((q) => q.status === "approved" && q.tier !== "reserve");
+  const room = Math.max(0, CORE_PER_TOPIC - live.length);
+  const core = new Set<string>();
+  if (drafts.length <= room) for (const q of drafts) core.add(q.id);
+  else if (room > 0) {
+    const line = (q: (typeof all)[number], n: number) => `${n}. [${q.audience.join(", ")}] (${q.format}) ${q.prompt} -> ${answerText(q.data).slice(0, 160)}`;
+    const out = await pickCore(
+      topic.name,
+      drafts.map((q, i) => line(q, i + 1)).join("\n"),
+      room,
+      live.map((q) => `- ${q.prompt}`).join("\n"),
+    );
+    for (const n of out.core) {
+      const q = drafts[n - 1];
+      if (q && core.size < room) core.add(q.id);
+    }
+  }
+  const coreIds = [...core];
+  const reserveIds = drafts.filter((q) => !core.has(q.id)).map((q) => q.id);
+  if (coreIds.length) await database.update(questions).set({ tier: "core" }).where(inArray(questions.id, coreIds));
+  if (reserveIds.length) await database.update(questions).set({ tier: "reserve" }).where(inArray(questions.id, reserveIds));
+  return { core: coreIds.length, reserve: reserveIds.length };
+}
+
+/** Put a topic in or out of the current install. */
+export async function setInstall(teamId: string, topicId: string, on: boolean, database: Db = db) {
+  await database.update(topics).set({ inInstall: on }).where(and(eq(topics.teamId, teamId), eq(topics.id, topicId)));
+}
+
+/** Start a new install: take every topic out. */
+export async function clearInstall(teamId: string, database: Db = db) {
+  await database.update(topics).set({ inInstall: false }).where(and(eq(topics.teamId, teamId), eq(topics.inInstall, true)));
 }
 
 // ---------------- coach review ----------------
+
+/** Unsorted questions (tier null) count as core so nothing is hidden from the coach. */
+export const inPile = (pile: "core" | "reserve") => (pile === "reserve" ? eq(questions.tier, "reserve") : sql`${questions.tier} is distinct from 'reserve'`);
 
 export async function reviewLesson(teamId: string, id: string, patch: { status?: "approved" | "rejected" | "draft"; title?: string; body?: string; audience?: string }, userId: string, database: Db = db) {
   const set: Partial<typeof lessons.$inferInsert> = {};
@@ -508,11 +571,12 @@ export async function reviewLesson(teamId: string, id: string, patch: { status?:
 export async function reviewQuestion(
   teamId: string,
   id: string,
-  patch: { status?: "approved" | "rejected" | "draft"; prompt?: string; explanation?: string; data?: unknown; audience?: string[] },
+  patch: { status?: "approved" | "rejected" | "draft"; prompt?: string; explanation?: string; data?: unknown; audience?: string[]; tier?: "core" | "reserve" },
   userId: string,
   database: Db = db,
 ) {
   const set: Partial<typeof questions.$inferInsert> = {};
+  if (patch.tier === "core" || patch.tier === "reserve") set.tier = patch.tier;
   if (patch.prompt !== undefined) set.prompt = patch.prompt.trim();
   if (patch.explanation !== undefined) set.explanation = patch.explanation.trim();
   if (patch.data !== undefined) {
@@ -538,7 +602,21 @@ export async function topicOverview(teamId: string, database: Db = db) {
       .where(eq(table.teamId, teamId))
       .groupBy(table.topicId, table.status);
   const ls = await count(lessons);
-  const qs = await count(questions);
+  // reserve drafts are counted apart: they aren't waiting on the coach
+  const qs = await database
+    .select({
+      topicId: questions.topicId,
+      status: sql<string>`case when ${questions.status} = 'draft' and ${questions.tier} = 'reserve' then 'reserve' else ${questions.status} end`,
+      n: sql<number>`count(*)::int`,
+    })
+    .from(questions)
+    .where(eq(questions.teamId, teamId))
+    .groupBy(sql`1`, sql`2`);
+  const unsorted = await database
+    .select({ topicId: questions.topicId, n: sql<number>`count(*)::int` })
+    .from(questions)
+    .where(and(eq(questions.teamId, teamId), eq(questions.status, "draft"), isNull(questions.tier)))
+    .groupBy(questions.topicId);
   // An open question is "asked" when it's a main one and not a repeat of another topic's.
   const gs = await database
     .select({
@@ -559,7 +637,10 @@ export async function topicOverview(teamId: string, database: Db = db) {
     lessonsDraft: n(ls, t.id, "draft"),
     lessonsApproved: n(ls, t.id, "approved"),
     questionsDraft: n(qs, t.id, "draft"),
+    questionsReserve: n(qs, t.id, "reserve"),
     questionsApproved: n(qs, t.id, "approved"),
+    /** drafts written before the core set existed (a whole-playbook run sorts them) */
+    questionsUnsorted: unsorted.find((u) => u.topicId === t.id)?.n ?? 0,
   }));
 }
 
@@ -661,10 +742,14 @@ export async function practiceSet(teamId: string, playerId: string, group: Audie
   const pool = topicId ? qs.filter((q) => q.topicId === topicId) : qs;
   const srs = await database.select().from(questionSrs).where(eq(questionSrs.playerId, playerId));
   const by = new Map(srs.map((s) => [s.questionId, s]));
+  // new questions from the current install come before other new ones
+  const install = new Set(
+    (await database.select({ id: topics.id }).from(topics).where(and(eq(topics.teamId, teamId), eq(topics.inInstall, true)))).map((t) => t.id),
+  );
   const now = Date.now();
   const scored = pool.map((q) => {
     const s = by.get(q.id);
-    const score = !s ? 1 + Math.random() : s.dueAt.getTime() <= now ? -(now - s.dueAt.getTime()) / DAY - (5 - s.box) : 2 + (s.dueAt.getTime() - now) / DAY + Math.random();
+    const score = !s ? (install.has(q.topicId) ? 0 : 1) + Math.random() : s.dueAt.getTime() <= now ? -(now - s.dueAt.getTime()) / DAY - (5 - s.box) : 2 + (s.dueAt.getTime() - now) / DAY + Math.random();
     return { q, score };
   });
   scored.sort((a, b) => a.score - b.score);

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { lessons, questions, topics } from "@/db/teach-schema";
 import { requireCoach } from "@/server/teams";
 import { pageRefs } from "@/teach/page-images";
+import { inPile } from "@/teach/service";
 import { ReviewQueue } from "./review-queue";
 
 export const metadata = { title: "Approve lessons and questions" };
@@ -16,7 +17,8 @@ export default async function Review({ params, searchParams }: PageProps<"/t/[te
   const status = show === "approved" ? "approved" : "draft";
   const ts = await db.select().from(topics).where(and(eq(topics.teamId, teamId), eq(topics.archived, false))).orderBy(asc(topics.sort));
   const lw = [eq(lessons.teamId, teamId), eq(lessons.status, status)];
-  const qw = [eq(questions.teamId, teamId), eq(questions.status, status)];
+  // reserve drafts aren't waiting on the coach; they're reviewed from their topic's reserve pile
+  const qw = [eq(questions.teamId, teamId), eq(questions.status, status), ...(status === "draft" ? [inPile("core")] : [])];
   if (topicId) {
     lw.push(eq(lessons.topicId, topicId));
     qw.push(eq(questions.topicId, topicId));

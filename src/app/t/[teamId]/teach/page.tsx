@@ -9,6 +9,7 @@ import { lastRun, runProgress } from "@/teach/playbook-run";
 import { openFlags, topicOverview } from "@/teach/service";
 import { TriageButton } from "./triage-button";
 import { DecodePanel } from "./decode-panel";
+import { ClearInstall } from "./install-button";
 import { PlaybookRunCard } from "./playbook-run-card";
 import { TopicRow } from "./topic-row";
 
@@ -37,10 +38,21 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
     .where(and(eq(teachPages.teamId, teamId), eq(teachPages.status, "failed")))
     .orderBy(asc(teachPages.pageNo));
   const topics = await topicOverview(teamId);
-  const totals = topics.reduce(
-    (a, t) => ({ gaps: a.gaps + t.gapsOpen, drafts: a.drafts + t.lessonsDraft + t.questionsDraft, live: a.live + t.lessonsApproved + t.questionsApproved }),
-    { gaps: 0, drafts: 0, live: 0 },
-  );
+  // the install comes first everywhere; otherwise playbook order
+  topics.sort((a, b) => Number(b.inInstall) - Number(a.inInstall));
+  const sum = (ts: typeof topics) =>
+    ts.reduce(
+      (a, t) => ({
+        gaps: a.gaps + t.gapsOpen,
+        drafts: a.drafts + t.lessonsDraft + t.questionsDraft,
+        reserve: a.reserve + t.questionsReserve,
+        live: a.live + t.lessonsApproved + t.questionsApproved,
+      }),
+      { gaps: 0, drafts: 0, reserve: 0, live: 0 },
+    );
+  const totals = sum(topics);
+  const install = topics.filter((t) => t.inInstall);
+  const installTotals = sum(install);
   const decoded = pageStats.find((s) => s.status === "decoded")?.n ?? 0;
   const flagged = new Set((await openFlags(teamId)).map((f) => f.question.id)).size;
   const optional = topics.reduce((a, t) => a + t.gapsOptional, 0);
@@ -56,7 +68,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       )[0]!.n
     : 0;
   const pagesLeft = lead ? Math.max(0, lead.pageCount - leadRead) : 0;
-  const topicsLeft = topics.filter((t) => !t.gapsFoundAt || !t.generatedAt).length;
+  const topicsLeft = topics.filter((t) => !t.gapsFoundAt || !t.generatedAt || t.questionsUnsorted > 0).length;
   const firstTodo = topics.find((t) => t.gapsOpen > 0 || t.lessonsDraft + t.questionsDraft > 0);
 
   return (
@@ -90,13 +102,48 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
           <div className="flex-1">
             <div className="font-semibold">Go topic by topic</div>
             <p className="text-sm text-muted">
-              Each topic is one page: answer Reps&apos; few questions, skim the lessons and quiz questions, approve them all with one tap.
+              Each topic is one page: answer Reps&apos; few questions, skim the lessons and its core quiz questions, approve them all with one tap.
+              {firstTodo.inInstall ? " Your install comes first." : ""}
             </p>
           </div>
           <Link href={`/t/${teamId}/teach/topic/${firstTodo.id}`} className="btn btn-primary">
             Start with {firstTodo.name} →
           </Link>
         </div>
+      )}
+
+      {topics.length > 0 && (
+        <section className="card flex flex-col gap-2 p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="eyebrow">
+              <span className="h-px w-6 bg-brand" />
+              This week&apos;s install
+            </p>
+            {install.length > 0 && <ClearInstall teamId={teamId} count={install.length} />}
+          </div>
+          {install.length === 0 ? (
+            <p className="text-sm text-muted">
+              Pick what you&apos;re teaching now: tap <b>+ Add to install</b> on those topics below. They come first here, in your review, and on your players&apos; Study page.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm">
+                {install.length} topic{install.length === 1 ? "" : "s"}
+                {installTotals.gaps ? <span className="font-semibold text-warn"> · {installTotals.gaps} questions for you</span> : null}
+                {installTotals.drafts ? <span className="font-semibold text-warn"> · {installTotals.drafts} to review</span> : null}
+                <span className="text-muted"> · {installTotals.live} live</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {install.map((t) => (
+                  <Link key={t.id} href={`/t/${teamId}/teach/topic/${t.id}`} className="border border-line px-2 py-1 text-sm hover:border-brand">
+                    {t.name}
+                    {t.gapsOpen + t.lessonsDraft + t.questionsDraft === 0 ? <span className="text-ok"> ✓</span> : null}
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
       )}
 
       <ol className="grid gap-3 sm:grid-cols-3">
@@ -113,6 +160,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
           <div className="font-semibold">Approve lessons & questions</div>
           <div className={`text-sm ${totals.drafts ? "font-semibold text-warn" : "text-muted"}`}>
             {totals.drafts} to review · {totals.live} live
+            {totals.reserve ? <span className="block font-normal text-muted">{totals.reserve} more questions in reserve</span> : null}
           </div>
         </Link>
       </ol>
@@ -149,7 +197,9 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
                   gapsOpen: t.gapsOpen,
                   gapsDone: t.gapsDone,
                   drafts: t.lessonsDraft + t.questionsDraft,
+                  reserve: t.questionsReserve,
                   live: t.lessonsApproved + t.questionsApproved,
+                  inInstall: t.inInstall,
                 }}
                 others={topics.filter((o) => o.id !== t.id).map((o) => ({ id: o.id, name: o.name }))}
               />

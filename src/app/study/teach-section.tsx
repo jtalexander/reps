@@ -15,6 +15,8 @@ export async function TeachSection({ teamId, playerId, position }: { teamId: str
   }
   const topicIds = [...new Set([...lessons.map((l) => l.topicId), ...questions.map((q) => q.topicId)])];
   const ts = await db.select().from(topics).where(and(eq(topics.teamId, teamId), inArray(topics.id, topicIds))).orderBy(asc(topics.sort));
+  // this week's install first
+  ts.sort((a, b) => Number(b.inInstall) - Number(a.inInstall));
   const done = new Set(
     (await db.select({ id: lessonProgress.lessonId }).from(lessonProgress).where(eq(lessonProgress.playerId, playerId))).map((r) => r.id),
   );
@@ -40,7 +42,10 @@ export async function TeachSection({ teamId, playerId, position }: { teamId: str
             <li key={t.id}>
               <Link href={`/study/learn/${t.id}`} className="card flex items-center justify-between gap-3 p-3 hover:border-ink">
                 <div>
-                  <div className="font-semibold">{t.name}</div>
+                  <div className="font-semibold">
+                    {t.name}
+                    {t.inInstall && <span className="ml-2 bg-brand px-1.5 py-0.5 align-middle font-label text-[10px] font-bold tracking-widest text-brand-ink uppercase">Install</span>}
+                  </div>
                   <div className="text-xs text-muted">{read ? "Learned" : ls.length ? "Start here" : "Questions only"}</div>
                 </div>
                 {pct !== null ? (

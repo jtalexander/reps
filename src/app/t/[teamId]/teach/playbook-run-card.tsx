@@ -5,14 +5,14 @@ import { safeCall } from "@/lib/safe-call";
 import { keepGoingAction, startPlaybookRunAction, stopPlaybookRunAction } from "./actions";
 
 export interface RunProgress {
-  stage: "reading" | "questions" | "sorting" | "writing" | "done";
+  stage: "reading" | "questions" | "sorting" | "writing" | "picking" | "done";
   pages: { total: number; read: number; failed: number };
   topics: { total: number; asked: number; written: number };
   running: number;
   stalled: boolean;
 }
 
-const ORDER = ["reading", "questions", "sorting", "writing", "done"] as const;
+const ORDER = ["reading", "questions", "sorting", "writing", "picking", "done"] as const;
 
 /** Start a whole-playbook run, or show how far the current one has got. */
 export function PlaybookRunCard({
@@ -61,7 +61,7 @@ export function PlaybookRunCard({
           <span className="h-px w-6 bg-brand" />
           {resume ? "Not finished" : "One tap"}
         </p>
-        <h2 className="text-2xl">{resume ? "Finish reading the playbook" : "Read the whole playbook"}</h2>
+        <h2 className="text-2xl">{resume ? "Finish reading the playbook" : pagesLeft ? "Read the whole playbook" : "Finish the playbook"}</h2>
         {last?.error ? (
           <p className="bg-warn-bg px-3 py-2 text-sm text-warn">The last run stopped: {last.error}</p>
         ) : resume ? (
@@ -72,7 +72,7 @@ export function PlaybookRunCard({
         <p className="text-sm text-muted">
           {pagesLeft
             ? `Reps reads the ${pagesLeft} pages it hasn't read yet, finds its questions for every topic, sorts them, and writes draft lessons and quiz questions.`
-            : `Everything is read. Reps finishes the ${topicsLeft} topic${topicsLeft === 1 ? "" : "s"} still missing questions or drafts, re-sorts the questions, and writes what's left.`}{" "}
+            : `Everything is read. Reps finishes the ${topicsLeft} topic${topicsLeft === 1 ? "" : "s"} that still need something: its questions for you, draft lessons and quiz questions, or picking the few must-know questions you review first.`}{" "}
           It runs on Reps&apos; server, so you can close this page. Anything already done is kept. Nothing reaches players until you approve it.
         </p>
         {uploads.length > 1 && (
@@ -85,7 +85,7 @@ export function PlaybookRunCard({
           </select>
         )}
         <button className="btn btn-primary self-start" disabled={busy || !uploadId} onClick={() => act("Starting", () => startPlaybookRunAction(teamId, uploadId))}>
-          {busy ? "Starting…" : resume ? "Pick up where it stopped" : "Read the whole playbook"}
+          {busy ? "Starting…" : resume ? "Pick up where it stopped" : pagesLeft ? "Read the whole playbook" : "Finish the playbook"}
         </button>
         {error && <p className="bg-bad-bg px-3 py-2 text-sm text-bad">{error}</p>}
       </section>
@@ -98,6 +98,7 @@ export function PlaybookRunCard({
     { title: "Finding Reps' questions", note: `${progress.topics.asked} of ${progress.topics.total} topics` },
     { title: "Sorting questions", note: at > 2 ? "Done" : "One pass over every topic" },
     { title: "Writing drafts", note: `${progress.topics.written} of ${progress.topics.total} topics` },
+    { title: "Choosing core questions", note: at > 4 ? "Done" : "About 5 must-know questions per topic" },
   ];
   return (
     <section className="card flex flex-col gap-3 border-brand/60 p-4">
@@ -105,7 +106,7 @@ export function PlaybookRunCard({
         <span className="h-px w-6 bg-brand" />
         Reading your playbook
       </p>
-      <ol className="grid gap-2 sm:grid-cols-4">
+      <ol className="grid gap-2 sm:grid-cols-5">
         {steps.map((s, i) => (
           <li key={s.title} className={`border p-3 ${i === at ? "border-brand" : "border-line"} ${i > at ? "opacity-50" : ""}`}>
             <div className="font-label text-xs font-bold tracking-widest text-muted uppercase">{i < at ? "Done" : i === at ? "Working" : "Next"}</div>

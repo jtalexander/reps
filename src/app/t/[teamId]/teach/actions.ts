@@ -13,6 +13,8 @@ import {
   acceptSuggestions,
   answerGap,
   approveTopic,
+  clearInstall,
+  setInstall,
   jobStatus,
   mergeTopics,
   newJob,
@@ -143,7 +145,7 @@ export async function reviewLessonAction(
 export async function reviewQuestionAction(
   teamId: string,
   id: string,
-  patch: { status?: "approved" | "rejected" | "draft"; prompt?: string; explanation?: string; data?: unknown; audience?: string[] },
+  patch: { status?: "approved" | "rejected" | "draft"; prompt?: string; explanation?: string; data?: unknown; audience?: string[]; tier?: "core" | "reserve" },
 ): Promise<R> {
   try {
     const { user } = await requireCoach(teamId);
@@ -188,10 +190,22 @@ export async function overrideGradeAction(teamId: string, attemptId: string, cor
 }
 
 /** Approve every draft lesson and question on a topic in one go. */
-export async function approveTopicAction(teamId: string, topicId: string, except: string[] = []): Promise<R<{ lessons: number; questions: number }>> {
+export async function approveTopicAction(
+  teamId: string,
+  topicId: string,
+  except: string[] = [],
+  pile: "core" | "reserve" = "core",
+): Promise<R<{ lessons: number; questions: number }>> {
   try {
     const { user } = await requireCoach(teamId);
-    const r = await approveTopic(teamId, topicId, user.id, except.filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 500));
+    const r = await approveTopic(
+      teamId,
+      topicId,
+      user.id,
+      except.filter((x) => /^[0-9a-f-]{36}$/i.test(x)).slice(0, 500),
+      undefined,
+      pile === "reserve" ? "reserve" : "core",
+    );
     revalidatePath(`/t/${teamId}/teach`);
     return { ok: true, ...r };
   } catch (e) {
@@ -251,6 +265,31 @@ export async function stopPlaybookRunAction(teamId: string): Promise<R> {
   try {
     await requireCoach(teamId);
     await stopPlaybookRun(teamId);
+    revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Put a topic in or out of the install the team is learning now. */
+export async function setInstallAction(teamId: string, topicId: string, on: boolean): Promise<R> {
+  try {
+    await requireCoach(teamId);
+    if (!/^[0-9a-f-]{36}$/i.test(topicId)) throw new Error("Topic not found.");
+    await setInstall(teamId, topicId, !!on);
+    revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Start a new install: take every topic out of it. */
+export async function clearInstallAction(teamId: string): Promise<R> {
+  try {
+    await requireCoach(teamId);
+    await clearInstall(teamId);
     revalidatePath(`/t/${teamId}/teach`);
     return { ok: true };
   } catch (e) {

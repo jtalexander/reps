@@ -5,7 +5,8 @@ import { db } from "@/db";
 import { gaps, lessons, questions, topics } from "@/db/teach-schema";
 import { requireCoach } from "@/server/teams";
 import { pageRefs } from "@/teach/page-images";
-import { topicOverview } from "@/teach/service";
+import { inPile, topicOverview } from "@/teach/service";
+import { InstallToggle } from "../../install-button";
 import { RewriteButton } from "./rewrite-button";
 import { TopicApprove } from "./topic-approve";
 import { TopicGaps } from "./topic-gaps";
@@ -16,8 +17,9 @@ export const metadata = { title: "Topic" };
  * Everything for one topic on one page: the few questions Reps needs
  * answered, then every draft lesson and question to skim and approve at once.
  */
-export default async function TopicPage({ params }: PageProps<"/t/[teamId]/teach/topic/[topicId]">) {
+export default async function TopicPage({ params, searchParams }: PageProps<"/t/[teamId]/teach/topic/[topicId]">) {
   const { teamId, topicId } = await params;
+  const pile = (await searchParams).pile === "reserve" ? "reserve" : "core";
   await requireCoach(teamId);
   if (!/^[0-9a-f-]{36}$/i.test(topicId)) notFound();
   const [topic] = await db.select().from(topics).where(and(eq(topics.teamId, teamId), eq(topics.id, topicId)));
@@ -40,16 +42,24 @@ export default async function TopicPage({ params }: PageProps<"/t/[teamId]/teach
   const answersSinceWrite = !!lastAnswer && (!topic.generatedAt || lastAnswer > topic.generatedAt);
   const answeredCount = allGaps.filter((g) => g.status === "answered" || g.status === "approved").length;
 
-  const ls = await db
-    .select()
-    .from(lessons)
-    .where(and(eq(lessons.teamId, teamId), eq(lessons.topicId, topicId), eq(lessons.status, "draft")))
-    .orderBy(asc(lessons.sort));
+  // the core pile carries the lessons; the reserve pile is questions only
+  const ls =
+    pile === "core"
+      ? await db
+          .select()
+          .from(lessons)
+          .where(and(eq(lessons.teamId, teamId), eq(lessons.topicId, topicId), eq(lessons.status, "draft")))
+          .orderBy(asc(lessons.sort))
+      : [];
   const qs = await db
     .select()
     .from(questions)
-    .where(and(eq(questions.teamId, teamId), eq(questions.topicId, topicId), eq(questions.status, "draft")))
+    .where(and(eq(questions.teamId, teamId), eq(questions.topicId, topicId), eq(questions.status, "draft"), inPile(pile)))
     .orderBy(asc(questions.sort));
+  const [reserve] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(questions)
+    .where(and(eq(questions.teamId, teamId), eq(questions.topicId, topicId), eq(questions.status, "draft"), inPile("reserve")));
   const [live] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(questions)
@@ -63,7 +73,10 @@ export default async function TopicPage({ params }: PageProps<"/t/[teamId]/teach
   // the next topic that still needs the coach
   const all = await topicOverview(teamId);
   const idx = all.findIndex((t) => t.id === topicId);
-  const next = [...all.slice(idx + 1), ...all.slice(0, Math.max(0, idx))].find((t) => t.gapsOpen > 0 || t.lessonsDraft + t.questionsDraft > 0);
+  const waiting = (t: (typeof all)[number]) => t.gapsOpen > 0 || t.lessonsDraft + t.questionsDraft > 0;
+  const after = [...all.slice(idx + 1), ...all.slice(0, Math.max(0, idx))];
+  // finish the install before anything else
+  const next = after.find((t) => t.inInstall && waiting(t)) ?? after.find(waiting);
 
   return (
     <div className="flex flex-col gap-5">
@@ -76,6 +89,9 @@ export default async function TopicPage({ params }: PageProps<"/t/[teamId]/teach
           <span className="text-sm text-muted">
             Playbook p{topic.pageNos.join(", ")} · {(live?.n ?? 0) + (liveL?.n ?? 0)} live
           </span>
+        </div>
+        <div className="mt-2">
+          <InstallToggle teamId={teamId} topicId={topicId} on={topic.inInstall} size="md" />
         </div>
       </div>
 
@@ -103,8 +119,27 @@ export default async function TopicPage({ params }: PageProps<"/t/[teamId]/teach
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="font-semibold">3. Skim and approve</h2>
+        <h2 className="font-semibold">{pile === "reserve" ? "Reserve questions" : "3. Skim and approve"}</h2>
+        {pile === "reserve" ? (
+          <p className="text-sm text-muted">
+            Extra questions Reps wrote beyond the core set. Players never see them unless you approve them, so come back when players have the core down and want more.{" "}
+            <Link className="underline" href={`/t/${teamId}/teach/topic/${topicId}`}>
+              Back to the core set
+            </Link>
+          </p>
+        ) : (
+          (reserve?.n ?? 0) > 0 && (
+            <p className="text-sm text-muted">
+              Showing the lessons and the few must-know questions. {reserve!.n} more question{reserve!.n === 1 ? " is" : "s are"} in reserve; players won&apos;t see them unless you
+              approve them.{" "}
+              <Link className="underline" href={`/t/${teamId}/teach/topic/${topicId}?pile=reserve`}>
+                Look through the reserve
+              </Link>
+            </p>
+          )
+        )}
         <TopicApprove
+          pile={pile}
           teamId={teamId}
           topicId={topicId}
           topicName={topic.name}
@@ -116,6 +151,7 @@ export default async function TopicPage({ params }: PageProps<"/t/[teamId]/teach
             topicId,
             question: { prompt: q.prompt, format: q.format, data: q.data, explanation: q.explanation, audience: q.audience, sourcePages: q.sourcePages, image: q.image ?? null },
           }))}
+          reserveLeft={pile === "core" ? (reserve?.n ?? 0) : 0}
           next={next ? { id: next.id, name: next.name } : null}
         />
         <Link href={`/t/${teamId}/teach/review?topic=${topicId}&show=approved`} className="self-start text-sm text-muted underline">

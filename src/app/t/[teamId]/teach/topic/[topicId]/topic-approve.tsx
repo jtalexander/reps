@@ -19,6 +19,8 @@ function answerLine(d: QuestionData): string {
 }
 
 export function TopicApprove({
+  pile = "core",
+  reserveLeft = 0,
   teamId,
   topicId,
   topicName,
@@ -27,6 +29,10 @@ export function TopicApprove({
   questions,
   next,
 }: {
+  /** "core": lessons + must-know questions; "reserve": the extra questions */
+  pile?: "core" | "reserve";
+  /** reserve questions on this topic, shown after the core set is approved */
+  reserveLeft?: number;
   teamId: string;
   topicId: string;
   topicName: string;
@@ -54,7 +60,12 @@ export function TopicApprove({
             {topicName} is live: {approvedAll.lessons} lesson{approvedAll.lessons === 1 ? "" : "s"} and {approvedAll.questions} question{approvedAll.questions === 1 ? "" : "s"} approved.
           </p>
         ) : (
-          <p className="text-muted">No drafts waiting on this topic.</p>
+          <p className="text-muted">{pile === "reserve" ? "Nothing left in reserve on this topic." : "No drafts waiting on this topic."}</p>
+        )}
+        {pile === "core" && reserveLeft > 0 && (
+          <p className="text-muted">
+            {reserveLeft} more question{reserveLeft === 1 ? " waits" : "s wait"} in reserve for when players want more.
+          </p>
         )}
         {next && (
           <Link className="btn btn-primary" href={`/t/${teamId}/teach/topic/${next.id}`}>
@@ -78,10 +89,29 @@ export function TopicApprove({
     });
   }
 
+  async function move(q: QuestionItem) {
+    const tier = pile === "core" ? "reserve" : "core";
+    const r = await safeCall(() => reviewQuestionAction(teamId, q.id, { tier }), "Moving");
+    if (!r.ok) return setError(r.error);
+    setState((s) => ({ ...s, [q.id]: tier === "core" ? "moved to the core set" : "moved to reserve" }));
+  }
+
+  async function unmove(q: QuestionItem) {
+    const r = await safeCall(() => reviewQuestionAction(teamId, q.id, { tier: pile }), "Moving");
+    if (!r.ok) return setError(r.error);
+    setState((s) => {
+      const rest = { ...s };
+      delete rest[q.id];
+      return rest;
+    });
+  }
+
+  const label = (v: string) => (v === "approved" ? "Approved" : v === "rejected" ? "Rejected" : v.charAt(0).toUpperCase() + v.slice(1));
+
   const handled = (id: string, label: string, it: LessonItem | QuestionItem) => (
     <div key={id} className="flex items-center justify-between rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted">
       <span>{label}</span>
-      <button className="underline" onClick={() => quick(it, "draft")}>
+      <button className="underline" onClick={() => (state[id]?.startsWith("moved") && it.type === "question" ? unmove(it) : quick(it, "draft"))}>
         Undo
       </button>
     </div>
@@ -90,7 +120,9 @@ export function TopicApprove({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted">
-        Skim everything below. Fix or reject anything that&apos;s wrong, then approve the rest with one tap at the bottom.
+        {pile === "reserve"
+          ? "Approve the ones you want players to have too. Anything you leave here stays out of their quizzes."
+          : "Skim everything below. Fix or reject anything that's wrong, then approve the rest with one tap at the bottom."}
       </p>
 
       {lessons.length > 0 && <h3 className="text-sm font-semibold">Lessons ({lessons.length})</h3>}
@@ -128,7 +160,7 @@ export function TopicApprove({
               <QuestionCard teamId={teamId} item={q} topic={topicName} pages={pages} mode="draft" startEditing onDone={(s) => setState((x) => ({ ...x, [q.id]: s }))} />
             </li>
           ) : state[q.id] ? (
-            <li key={q.id}>{handled(q.id, `${state[q.id] === "approved" ? "Approved" : "Rejected"}: ${q.question.prompt}`, q)}</li>
+            <li key={q.id}>{handled(q.id, `${label(state[q.id]!)}: ${q.question.prompt}`, q)}</li>
           ) : (
             <li key={q.id} className="card flex flex-col gap-1 p-3 text-sm">
               <div className="flex flex-wrap gap-2 text-xs text-muted">
@@ -140,6 +172,9 @@ export function TopicApprove({
               <div className="flex gap-3">
                 <button className="underline" onClick={() => setState((x) => ({ ...x, [q.id]: "editing" }))}>
                   {q.question.format === "tap" ? "See diagram / edit" : "Edit"}
+                </button>
+                <button className="text-muted underline" onClick={() => move(q)}>
+                  {pile === "core" ? "Move to reserve" : "Move to core"}
                 </button>
                 <button className="text-bad underline" onClick={() => quick(q, "rejected")}>
                   Reject
@@ -158,7 +193,7 @@ export function TopicApprove({
           onClick={async () => {
             setBusy(true);
             setError(null);
-            const r = await safeCall(() => approveTopicAction(teamId, topicId, editing), "Approving");
+            const r = await safeCall(() => approveTopicAction(teamId, topicId, editing, pile), "Approving");
             setBusy(false);
             if (!r.ok) return setError(r.error);
             if (editing.length) {
@@ -168,7 +203,7 @@ export function TopicApprove({
             router.refresh();
           }}
         >
-          {busy ? "Approving…" : `Approve ${[waitingL ? `${waitingL} lesson${waitingL === 1 ? "" : "s"}` : "", waitingQ ? `${waitingQ} question${waitingQ === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ")}`}
+          {busy ? "Approving…" : `Approve ${pile === "reserve" ? "these " : ""}${[waitingL ? `${waitingL} lesson${waitingL === 1 ? "" : "s"}` : "", waitingQ ? `${waitingQ} question${waitingQ === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ")}`}
         </button>
       )}
     </div>

@@ -184,6 +184,33 @@ export async function triageGaps(list: string, perTopic: number): Promise<Triage
   );
 }
 
+// ---------------- core questions ----------------
+
+export const CoreSchema = z.object({
+  core: z.array(z.number().int()).describe("numbers of the must-know questions, most important first, at most the limit"),
+});
+
+const CORE_SYSTEM = `${VOICE}
+
+Reps wrote more quiz questions for one topic than a coach can review at once. Pick the core set: the few questions that check what every player in this topic must know to line up and do his job (alignment, assignment, read, rule, the call). The rest stay in reserve for later.
+- Stay within the limit you're given.
+- Cover each position group that has questions before giving any group a second one.
+- Prefer questions about doing the job over background or terminology trivia, and skip near-duplicates.
+- Mix formats when the choice is otherwise even (a tap-the-diagram question is a strong check of alignment).
+Use the question numbers as given.`;
+
+/** Pick up to `limit` must-know questions from a topic's numbered draft list. */
+export async function pickCore(topic: string, list: string, limit: number, approved = ""): Promise<z.infer<typeof CoreSchema>> {
+  const already = approved ? `Already approved and live on this topic (players have these; pick what adds to them):\n${approved}\n\n` : "";
+  return structured(
+    CoreSchema,
+    CORE_SYSTEM,
+    [{ type: "text", text: `Topic: ${topic}\nLimit: ${limit}\n\n${already}Draft questions, as number. [who it's for] (format) question -> answer:\n${list}\n\nPick the core set.` }],
+    "low",
+    4000,
+  );
+}
+
 // ---------------- write lessons and questions ----------------
 
 export const WrittenTopicSchema = z.object({

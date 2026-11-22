@@ -10,7 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { createDb, type Db } from "@/db";
-import { players, users } from "@/db/schema";
+import { players, uploadPages, uploads, users } from "@/db/schema";
 import { gaps, jobs, lessons, questionFlags, questions, teachPages, topics } from "@/db/teach-schema";
 
 const askedWith: string[] = [];
@@ -62,6 +62,11 @@ vi.mock("@/teach/ai", () => ({
       else (same.find((g) => g.keep === k) ?? same[same.push({ keep: k, also: [] }) - 1]!).also.push(l.n);
     }
     return { key, same };
+  }),
+  // core: the LAST `limit` questions (so the pick is visibly not just "the first five"), plus a bad number to ignore
+  pickCore: vi.fn(async (_t: string, list: string, limit: number) => {
+    const n = list.split(/\r?\n/).length;
+    return { core: [99, ...Array.from({ length: limit }, (_, i) => n - i)] };
   }),
   gradeOpen: vi.fn(async (_p: string, _m: string, _k: string[], answer: string) => ({ score: /hitch/i.test(answer) && /corner/i.test(answer) ? 1 : 0.3, feedback: "ok" })),
   askPlaybook: vi.fn(async (_q: string, _pos: string, material: string) => {
@@ -346,5 +351,75 @@ describe("teach loop", () => {
     await run.workTeam(teamD.id, null, 120_000, db);
     expect(vi.mocked(ai.decodePage).mock.calls.length - decodes).toBe(3);
     expect(await run.lastRun(teamD.id, db)).toEqual({ status: "done", error: null, failedSteps: 0 });
+  });
+  it("keeps the review to a core set per topic, with the rest in reserve, and puts the install first", { timeout: 120_000 }, async () => {
+    const svc = await import("@/teach/service");
+    const run = await import("@/teach/playbook-run");
+    const ai = await import("@/teach/ai");
+    const { createTeam } = await import("@/server/teams");
+    const teamE = await createTeam(db, coachId, "Teach E", "high_school");
+    const [t1, t2] = await db
+      .insert(topics)
+      .values([
+        { teamId: teamE.id, name: "Smash", nameKey: "SMASH", sort: 0, gapsFoundAt: new Date(), generatedAt: new Date() },
+        { teamId: teamE.id, name: "Veer", nameKey: "VEER", sort: 1, gapsFoundAt: new Date(), generatedAt: new Date() },
+      ])
+      .returning();
+    const q = (topicId: string, i: number) => ({
+      teamId: teamE.id,
+      topicId,
+      format: "choice" as const,
+      prompt: `Q${i}?`,
+      data: { kind: "choice" as const, choices: [{ id: "c0", text: "yes" }, { id: "c1", text: "no" }], answer: "c0" },
+      explanation: "x",
+      sort: i,
+    });
+    await db.insert(lessons).values({ teamId: teamE.id, topicId: t1!.id, audience: "ALL", title: "Smash", body: "b" });
+    // 8 drafts on Smash written before the core set existed (tier null), 3 on Veer
+    await db.insert(questions).values([...Array.from({ length: 8 }, (_, i) => q(t1!.id, i)), ...Array.from({ length: 3 }, (_, i) => q(t2!.id, i))]);
+
+    // unsorted drafts still count as waiting, so nothing is hidden
+    let ov = await svc.topicOverview(teamE.id, db);
+    expect(ov.find((t) => t.id === t1!.id)).toMatchObject({ questionsDraft: 8, questionsReserve: 0, questionsUnsorted: 8 });
+
+    // a whole-playbook run with nothing else to do just sorts them
+    const calls = vi.mocked(ai.pickCore).mock.calls.length;
+    const up = await db.insert(uploads).values({ teamId: teamE.id, filename: "e.pdf", mediaKey: "e", status: "ready", pageCount: 1 }).returning();
+    await db.insert(uploadPages).values({ teamId: teamE.id, uploadId: up[0]!.id, pageNo: 1, width: 612, height: 792, imageKey: "e1" });
+    await db.insert(teachPages).values({ teamId: teamE.id, uploadId: up[0]!.id, pageId: (await db.select().from(uploadPages).where(eq(uploadPages.uploadId, up[0]!.id)))[0]!.id, pageNo: 1, status: "decoded" });
+    await run.startPlaybookRun(teamE.id, up[0]!.id, db);
+    await run.workTeam(teamE.id, null, 60_000, db);
+    expect(await run.lastRun(teamE.id, db)).toEqual({ status: "done", error: null, failedSteps: 0 });
+    expect(vi.mocked(ai.pickCore).mock.calls.length - calls).toBe(1); // Veer has only 3: all core, no AI call
+    ov = await svc.topicOverview(teamE.id, db);
+    expect(ov.find((t) => t.id === t1!.id)).toMatchObject({ questionsDraft: 5, questionsReserve: 3, questionsUnsorted: 0 });
+    expect(ov.find((t) => t.id === t2!.id)).toMatchObject({ questionsDraft: 3, questionsReserve: 0 });
+    const tiers = await db.select().from(questions).where(eq(questions.topicId, t1!.id)).orderBy(questions.sort);
+    expect(tiers.map((x) => x.tier)).toEqual(["reserve", "reserve", "reserve", "core", "core", "core", "core", "core"]);
+
+    // the coach moves one, then approves the core set: lessons + core only
+    await svc.reviewQuestion(teamE.id, tiers[0]!.id, { tier: "core" }, coachId, db);
+    await svc.reviewQuestion(teamE.id, tiers[7]!.id, { tier: "reserve" }, coachId, db);
+    expect(await svc.approveTopic(teamE.id, t1!.id, coachId, [], db)).toEqual({ lessons: 1, questions: 5 });
+    const after = await db.select().from(questions).where(eq(questions.topicId, t1!.id)).orderBy(questions.sort);
+    expect(after.filter((x) => x.status === "approved").map((x) => x.prompt)).toEqual(["Q0?", "Q3?", "Q4?", "Q5?", "Q6?"]);
+    // reserve stays a draft until approved from the reserve pile, which never touches lessons
+    expect(await svc.approveTopic(teamE.id, t1!.id, coachId, [tiers[1]!.id], db, "reserve")).toEqual({ lessons: 0, questions: 2 });
+
+    // a rewrite with the core already live adds to reserve without asking the AI
+    await db.insert(questions).values([q(t1!.id, 20), q(t1!.id, 21)]);
+    const before = vi.mocked(ai.pickCore).mock.calls.length;
+    expect(await svc.pickCoreQuestions(teamE.id, t1!.id, db)).toEqual({ core: 0, reserve: 3 });
+    expect(vi.mocked(ai.pickCore).mock.calls.length).toBe(before);
+
+    // install: in, first in line, out
+    await svc.setInstall(teamE.id, t2!.id, true, db);
+    await svc.setInstall(teamA.id, t2!.id, true, db); // another team's coach can't touch it
+    ov = await svc.topicOverview(teamE.id, db);
+    expect(ov.filter((t) => t.inInstall).map((t) => t.name)).toEqual(["Veer"]);
+    await svc.clearInstall(teamA.id, db);
+    expect((await svc.topicOverview(teamE.id, db)).some((t) => t.inInstall)).toBe(true);
+    await svc.clearInstall(teamE.id, db);
+    expect((await svc.topicOverview(teamE.id, db)).some((t) => t.inInstall)).toBe(false);
   });
 });

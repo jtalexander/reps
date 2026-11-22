@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { safeCall } from "@/lib/safe-call";
 import { findGapsAction, mergeTopicsAction, renameTopicAction, writeTopicAction } from "./actions";
+import { InstallToggle } from "./install-button";
 import { runAndWait } from "./wait-job";
 
 interface Topic {
@@ -15,7 +16,9 @@ interface Topic {
   gapsOpen: number;
   gapsDone: number;
   drafts: number;
+  reserve: number;
   live: number;
+  inInstall: boolean;
 }
 
 export function TopicRow({ teamId, topic, others }: { teamId: string; topic: Topic; others: Array<{ id: string; name: string }> }) {
@@ -65,10 +68,12 @@ export function TopicRow({ teamId, topic, others }: { teamId: string; topic: Top
         <span className="text-xs text-muted">
           {topic.gapsOpen ? <span className="font-semibold text-warn">{topic.gapsOpen} questions for you · </span> : null}
           {topic.drafts ? <span className="font-semibold text-warn">{topic.drafts} to review · </span> : null}
+          {topic.reserve ? <span>{topic.reserve} in reserve · </span> : null}
           {topic.live} live
         </span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+        <InstallToggle teamId={teamId} topicId={topic.id} on={topic.inInstall} />
         <button className="btn btn-ghost min-h-9 px-3" disabled={!!busy} onClick={() => act("Finding gaps", () => runAndWait(teamId, () => findGapsAction(teamId, topic.id), "Finding gaps"))}>
           {busy === "Finding gaps" ? "Looking for gaps…" : topic.gapsFound ? "Find gaps again" : "1. Find gaps"}
         </button>
