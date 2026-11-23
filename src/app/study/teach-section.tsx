@@ -66,7 +66,7 @@ export async function TeachSection({ teamId, playerId, position }: { teamId: str
           Ask the playbook
         </Link>
         <Link href="/study/pages" className="btn btn-ghost col-span-2 min-h-11">
-          Read the playbook pages
+          My playbook: plays and pages
         </Link>
       </div>
     </section>

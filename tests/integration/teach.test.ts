@@ -389,7 +389,13 @@ describe("teach loop", () => {
     await db.insert(teachPages).values({ teamId: teamE.id, uploadId: up[0]!.id, pageId: (await db.select().from(uploadPages).where(eq(uploadPages.uploadId, up[0]!.id)))[0]!.id, pageNo: 1, status: "decoded" });
     await run.startPlaybookRun(teamE.id, up[0]!.id, db);
     await run.workTeam(teamE.id, null, 60_000, db);
-    expect(await run.lastRun(teamE.id, db)).toEqual({ status: "done", error: null, failedSteps: 0 });
+    // two topics to sort = a second worker in this process; wait for the last one to close the run
+    let ended = await run.lastRun(teamE.id, db);
+    for (let i = 0; !ended && i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      ended = await run.lastRun(teamE.id, db);
+    }
+    expect(ended).toEqual({ status: "done", error: null, failedSteps: 0 });
     expect(vi.mocked(ai.pickCore).mock.calls.length - calls).toBe(1); // Veer has only 3: all core, no AI call
     ov = await svc.topicOverview(teamE.id, db);
     expect(ov.find((t) => t.id === t1!.id)).toMatchObject({ questionsDraft: 5, questionsReserve: 3, questionsUnsorted: 0 });
@@ -421,5 +427,33 @@ describe("teach loop", () => {
     expect((await svc.topicOverview(teamE.id, db)).some((t) => t.inInstall)).toBe(true);
     await svc.clearInstall(teamE.id, db);
     expect((await svc.topicOverview(teamE.id, db)).some((t) => t.inInstall)).toBe(false);
+  });
+  it("lists the playbook's drawings by topic for the Playbook tab, team-scoped", { timeout: 60_000 }, async () => {
+    const { playbookDrawings, playbookPages, matches } = await import("@/teach/drawings");
+    const { createTeam } = await import("@/server/teams");
+    const teamF = await createTeam(db, coachId, "Teach F", "high_school");
+    const [up] = await db.insert(uploads).values({ teamId: teamF.id, filename: "f.pdf", mediaKey: "f", status: "ready", pageCount: 2 }).returning();
+    const pgs = await db
+      .insert(uploadPages)
+      .values([1, 2].map((n) => ({ teamId: teamF.id, uploadId: up!.id, pageNo: n, width: 612, height: 792, imageKey: `f${n}` })))
+      .returning();
+    const box = { x: 10, y: 10, w: 200, h: 150 };
+    await db.insert(teachPages).values([
+      { teamId: teamF.id, uploadId: up!.id, pageId: pgs[0]!.id, pageNo: 1, status: "decoded", diagrams: [{ id: "d1", label: "TRIPS RIGHT STACK", box }, { id: "d2", label: "junk", box: { ...box, w: 0 } }] },
+      { teamId: teamF.id, uploadId: up!.id, pageId: pgs[1]!.id, pageNo: 2, status: "decoded", diagrams: [{ id: "d1", label: "VEER RIGHT vs 4-3", box }] },
+    ]);
+    await db.insert(topics).values([
+      { teamId: teamF.id, name: "Formation tags", nameKey: "FORMATION TAGS", sort: 0, pageNos: [1] },
+      { teamId: teamF.id, name: "Veer", nameKey: "VEER", sort: 1, pageNos: [2], inInstall: true },
+    ]);
+    const ds = await playbookDrawings(teamF.id, db);
+    expect(ds.map((d) => [d.label, d.topicName, d.inInstall])).toEqual([
+      ["TRIPS RIGHT STACK", "Formation tags", false],
+      ["VEER RIGHT vs 4-3", "Veer", true],
+    ]);
+    expect(ds.filter((d) => matches(d, "veer 4-3")).map((d) => d.key)).toEqual(["2.d1"]);
+    expect(ds.filter((d) => matches(d, "trips stack")).length).toBe(1);
+    expect((await playbookPages(teamF.id, db)).map((p) => p.pageNo)).toEqual([1, 2]);
+    expect((await playbookDrawings(teamA.id, db)).some((d) => d.label === "TRIPS RIGHT STACK")).toBe(false);
   });
 });

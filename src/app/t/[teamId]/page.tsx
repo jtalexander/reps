@@ -25,8 +25,9 @@ export default async function Dashboard({ params }: PageProps<"/t/[teamId]">) {
   );
 
   const steps = [
-    { done: plays.length > 0, label: "Upload your playbook PDF", href: `/t/${teamId}/uploads` },
-    { done: stats.approved > 0, label: "Review and approve plays", href: `/t/${teamId}/plays` },
+    { done: plays.length > 0 || teach.length > 0, label: "Upload your playbook PDF", href: `/t/${teamId}/uploads` },
+    { done: teach.length > 0, label: "Have Reps read it (Teach → Read the whole playbook)", href: `/t/${teamId}/teach` },
+    { done: teachTotals.live > 0 || stats.approved > 0, label: "Approve lessons and questions, topic by topic", href: `/t/${teamId}/teach` },
     { done: roster.length > 0, label: "Add your players", href: `/t/${teamId}/roster` },
     { done: false, label: `Give players the join code: ${team.joinCode}`, href: `/t/${teamId}/settings` },
   ];
