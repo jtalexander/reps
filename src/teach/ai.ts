@@ -13,6 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { NamingSchema } from "@/domain/naming";
 
 export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5";
 type Effort = "low" | "medium" | "high";
@@ -317,5 +318,94 @@ export async function askPlaybook(question: string, position: string, material: 
     [{ type: "text", text: `Approved material:\n${material}\n\nPlayer's position: ${position}\nQuestion: ${question}` }],
     "low",
     2000,
+  );
+}
+
+// ---------------- drawings -> plays ----------------
+
+const yd = z.object({ x: z.number().describe("yards from the ball, right +"), y: z.number().describe("yards from the line of scrimmage, downfield +, backfield -") });
+
+/**
+ * One drawing, kept small on purpose: where each offensive player really
+ * lines up and the line drawn from him, in yards. Playbook drawings aren't to
+ * scale, so the model places players by football norms, not by pixels.
+ * Reads, rules and coaching points come from Teach's facts, not the picture.
+ */
+export const DrawingSchema = z.object({
+  is_play: z.boolean().describe("false when the box isn't a field drawing with offensive players (a legend, a list, a logo)"),
+  kind: z.enum(["formation", "run", "pass", "play_action", "screen", "option", "protection", "special", "unknown"]),
+  formation_name: z.string().describe("the formation as written in the label or on the drawing, e.g. 'SPREAD RIGHT'; 'unknown' if none"),
+  players: z
+    .array(
+      z.object({
+        id: z.string().describe("the letter in the marker (X, Z, Y, H, F, Q...). Unlabeled linemen: LT, LG, C, RG, RT left to right"),
+        at: yd,
+        on_ball: z.boolean().describe("on the line of scrimmage"),
+        does: z.enum(["route", "block", "carry", "fake", "mesh", "pass_pro", "lead", "motion_only", "nothing_drawn"]),
+        route_name: z.string().nullable().describe("standard route name when it's a route (go, slant, hitch, out, curl, dig, post, corner, flat, wheel, drag, seam, swing, bubble...), else null"),
+        path: z.array(yd).nullable().describe("the line drawn from this player, start to end, up to 6 points, in field yards; null when nothing is drawn"),
+      }),
+    )
+    .describe("offensive players only, never defenders"),
+  motion: z.object({ player: z.string(), end: yd.describe("where the motion ends, field yards") }).nullable(),
+  front: z.string().nullable().describe("the defense it's drawn against when the label or drawing names one (e.g. '4-3 Under'), else null"),
+});
+export type Drawing = z.infer<typeof DrawingSchema>;
+
+const DRAWING_SYSTEM = `${VOICE}
+
+You turn one football diagram, cropped from the coach's playbook, into data: where each OFFENSIVE player really lines up and the line drawn from him, in yards.
+- Coordinates are field yards with the ball at (0, 0): x to the right (+) as the offense faces up, y downfield (+) and into the backfield (-).
+- Playbook drawings are NOT to scale. Keep the drawing's order (who is left/right of whom, who is on or off the ball, who is deeper) but place players where they really line up: linemen about 1.3 yards apart center to center; a tight end 1.3 yards outside the tackle; off-the-ball receivers and wings 1 yard back; a slot about 6-8 yards from the ball; a wide receiver about 12-16 yards from the ball (closer when the drawing shows him tight or the label says so); shotgun QB 5 yards deep, pistol 4, under center 1; backs as drawn relative to the QB (beside him in the gun, 5-7 yards deep in the I).
+- Lines: follow the drawn shape and its turns; use realistic depths (a hitch or stick at 5-6 yards, a slant breaks at 2-3, an out or dig at 10-12, a corner or post breaks at 10-12 and keeps going, a go runs 20+). A block is a short line (1-3 yards) to its target. A carry follows the drawn path through the hole. Up to 6 points per line, starting at the player.
+- Offensive players are circles, squares or letters on the offense's side. Ignore every defender (triangles, Vs, letters past the ball) and the throw line from QB to a receiver.
+- Line endings: arrow = route or carry; a short bar (T) = block; a wavy or dashed line before the snap = motion.
+- When one image shows two half-field rule drawings, use the one for the most receivers and put the others in their normal spots with nothing_drawn.
+- Never invent a line that isn't drawn: use nothing_drawn and path null.
+- A formation drawing with no lines is kind "formation"; a protection drawing is kind "protection".`;
+
+export async function readDrawing(png: Uint8Array, width: number, height: number, label: string, notes: string, naming = ""): Promise<Drawing> {
+  return structured(
+    DrawingSchema,
+    DRAWING_SYSTEM,
+    [
+      { type: "image", source: { type: "base64", media_type: "image/png", data: Buffer.from(png).toString("base64") } },
+      {
+        type: "text",
+        text: `The image is ${width} by ${height} pixels.
+The playbook labels this drawing: ${label}
+${notes ? `What the page says around it:
+${notes}
+` : ""}${naming ? `The team's naming rules (use these letters for every player, including unlabeled markers: the passer is the QB letter, backs get their back letters):
+${naming}
+` : ""}Return the drawing as data.`,
+      },
+    ],
+    "high",
+    12000,
+  );
+}
+
+// ---------------- naming rules ----------------
+
+const NAMING_SYSTEM = `${VOICE}
+
+From what Reps read on every page of the playbook, write down the team's naming rules: what each position letter is, the words that build a formation and a play call, and the order a call is said in.
+- Use only what the playbook shows or says; keep the coach's exact words and spellings. Leave a list empty rather than invent.
+- "means" is what the word tells players to do or where it puts them, in one or two short sentences.
+- Formation tags are words added to a formation that move players (e.g. ZIP, ZOOT, STACK); list each once, not once per formation.
+- Plays: every run, pass, screen and gadget name, with what it is in a few words.
+- Leave out wristband codes (ALPHA, BRAVO..., pod colors and numbers) and team code names for plays; those are a separate system. "other" is for protections, tempos, cadence words, audible and check words.
+- List the pages where each word is shown or explained.`;
+
+export async function draftNaming(material: string) {
+  return structured(
+    NamingSchema,
+    NAMING_SYSTEM,
+    [{ type: "text", text: `${material}
+
+Write the team's naming rules.` }],
+    "high",
+    24000,
   );
 }

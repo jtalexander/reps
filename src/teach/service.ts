@@ -9,6 +9,9 @@ import { db, type Db } from "@/db";
 import { players, uploadPages } from "@/db/schema";
 import { askLog, attempts, gaps, jobs, lessonProgress, lessons, questionFlags, questionSrs, questions, teachPages, topics } from "@/db/teach-schema";
 import { media } from "@/media/store";
+import { convertDrawing } from "./convert";
+import { runNaming } from "./naming";
+import { pngSize } from "./png";
 import { askPlaybook, decodePage, findGaps, gradeOpen, pickCore, triageGaps, writeTopic, type PageImage } from "./ai";
 import { QuestionDataSchema, type Audience, type Box, type DiagramRegion, type Fact, type QuestionData, type QuestionImage } from "./types";
 
@@ -31,12 +34,7 @@ async function pageImage(teamId: string, pageNo: number, uploadId: string, datab
   return { img: { pageNo, png: file.bytes, width: im.width, height: im.height, text }, widthPt: p.width };
 }
 
-/** Width and height from a PNG's header (no image library, so background jobs stay plain JS). */
-export function pngSize(bytes: Uint8Array): { width: number; height: number } {
-  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.length < 24 || v.getUint32(0) !== 0x89504e47) throw new Error("Page image isn't a PNG.");
-  return { width: v.getUint32(16), height: v.getUint32(20) };
-}
+export { pngSize } from "./png";
 
 const toPoints = (b: { x: number; y: number; w: number; h: number }, scale: number): Box => ({
   x: Math.round((b.x / scale) * 10) / 10,
@@ -116,6 +114,8 @@ export async function executeJob(job: typeof jobs.$inferSelect, database: Db = d
     else if (job.kind === "triage") result = await triageTeamGaps(job.teamId, database);
     else if (job.kind === "write_topic") await runWrite(job.teamId, job.ref, database);
     else if (job.kind === "pick_core") result = await pickCoreQuestions(job.teamId, job.ref, database);
+    else if (job.kind === "naming") result = await runNaming(job.teamId, database);
+    else if (job.kind === "convert_drawing") await convertDrawing(job.teamId, job.ref, database);
     else throw new Error(`Unknown job kind ${job.kind}`);
     await setJob(job.id, { status: "done", result }, database);
   } catch (err) {

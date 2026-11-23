@@ -23,6 +23,7 @@ import {
 import type { Box } from "@/ingest/boxes";
 import type { Concept } from "@/domain/concepts";
 import type { PlayData } from "@/domain/play";
+import type { Naming } from "@/domain/naming";
 import type { Terms } from "@/domain/terms";
 
 const id = () => uuid().primaryKey().defaultRandom();
@@ -106,8 +107,14 @@ export const teams = pgTable("teams", {
   /** bumped when the coach resets the code: old player cookies stop working */
   joinCodeVersion: integer().notNull().default(1),
   terms: jsonb().$type<Terms>().notNull().default(sql`'{}'::jsonb`),
+  /** naming rules Reps drafted from the playbook (null until drafted) */
+  naming: jsonb().$type<Naming>(),
+  /** when the coach confirmed the naming rules (null = still a draft) */
+  namingApprovedAt: timestamp({ withTimezone: true }),
   /** flip diagrams in quizzes so players learn both sides */
   allowFlip: boolean().notNull().default(true),
+  /** show a play's "vs front" drawings as one play with a version per front (coach preference) */
+  groupFronts: boolean().notNull().default(true),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

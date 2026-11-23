@@ -263,9 +263,12 @@ export const isPassFamily = (t: PlayData["play_type"]) =>
   t === "pass" || t === "play_action" || t === "screen" || t === "rpo";
 export const needsOptionRules = (t: PlayData["play_type"]) => t === "option" || t === "rpo";
 
+/** Offensive linemen, by any common letters (LT..RT, or playside/backside PST, PSG, BSG, BST). */
+export const isLineman = (id: string) => /^(LT|LG|C|RG|RT|OL|T|G|PST|PSG|BSG|BST|PT|PG|BT|BG)$/.test(id);
+
 /** Players who catch, carry or read: the ones quizzes ask about. */
 export function skillPlayers(play: PlayData): Player[] {
-  return play.players.filter((p) => !/^(LT|LG|C|RG|RT|OL|T|G)$/.test(p.id));
+  return play.players.filter((p) => !isLineman(p.id));
 }
 
 export function playerById(play: PlayData, id: string): Player | undefined {

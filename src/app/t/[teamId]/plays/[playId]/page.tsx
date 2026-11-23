@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { plays } from "@/db/schema";
 import { TermsSchema } from "@/domain/terms";
 import { hasApiKey } from "@/ingest/extract";
-import { conceptsForTeam, getPlay } from "@/server/plays";
+import { conceptsForTeam, getPlay, isConverted } from "@/server/plays";
 import { requireCoach } from "@/server/teams";
 import { startBlankAction } from "../../actions";
 import { PlayReview } from "./play-review";
@@ -65,6 +65,7 @@ export default async function PlayPage({ params }: PageProps<"/t/[teamId]/plays/
       terms={TermsSchema.parse(team.terms ?? {})}
       position={{ index: idx + 1, total: siblings.length }}
       nextId={nextNeeding?.id ?? null}
+      converted={isConverted(play)}
     />
   );
 }

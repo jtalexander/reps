@@ -46,6 +46,10 @@ export default async function Settings({ params }: PageProps<"/t/[teamId]/settin
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="allowFlip" defaultChecked={team.allowFlip} className="h-5 w-5" /> Flip some quiz diagrams so players learn plays from both sides
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="groupFronts" defaultChecked={team.groupFronts} className="h-5 w-5" /> Show a play drawn against several fronts (Veer vs 4-3, vs 5-2…) as one play
+          with a version for each front
+        </label>
         <button className="btn btn-primary self-start">Save</button>
       </form>
       <TermsEditor teamId={teamId} initial={TermsSchema.parse(team.terms ?? {})} />

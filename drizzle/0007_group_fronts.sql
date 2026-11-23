@@ -1,0 +1,1 @@
+ALTER TABLE "teams" ADD COLUMN "group_fronts" boolean DEFAULT true NOT NULL;

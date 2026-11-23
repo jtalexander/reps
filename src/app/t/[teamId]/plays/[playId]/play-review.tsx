@@ -44,6 +44,8 @@ export function PlayReview(props: {
   terms: Terms;
   position: { index: number; total: number };
   nextId: string | null;
+  /** converted from a Teach drawing: approve once the drawing matches; reads come from Teach */
+  converted?: boolean;
 }) {
   const router = useRouter();
   const [data, setData] = useState<PlayData>(props.initial);
@@ -174,7 +176,12 @@ export function PlayReview(props: {
       </div>
 
       {/* checklist */}
-      {r.missing.length > 0 ? (
+      {props.converted ? (
+        <div className={`p-3 text-sm ${status === "approved" && !dirty ? "bg-ok-bg text-ok" : "border border-line"}`}>
+          <strong>{status === "approved" && !dirty ? "Approved." : "Converted from your drawing."}</strong> Check that every player, route and block matches your page, fix
+          anything off, then approve. Reads and coaching points come from the topic&apos;s lessons in Teach.
+        </div>
+      ) : r.missing.length > 0 ? (
         <div className="rounded-xl border border-warn/40 bg-warn-bg p-3">
           <p className="text-sm font-semibold text-warn">To finish this play ({r.missing.length})</p>
           <ul className="mt-1 list-inside list-disc text-sm">
@@ -238,6 +245,7 @@ export function PlayReview(props: {
             order={order}
             onPlayerTap={tap === "progression" ? onPlayerTap : undefined}
             onDefenderTap={tap === "read_key" ? onDefenderTap : undefined}
+            fit
             className="block w-full"
           />
         </div>
@@ -635,7 +643,7 @@ export function PlayReview(props: {
           ) : (
             <button
               className="btn btn-primary flex-1 sm:flex-none"
-              disabled={pending || !r.complete}
+              disabled={pending || (!r.complete && !props.converted)}
               onClick={() =>
                 start(async () => {
                   if (dirty && !(await save())) return;
@@ -648,7 +656,7 @@ export function PlayReview(props: {
                 })
               }
             >
-              {r.complete ? "Approve" : `${r.missing.length} to go`}
+              {r.complete || props.converted ? "Approve" : `${r.missing.length} to go`}
             </button>
           )}
           {props.nextId && (

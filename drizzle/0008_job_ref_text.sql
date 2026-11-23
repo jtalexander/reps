@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ALTER COLUMN "ref" SET DATA TYPE text;

@@ -10,7 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { createDb, type Db } from "@/db";
-import { players, uploadPages, uploads, users } from "@/db/schema";
+import { players, plays, uploadPages, uploads, users } from "@/db/schema";
 import { gaps, jobs, lessons, questionFlags, questionSrs, questions, teachPages, topics } from "@/db/teach-schema";
 
 const askedWith: string[] = [];
@@ -64,6 +64,28 @@ vi.mock("@/teach/ai", () => ({
     return { key, same };
   }),
   // core: the LAST `limit` questions (so the pick is visibly not just "the first five"), plus a bad number to ignore
+  readDrawing: vi.fn(async (_png: Uint8Array, _w: number, _h: number, label: string, _notes: string, naming: string) => ({
+    is_play: true,
+    kind: "run",
+    formation_name: "SPREAD RIGHT",
+    players: [
+      { id: "C", at: { x: 0, y: 0 }, on_ball: true, does: "block", route_name: null, path: [{ x: 0, y: 0 }, { x: 0, y: 1 }] },
+      { id: naming.includes("X = Split end") ? "QB" : "B1", at: { x: 0, y: -5 }, on_ball: false, does: "carry", route_name: null, path: [{ x: 0, y: -5 }, { x: 2, y: 3 }] },
+    ],
+    motion: null,
+    front: label.includes(" vs ") ? label.split(" vs ")[1]! : null,
+  })),
+  draftNaming: vi.fn(async (material: string) => ({
+    positions: [{ letter: "X", name: "Split end", role: "WR", notes: material.includes("TRIPS RIGHT STACK") ? "away from the call" : "" }],
+    direction: { words: [{ word: "RIGHT", side: "right" }], rule: "RIGHT puts Y and Z on the right" },
+    call_order: ["Formation", "Play", "Direction"],
+    formations: [{ word: "TRIPS", means: "three receivers to the call side", pages: [1] }],
+    formation_tags: [{ word: "STACK", means: "receivers stack", pages: [1] }],
+    backfields: [],
+    motions: [],
+    plays: [{ word: "VEER", means: "inside veer option", pages: [2] }],
+    other: [],
+  })),
   pickCore: vi.fn(async (_t: string, list: string, limit: number) => {
     const n = list.split(/\r?\n/).length;
     return { core: [99, ...Array.from({ length: limit }, (_, i) => n - i)] };
@@ -475,5 +497,64 @@ describe("teach loop", () => {
     expect(ds.filter((d) => matches(d, "trips stack")).length).toBe(1);
     expect((await playbookPages(teamF.id, db)).map((p) => p.pageNo)).toEqual([1, 2]);
     expect((await playbookDrawings(teamA.id, db)).some((d) => d.label === "TRIPS RIGHT STACK")).toBe(false);
+
+    // naming rules: drafted as a background job from what Reps read, saved as a draft, then confirmed
+    const svc = await import("@/teach/service");
+    const naming = await import("@/teach/naming");
+    const job = await svc.newJob(teamF.id, "naming", teamF.id, db);
+    const done = await svc.executeJob(job, db);
+    expect(done?.status).toBe("done");
+    expect(done?.result).toEqual({ positions: 1, formations: 1, plays: 1 });
+    let got = await naming.getNaming(teamF.id, db);
+    expect(got.naming?.positions[0]).toMatchObject({ letter: "X", notes: "away from the call" }); // drew on the drawing labels
+    expect(got.approvedAt).toBeNull();
+    await naming.saveNaming(teamF.id, { ...got.naming!, formations: [...got.naming!.formations, { word: "TRIO", means: "3x1, Y on the line", pages: [1] }] }, true, db);
+    got = await naming.getNaming(teamF.id, db);
+    expect(got.naming?.formations.map((f) => f.word)).toEqual(["TRIPS", "TRIO"]);
+    expect(got.approvedAt).not.toBeNull();
+    expect((await naming.getNaming(teamA.id, db)).naming).toBeNull();
+    const { namingBrief } = await import("@/domain/naming");
+    expect(namingBrief(got.naming)).toContain("X = Split end (WR)");
+
+    // real plays: convert the install's drawings as background jobs, check, approve the topic
+    const { createCanvas } = await import("@napi-rs/canvas");
+    const { media } = await import("@/media/store");
+    const page = createCanvas(612, 792);
+    page.getContext("2d").fillRect(20, 20, 100, 100);
+    for (const p of pgs) await media().put(p.imageKey, new Uint8Array(page.toBuffer("image/png")), "image/png");
+    const run = await import("@/teach/convert-run");
+    const q = await run.queueConversions(teamF.id, "install", null, db);
+    expect(q).toEqual({ queued: 1, failed: 0, left: 0 }); // only Veer is in the install
+    expect((await run.queueConversions(teamF.id, "install", null, db)).queued).toBe(0); // already queued
+    // the inline workers pick it up; wait until it's done
+    for (let i = 0; i < 100 && (await run.conversionProgress(teamF.id, db)).waiting > 0; i++) await new Promise((r) => setTimeout(r, 100));
+    const made = await db.select().from(plays).where(and(eq(plays.teamId, teamF.id), eq(plays.archived, false)));
+    expect(made.map((p) => [p.name, p.status, p.extraction])).toEqual([["VEER RIGHT vs 4-3", "draft", "done"]]);
+    expect(made[0]!.data?.players.map((p) => p.id)).toEqual(["C", "QB"]); // named with the team's rules
+    expect(made[0]!.data?.players[1]!.path).toEqual([[0, 0], [2, 8]]); // field yards, relative to the player
+    const veer = ds.find((d) => d.label.startsWith("VEER"))!;
+    expect(await run.approveConvertedTopic(teamA.id, veer.topicId!, coachId, db)).toBe(0); // another team's coach can't
+    expect(await run.approveConvertedTopic(teamF.id, veer.topicId!, coachId, db)).toBe(1);
+    // one play at a time: unapprove, approve again without the old read checklist, an edit sends it back to check
+    const { approvedPlays, approvePlay, savePlayData, unapprovePlay } = await import("@/server/plays");
+    const statusOf = async () => (await db.select().from(plays).where(eq(plays.id, made[0]!.id)))[0]!.status;
+    await unapprovePlay(teamF.id, made[0]!.id, "high_school", db);
+    expect(await statusOf()).toBe("draft");
+    await approvePlay(teamF.id, made[0]!.id, coachId, "high_school", db);
+    expect(await statusOf()).toBe("approved");
+    await savePlayData(teamF.id, made[0]!.id, made[0]!.data, { level: "high_school", database: db });
+    expect(await statusOf()).toBe("draft");
+    await approvePlay(teamF.id, made[0]!.id, coachId, "high_school", db);
+    // converted plays stay out of the old play quizzes for now
+    expect(await approvedPlays(teamF.id, undefined, db)).toEqual([]);
+    const { groupByFront } = await import("@/domain/fronts");
+    const named = [{ name: "VEER RIGHT vs 4-3" }, { name: "VEER RIGHT vs 5-2" }, { name: "SMASH" }];
+    expect(groupByFront(named, true).map((g) => [g.base, g.items.map((x) => x.front)])).toEqual([
+      ["VEER RIGHT", ["4-3", "5-2"]],
+      ["SMASH", [null]],
+    ]);
+    expect(groupByFront(named, false).length).toBe(3);
+    // the same play drawn on two pages (two versions) stays two plays
+    expect(groupByFront([{ name: "VEER RIGHT vs 4-3", page: 53 }, { name: "VEER RIGHT vs 5-2", page: 53 }, { name: "VEER RIGHT vs 4-3", page: 54 }], true).map((g) => g.items.length)).toEqual([2, 1]);
   });
 });

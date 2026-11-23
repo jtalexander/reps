@@ -24,7 +24,10 @@ export default async function Playbook({ params, searchParams }: PageProps<"/t/[
 
   const all = await playbookDrawings(teamId);
   const [old] = await db
-    .select({ n: sql<number>`count(*)::int` })
+    .select({
+      n: sql<number>`count(*) filter (where ${plays.aiRaw}->>'drawingKey' is null)::int`,
+      converted: sql<number>`count(*) filter (where ${plays.aiRaw}->>'drawingKey' is not null)::int`,
+    })
     .from(plays)
     .where(and(eq(plays.teamId, teamId), eq(plays.archived, false)));
   const refs = await pageRefs(teamId);
@@ -51,7 +54,17 @@ export default async function Playbook({ params, searchParams }: PageProps<"/t/[
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-4xl">Playbook</h1>
+        <div className="flex items-baseline justify-between gap-2">
+          <h1 className="text-4xl">Playbook</h1>
+          <span className="flex gap-3 text-sm font-semibold">
+            <Link href={`/t/${teamId}/plays/converted`} className="underline">
+              Real plays
+            </Link>
+            <Link href={`/t/${teamId}/plays/naming`} className="underline">
+              Naming rules
+            </Link>
+          </span>
+        </div>
         <p className="text-sm text-muted">
           {all.length
             ? `${all.length} drawings Reps found on ${pages} pages of your playbook. Tap one to see it bigger with what Reps read from its page.`
@@ -120,6 +133,11 @@ export default async function Playbook({ params, searchParams }: PageProps<"/t/[
         </>
       )}
 
+      {(old?.converted ?? 0) > 0 && (
+        <Link href={`/t/${teamId}/plays/converted`} className="self-start text-sm font-semibold underline">
+          Real plays Reps converted from these drawings ({old!.converted})
+        </Link>
+      )}
       {(old?.n ?? 0) > 0 && (
         <Link href={`/t/${teamId}/plays?view=old`} className="self-start text-sm text-muted underline">
           Older play cards from before Teach ({old!.n})

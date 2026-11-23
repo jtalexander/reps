@@ -271,8 +271,9 @@ export async function saveSettingsAction(teamId: string, fd: FormData): Promise<
   const level = String(fd.get("level")) as Level;
   const name = String(fd.get("name") ?? "").trim().slice(0, 80) || team.name;
   const allowFlip = fd.get("allowFlip") === "on";
+  const groupFronts = fd.get("groupFronts") === "on";
   const nextLevel = LEVELS.includes(level) ? level : team.level;
-  await db.update(teams).set({ name, level: nextLevel, allowFlip }).where(eq(teams.id, teamId));
+  await db.update(teams).set({ name, level: nextLevel, allowFlip, groupFronts }).where(eq(teams.id, teamId));
   if (nextLevel !== team.level) await restatusAll(teamId, nextLevel);
   revalidatePath(`/t/${teamId}`, "layout");
 }

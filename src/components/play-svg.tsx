@@ -6,7 +6,7 @@
  */
 import { useId } from "react";
 import { buildLook, defenderForKey, playSideSign, type DefensiveLook, type Front } from "@/domain/defense";
-import { flipPlay, type Coverage, type PlayData, type Player, type Point } from "@/domain/play";
+import { flipPlay, isLineman, type Coverage, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTE_BY_KEY, outsideSign, routePath } from "@/domain/routes";
 
 const TOP = 22;
@@ -32,6 +32,23 @@ export interface PlaySvgProps {
   className?: string;
   /** clip the vertical extent for compact cards */
   compact?: boolean;
+  /** zoom to the players and their lines (a drawing of just the line and backs fills the frame) */
+  fit?: boolean;
+}
+
+/** Field area a play uses: every player, the end of every line, motion ends and defenders. */
+function extent(data: PlayData, strength: string, extra: Array<{ x: number; y: number }>) {
+  const pts: Point[] = [];
+  for (const p of data.players) {
+    const start: Point = data.motion && data.motion.player === p.id && data.motion.end ? data.motion.end : [p.x, p.y];
+    pts.push([p.x, p.y], start);
+    const rel = p.route ? routePath(p.route, p, strength) : p.block?.path ?? p.path;
+    for (const [dx, dy] of rel ?? []) pts.push([start[0] + dx, start[1] + dy]);
+  }
+  for (const d of extra) pts.push([d.x, d.y]);
+  const xs = pts.map((q) => q[0]);
+  const ys = pts.map((q) => q[1]);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
 }
 
 const sy = (y: number) => TOP - y;
@@ -145,9 +162,26 @@ export function PlaySvg(props: PlaySvgProps) {
     );
   }
 
-  const yMin = props.compact ? -9 : BOTTOM;
-  const yMax = props.compact ? 16 : TOP;
-  const viewBox = `${-HALF} ${sy(yMax)} ${HALF * 2} ${yMax - yMin}`;
+  let yMin = props.compact ? -9 : BOTTOM;
+  let yMax = props.compact ? 16 : TOP;
+  let vx = -HALF;
+  let vw = HALF * 2;
+  if (props.fit && data.players.length) {
+    const e = extent(data, strength, look?.defenders ?? []);
+    const pad = 2.5;
+    let x0 = e.x0 - pad;
+    let x1 = e.x1 + pad;
+    let y0 = e.y0 - pad;
+    let y1 = e.y1 + pad;
+    // never tighter than 16 x 10 yards, so a short drawing still reads as a field
+    if (x1 - x0 < 16) [x0, x1] = [(x0 + x1) / 2 - 8, (x0 + x1) / 2 + 8];
+    if (y1 - y0 < 10) [y0, y1] = [(y0 + y1) / 2 - 5, (y0 + y1) / 2 + 5];
+    vx = Math.max(-HALF, x0);
+    vw = Math.min(HALF, x1) - vx;
+    yMin = Math.floor(y0);
+    yMax = Math.ceil(y1);
+  }
+  const viewBox = `${vx} ${sy(yMax)} ${vw} ${yMax - yMin}`;
 
   return (
     <svg viewBox={viewBox} className={props.className} role="img" aria-label={data.name} style={{ color: "var(--ink)" }}>
@@ -162,7 +196,7 @@ export function PlaySvg(props: PlaySvgProps) {
           <path d="M5 0 L5 10" stroke="currentColor" strokeWidth="2" />
         </marker>
       </defs>
-      <rect x={-HALF} y={sy(yMax)} width={HALF * 2} height={yMax - yMin} fill="var(--field)" />
+      <rect x={vx} y={sy(yMax)} width={vw} height={yMax - yMin} fill="var(--field)" />
       {Array.from({ length: Math.floor((yMax - yMin) / 5) + 1 }, (_, i) => Math.ceil(yMin / 5) * 5 + i * 5).map((y) => (
         <line key={y} x1={-HALF} x2={HALF} y1={sy(y)} y2={sy(y)} stroke="var(--yard)" strokeWidth={0.12} />
       ))}
@@ -227,7 +261,7 @@ export function PlaySvg(props: PlaySvgProps) {
           const isC = p.id === "C";
           const hl = props.highlight === p.id;
           const tap = props.onPlayerTap ? () => props.onPlayerTap!(p.id) : undefined;
-          const r = 0.9;
+          const r = isLineman(p.id) ? 0.6 : 0.9;
           return (
             <g key={p.id + p.x} onClick={tap} style={tap ? { cursor: "pointer" } : undefined}>
               {tap && <circle cx={p.x} cy={sy(p.y)} r={1.6} fill="transparent" />}
@@ -236,7 +270,7 @@ export function PlaySvg(props: PlaySvgProps) {
               ) : (
                 <circle cx={p.x} cy={sy(p.y)} r={r} fill={hl ? "var(--hl)" : "var(--card)"} stroke="currentColor" strokeWidth={0.18} />
               )}
-              {!/^(LT|LG|C|RG|RT)$/.test(p.id) && (
+              {!isLineman(p.id) && (
                 <text x={p.x} y={sy(p.y) + 0.38} fontSize={p.id.length > 1 ? 0.8 : 1.05} fontWeight={700} textAnchor="middle" fill={hl ? "var(--hl-ink)" : "currentColor"}>
                   {p.id}
                 </text>

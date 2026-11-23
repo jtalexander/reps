@@ -4,7 +4,7 @@
  * first (requireCoach); every query here is scoped by teamId.
  */
 import "server-only";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { plays, teamConcepts, teams } from "@/db/schema";
 import {
@@ -59,6 +59,9 @@ export function withConcept(data: PlayData, concepts: Concept[]): PlayData {
   return concept ? applyConcept(data, concept) : data;
 }
 
+/** A play Reps converted from one of Teach's drawings (not the old play reader). */
+export const isConverted = (row: { aiRaw: unknown }) => Boolean((row.aiRaw as { drawingKey?: string } | null)?.drawingKey);
+
 export async function savePlayData(
   teamId: string,
   playId: string,
@@ -69,7 +72,8 @@ export async function savePlayData(
   const current = await getPlay(teamId, playId, database);
   if (!current) throw new Error("Play not found.");
   const data = PlayDataSchema.parse(input);
-  const { status, qbReady } = statusFor(data, opts.level, current.status === "approved");
+  // a play converted from a drawing goes back to "to check" when edited; reads come from Teach, not this play
+  const { status, qbReady } = isConverted(current) ? { status: "draft" as const, qbReady: false } : statusFor(data, opts.level, current.status === "approved");
   const [row] = await database
     .update(plays)
     .set({ ...columnsFor(data), status, qbReady, ...(status !== "approved" ? { approvedAt: null, approvedBy: null } : {}) })
@@ -82,7 +86,8 @@ export async function approvePlay(teamId: string, playId: string, userId: string
   const current = await getPlay(teamId, playId, database);
   if (!current?.data) throw new Error("Play not found.");
   const r = readiness(current.data, level);
-  if (!r.complete) {
+  // a converted play is approved once its drawing is confirmed; the old read checklist doesn't apply
+  if (!r.complete && !isConverted(current)) {
     throw new Error(`Still needed: ${r.missing.map((m) => m.label).join(", ")}`);
   }
   // Approval confirms every suggested value.
@@ -98,7 +103,7 @@ export async function approvePlay(teamId: string, playId: string, userId: string
 export async function unapprovePlay(teamId: string, playId: string, level: Level, database: Db = db) {
   const current = await getPlay(teamId, playId, database);
   if (!current?.data) throw new Error("Play not found.");
-  const { status } = statusFor(current.data, level, false);
+  const { status } = isConverted(current) ? { status: "draft" as const } : statusFor(current.data, level, false);
   await database
     .update(plays)
     .set({ status, qbReady: false, approvedAt: null, approvedBy: null })
@@ -157,7 +162,8 @@ export async function restatusAll(teamId: string, level: Level, database: Db = d
 }
 
 export async function approvedPlays(teamId: string, ids?: string[], database: Db = db) {
-  const where = [eq(plays.teamId, teamId), eq(plays.status, "approved"), eq(plays.archived, false)];
+  // plays converted from Teach's drawings stay out of the old play quizzes until quizzes on real plays are built
+  const where = [eq(plays.teamId, teamId), eq(plays.status, "approved"), eq(plays.archived, false), sql`${plays.aiRaw}->>'drawingKey' is null`];
   if (ids?.length) where.push(inArray(plays.id, ids));
   return database.select().from(plays).where(and(...where)).orderBy(asc(plays.sourcePage), asc(plays.boxIndex));
 }

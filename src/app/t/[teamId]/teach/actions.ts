@@ -9,6 +9,9 @@ import { renderPages } from "@/server/ingest";
 import { dispatchJob } from "@/teach/dispatch";
 import { WORKERS, dispatchWorkers, startPlaybookRun, stopPlaybookRun } from "@/teach/playbook-run";
 import { requireCoach } from "@/server/teams";
+import type { Naming } from "@/domain/naming";
+import { saveNaming } from "@/teach/naming";
+import { approveConvertedTopic, queueConversions, retryConversion } from "@/teach/convert-run";
 import {
   acceptSuggestions,
   answerGap,
@@ -75,7 +78,7 @@ async function origin() {
  * Queue an AI job and return at once; the page waits with `jobStatusAction`.
  * (AI steps can take minutes; a request on Netlify can't.)
  */
-async function startJob(teamId: string, kind: "decode_page" | "find_gaps" | "write_topic" | "triage", ref: string): Promise<R<{ jobId: string }>> {
+async function startJob(teamId: string, kind: "decode_page" | "find_gaps" | "write_topic" | "triage" | "naming", ref: string): Promise<R<{ jobId: string }>> {
   try {
     await requireCoach(teamId);
     const job = await newJob(teamId, kind, ref);
@@ -94,6 +97,10 @@ export async function findGapsAction(teamId: string, topicId: string) {
 }
 export async function writeTopicAction(teamId: string, topicId: string) {
   return startJob(teamId, "write_topic", topicId);
+}
+/** Draft the team's naming rules from everything Reps read (one AI call). */
+export async function draftNamingAction(teamId: string) {
+  return startJob(teamId, "naming", teamId);
 }
 /** Re-rank the open questions and link repeats across topics (one AI call). */
 export async function triageAction(teamId: string) {
@@ -291,6 +298,60 @@ export async function clearInstallAction(teamId: string): Promise<R> {
     await requireCoach(teamId);
     await clearInstall(teamId);
     revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Save the coach's edits to the naming rules; `approve` marks them confirmed. */
+export async function saveNamingAction(teamId: string, naming: Naming, approve: boolean): Promise<R<object>> {
+  try {
+    await requireCoach(teamId);
+    await saveNaming(teamId, naming, approve);
+    revalidatePath(`/t/${teamId}/plays/naming`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ---------- drawings -> plays ----------
+const TOPIC_ID = /^[0-9a-f-]{36}$/i;
+
+/** Queue conversion of the install topics' drawings, or of the given topics'. Call again while `left` > 0. */
+export async function convertTopicsAction(teamId: string, which: "install" | string[]): Promise<R<{ queued: number; failed: number; left: number }>> {
+  try {
+    await requireCoach(teamId);
+    const pick = which === "install" ? "install" : which.filter((x) => TOPIC_ID.test(x)).slice(0, 100);
+    const r = await queueConversions(teamId, pick, await origin());
+    revalidatePath(`/t/${teamId}/plays/converted`);
+    return { ok: true, ...r };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** The coach checked a topic's converted plays side by side: approve them all. */
+export async function approveConvertedTopicAction(teamId: string, topicId: string): Promise<R<{ approved: number }>> {
+  try {
+    const { user } = await requireCoach(teamId);
+    if (!TOPIC_ID.test(topicId)) throw new Error("That topic wasn't found.");
+    const approved = await approveConvertedTopic(teamId, topicId, user.id);
+    revalidatePath(`/t/${teamId}/plays/converted`);
+    return { ok: true, approved };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Throw away one converted play and have Reps read its drawing again. */
+export async function retryConversionAction(teamId: string, playId: string): Promise<R<object>> {
+  try {
+    await requireCoach(teamId);
+    if (!TOPIC_ID.test(playId)) throw new Error("That play wasn't found.");
+    await retryConversion(teamId, playId, await origin());
+    revalidatePath(`/t/${teamId}/plays/converted`);
     return { ok: true };
   } catch (e) {
     return fail(e);

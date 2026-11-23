@@ -6,7 +6,7 @@
  *
  * Geometry matches play.ts: yards from the ball, y > 0 is the defense's side.
  */
-import type { Coverage, PlayData, Player } from "./play";
+import { isLineman, type Coverage, type PlayData, type Player } from "./play";
 
 export const FRONTS = ["4-3", "4-2-5", "3-4", "5-3", "4-4"] as const;
 export type Front = (typeof FRONTS)[number];
@@ -71,7 +71,7 @@ export type ReactionKey = (typeof REACTIONS)[number]["key"];
 
 /** Receivers per side, outside-in, for aligning corners and apex players. */
 function receiversBySide(play: PlayData) {
-  const skill = play.players.filter((p) => !/^(LT|LG|C|RG|RT|OL|T|G|QB)$/.test(p.id));
+  const skill = play.players.filter((p) => !isLineman(p.id) && p.id !== "QB");
   const eligible = skill.filter((p) => Math.abs(p.x) > 3.5 || p.y > -0.6);
   const left = eligible.filter((p) => p.x < -3.5).sort((a, b) => a.x - b.x);
   const right = eligible.filter((p) => p.x > 3.5).sort((a, b) => b.x - a.x);
