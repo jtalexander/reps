@@ -14,8 +14,9 @@ export const metadata = { title: "Study" };
 export default async function StudyHome({ searchParams }: PageProps<"/study">) {
   const { empty } = await searchParams;
   const me = await requirePlayer();
-  const sets = (await db.select().from(studySets).where(eq(studySets.teamId, me.team.id)).orderBy(desc(studySets.createdAt))).filter((s) =>
-    inGroups(me.position, s.positions),
+  const sets = (await db.select().from(studySets).where(eq(studySets.teamId, me.team.id)).orderBy(desc(studySets.createdAt))).filter(
+    // old play-reader sets only; topic sets show in the Teach section
+    (s) => s.playIds.length > 0 && s.topicIds.length === 0 && inGroups(me.position, s.positions),
   );
   const plays = await quizPlays(me.team.id);
   const [due] = await db

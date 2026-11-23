@@ -1,0 +1,1 @@
+ALTER TABLE "study_sets" ADD COLUMN "topic_ids" uuid[] DEFAULT '{}'::uuid[] NOT NULL;

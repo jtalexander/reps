@@ -253,7 +253,10 @@ export const studySets = pgTable(
       .references(() => teams.id, { onDelete: "cascade" }),
     name: text().notNull(),
     dueDate: date(),
+    /** old play-reader sets; new sets use topicIds */
     playIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
+    /** Teach topics in the set; players practice those topics' approved questions */
+    topicIds: uuid().array().notNull().default(sql`'{}'::uuid[]`),
     /** empty = everyone */
     positions: text().array().notNull().default(sql`'{}'::text[]`),
     createdAt: createdAt(),

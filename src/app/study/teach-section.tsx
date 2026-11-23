@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { and, asc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { studySets } from "@/db/schema";
 import { lessonProgress, questionSrs, topics } from "@/db/teach-schema";
-import { POSITION_GROUPS } from "@/domain/positions";
+import { inGroups, POSITION_GROUPS } from "@/domain/positions";
 import { approvedFor, mastery } from "@/teach/service";
 import { audienceOf, AUDIENCE_LABEL } from "@/teach/types";
 
@@ -26,8 +27,42 @@ export async function TeachSection({ teamId, playerId, position }: { teamId: str
     .from(questionSrs)
     .where(and(eq(questionSrs.playerId, playerId), lte(questionSrs.dueAt, new Date())));
 
+  // study sets the coach assigned to this player's position
+  const sets = (
+    await db
+      .select()
+      .from(studySets)
+      .where(and(eq(studySets.teamId, teamId), sql`cardinality(${studySets.topicIds}) > 0`))
+      .orderBy(desc(studySets.createdAt))
+  ).filter((s) => inGroups(position, s.positions));
+  const names = new Map(ts.map((t) => [t.id, t.name]));
+  const setScore = (ids: string[]) => {
+    const rows = ids.flatMap((id) => (m.has(id) ? [m.get(id)!] : []));
+    return rows.length ? Math.round((rows.reduce((a, r) => a + r.score, 0) / ids.length) * 100) : null;
+  };
+
   return (
     <section className="flex flex-col gap-3">
+      {sets.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="font-semibold">Assigned</h2>
+          {sets.map((s) => {
+            const pct = setScore(s.topicIds);
+            return (
+              <Link key={s.id} href={`/study/practice?set=${s.id}`} className="card flex items-center justify-between gap-3 border-brand p-3">
+                <div className="min-w-0">
+                  <div className="font-semibold">{s.name}</div>
+                  <div className="truncate text-xs text-muted">
+                    {s.dueDate ? `Due ${new Date(s.dueDate + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · ` : ""}
+                    {s.topicIds.map((id) => names.get(id)).filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <span className="btn btn-accent shrink-0 px-3">{pct === null ? "Start" : `${pct}%`}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
       <div className="flex items-baseline justify-between">
         <h2 className="font-semibold">Learn your offense</h2>
         <span className="text-xs text-muted">{AUDIENCE_LABEL[group]}</span>

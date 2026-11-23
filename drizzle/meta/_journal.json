@@ -36,6 +36,13 @@
       "when": 1795383952701,
       "tag": "0004_core_install",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795450680422,
+      "tag": "0005_study_set_topics",
+      "breakpoints": true
     }
   ]
 }

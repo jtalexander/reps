@@ -737,9 +737,10 @@ export async function gradeAttempt(
 }
 
 /** Practice set: due and missed questions first, then new ones. */
-export async function practiceSet(teamId: string, playerId: string, group: Audience, count = 10, topicId?: string, database: Db = db) {
+export async function practiceSet(teamId: string, playerId: string, group: Audience, count = 10, only?: string | string[], database: Db = db) {
   const { questions: qs } = await approvedFor(teamId, group, database);
-  const pool = topicId ? qs.filter((q) => q.topicId === topicId) : qs;
+  const pick = only === undefined ? null : new Set(Array.isArray(only) ? only : [only]);
+  const pool = pick ? qs.filter((q) => pick.has(q.topicId)) : qs;
   const srs = await database.select().from(questionSrs).where(eq(questionSrs.playerId, playerId));
   const by = new Map(srs.map((s) => [s.questionId, s]));
   // new questions from the current install come before other new ones

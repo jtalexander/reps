@@ -427,6 +427,15 @@ describe("teach loop", () => {
     expect((await svc.topicOverview(teamE.id, db)).some((t) => t.inInstall)).toBe(true);
     await svc.clearInstall(teamE.id, db);
     expect((await svc.topicOverview(teamE.id, db)).some((t) => t.inInstall)).toBe(false);
+
+    // a study set: practice draws only from the set's topics
+    await svc.approveTopic(teamE.id, t2!.id, coachId, [], db);
+    const [pe] = await db.insert(players).values({ teamId: teamE.id, name: "E", positions: ["X"] }).returning();
+    const all = await svc.practiceSet(teamE.id, pe!.id, "WR", 50, undefined, db);
+    expect(new Set(all.map((x) => x.topicId))).toEqual(new Set([t1!.id, t2!.id]));
+    const veerOnly = await svc.practiceSet(teamE.id, pe!.id, "WR", 50, [t2!.id], db);
+    expect(veerOnly.length).toBe(3);
+    expect(veerOnly.every((x) => x.topicId === t2!.id)).toBe(true);
   });
   it("lists the playbook's drawings by topic for the Playbook tab, team-scoped", { timeout: 60_000 }, async () => {
     const { playbookDrawings, playbookPages, matches } = await import("@/teach/drawings");

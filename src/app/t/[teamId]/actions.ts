@@ -4,10 +4,11 @@
  * team before touching anything; ids from the client are always paired with
  * the teamId in queries.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { players, plays, studySets, teams } from "@/db/schema";
+import { topics } from "@/db/teach-schema";
 import { ConceptSchema } from "@/domain/concepts";
 import { LEVELS, readiness, type Level } from "@/domain/readiness";
 import { TermsSchema } from "@/domain/terms";
@@ -235,18 +236,22 @@ export async function removePlayerAction(teamId: string, playerId: string): Prom
 export async function createSetAction(teamId: string, fd: FormData): Promise<void> {
   await requireCoach(teamId);
   const name = String(fd.get("name") ?? "").trim().slice(0, 80);
-  const playIds = fd.getAll("playIds").map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+  const ids = (k: string) => fd.getAll(k).map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+  const topicIds = ids("topicIds");
   const due = String(fd.get("dueDate") ?? "");
   const positions = fd.getAll("positions").map(String);
-  if (!name || playIds.length === 0) return;
-  // keep only this team's approved plays
-  const owned = await db.select({ id: plays.id }).from(plays).where(and(eq(plays.teamId, teamId), eq(plays.status, "approved")));
+  if (!name || topicIds.length === 0) return;
+  // keep only this team's topics
+  const owned = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.teamId, teamId), inArray(topics.id, topicIds)));
   const ok = new Set(owned.map((o) => o.id));
   await db.insert(studySets).values({
     teamId,
     name,
     dueDate: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
-    playIds: playIds.filter((id) => ok.has(id)),
+    topicIds: topicIds.filter((id) => ok.has(id)),
     positions,
   });
   revalidatePath(`/t/${teamId}/sets`);

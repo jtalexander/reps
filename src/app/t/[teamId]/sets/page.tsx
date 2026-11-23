@@ -1,7 +1,8 @@
-import { desc, eq } from "drizzle-orm";
+import Link from "next/link";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { studySets } from "@/db/schema";
-import { approvedPlays } from "@/server/plays";
+import { questions, topics } from "@/db/teach-schema";
 import { requireCoach } from "@/server/teams";
 import { createSetAction, deleteSetAction } from "../actions";
 
@@ -9,20 +10,37 @@ export const metadata = { title: "Study sets" };
 
 const POSITION_GROUPS = ["QB", "RB", "WR", "TE", "OL"];
 
+/** Assign topics (this week's game plan) with a due date; players practice just those. */
 export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
   const { teamId } = await params;
   await requireCoach(teamId);
   const sets = await db.select().from(studySets).where(eq(studySets.teamId, teamId)).orderBy(desc(studySets.createdAt));
-  const approved = await approvedPlays(teamId);
-  const names = new Map(approved.map((p) => [p.id, p.name]));
+  // topics with approved quiz questions, install first
+  const ready = await db
+    .select({ id: topics.id, name: topics.name, inInstall: topics.inInstall, n: sql<number>`count(${questions.id})::int` })
+    .from(topics)
+    .innerJoin(questions, and(eq(questions.topicId, topics.id), eq(questions.status, "approved")))
+    .where(and(eq(topics.teamId, teamId), eq(topics.archived, false)))
+    .groupBy(topics.id)
+    .orderBy(desc(topics.inInstall), asc(topics.sort));
+  const names = new Map(ready.map((t) => [t.id, t.name]));
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-4xl">Study sets</h1>
-        <p className="mt-1 text-sm text-muted">Assign a group of approved plays — this week&apos;s game plan — with a due date. Players see it first on their home screen.</p>
+        <p className="mt-1 text-sm text-muted">
+          Assign topics, like this week&apos;s game plan, with a due date. Players see it first on their home screen and practice only those topics&apos; approved questions.
+        </p>
       </div>
-      {approved.length === 0 ? (
-        <p className="card p-4 text-sm text-muted">Approve some plays first. Only approved plays can go in a study set.</p>
+      {ready.length === 0 ? (
+        <p className="card p-4 text-sm text-muted">
+          Approve some topics in{" "}
+          <Link className="font-semibold text-ink underline" href={`/t/${teamId}/teach`}>
+            Teach
+          </Link>{" "}
+          first. Only topics with approved questions can go in a study set.
+        </p>
       ) : (
         <form action={createSetAction.bind(null, teamId)} className="card flex flex-col gap-3 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -40,12 +58,15 @@ export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
             </div>
           </div>
           <fieldset>
-            <legend className="label">Plays ({approved.length} approved)</legend>
-            <div className="grid max-h-72 gap-1 overflow-y-auto rounded-lg border border-line p-2 sm:grid-cols-2">
-              {approved.map((p) => (
-                <label key={p.id} className="flex min-h-9 items-center gap-2 text-sm">
-                  <input type="checkbox" name="playIds" value={p.id} className="h-5 w-5" />
-                  <span className="truncate">{p.name}</span>
+            <legend className="label">Topics ({ready.length} approved{ready.some((t) => t.inInstall) ? ", install checked" : ""})</legend>
+            <div className="grid max-h-80 gap-1 overflow-y-auto border border-line p-2 sm:grid-cols-2">
+              {ready.map((t) => (
+                <label key={t.id} className="flex min-h-9 items-center gap-2 text-sm">
+                  <input type="checkbox" name="topicIds" value={t.id} defaultChecked={t.inInstall} className="h-5 w-5" />
+                  <span className="truncate">
+                    {t.name} <span className="text-xs text-muted">· {t.n}</span>
+                    {t.inInstall && <span className="ml-1.5 bg-brand px-1 font-label text-[10px] font-bold tracking-widest text-brand-ink uppercase">Install</span>}
+                  </span>
                 </label>
               ))}
             </div>
@@ -70,7 +91,8 @@ export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
               <div>
                 <div className="font-semibold">{s.name}</div>
                 <div className="text-xs text-muted">
-                  {s.playIds.length} plays{s.dueDate ? ` · due ${s.dueDate}` : ""}
+                  {s.topicIds.length ? `${s.topicIds.length} topic${s.topicIds.length === 1 ? "" : "s"}` : `${s.playIds.length} old plays`}
+                  {s.dueDate ? ` · due ${s.dueDate}` : ""}
                   {s.positions.length ? ` · ${s.positions.join(", ")}` : " · everyone"}
                 </div>
               </div>
@@ -78,7 +100,7 @@ export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
                 <button className="text-sm text-muted underline">Delete</button>
               </form>
             </div>
-            <p className="mt-1 text-xs text-muted">{s.playIds.map((id) => names.get(id) ?? "(unapproved)").join(" · ")}</p>
+            {s.topicIds.length > 0 && <p className="mt-1 text-xs text-muted">{s.topicIds.map((id) => names.get(id) ?? "(no approved questions)").join(" · ")}</p>}
           </li>
         ))}
       </ul>
