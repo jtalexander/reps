@@ -6,6 +6,7 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { players, plays, studySets, teams } from "@/db/schema";
 import { topics } from "@/db/teach-schema";
@@ -255,6 +256,7 @@ export async function createSetAction(teamId: string, fd: FormData): Promise<voi
     positions,
   });
   revalidatePath(`/t/${teamId}/sets`);
+  redirect(`/t/${teamId}/sets?made=${encodeURIComponent(name)}`);
 }
 
 export async function deleteSetAction(teamId: string, setId: string): Promise<void> {

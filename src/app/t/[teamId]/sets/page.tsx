@@ -3,6 +3,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { studySets } from "@/db/schema";
 import { questions, topics } from "@/db/teach-schema";
+import { SubmitButton } from "@/components/submit-button";
 import { requireCoach } from "@/server/teams";
 import { createSetAction, deleteSetAction } from "../actions";
 
@@ -11,8 +12,9 @@ export const metadata = { title: "Study sets" };
 const POSITION_GROUPS = ["QB", "RB", "WR", "TE", "OL"];
 
 /** Assign topics (this week's game plan) with a due date; players practice just those. */
-export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
+export default async function Sets({ params, searchParams }: PageProps<"/t/[teamId]/sets">) {
   const { teamId } = await params;
+  const { made } = await searchParams;
   await requireCoach(teamId);
   const sets = await db.select().from(studySets).where(eq(studySets.teamId, teamId)).orderBy(desc(studySets.createdAt));
   // topics with approved quiz questions, install first
@@ -33,6 +35,11 @@ export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
           Assign topics, like this week&apos;s game plan, with a due date. Players see it first on their home screen and practice only those topics&apos; approved questions.
         </p>
       </div>
+      {typeof made === "string" && made && (
+        <p className="border border-ok bg-ok-bg px-3 py-2 text-sm font-semibold text-ok">
+          Assigned “{made.slice(0, 80)}”. Players see it at the top of their Study screen. It&apos;s in the list below.
+        </p>
+      )}
       {ready.length === 0 ? (
         <p className="card p-4 text-sm text-muted">
           Approve some topics in{" "}
@@ -42,7 +49,7 @@ export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
           first. Only topics with approved questions can go in a study set.
         </p>
       ) : (
-        <form action={createSetAction.bind(null, teamId)} className="card flex flex-col gap-3 p-4">
+        <form key={typeof made === "string" ? made : "new"} action={createSetAction.bind(null, teamId)} className="card flex flex-col gap-3 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="label" htmlFor="name">
@@ -81,7 +88,9 @@ export default async function Sets({ params }: PageProps<"/t/[teamId]/sets">) {
               ))}
             </div>
           </fieldset>
-          <button className="btn btn-primary self-start">Assign study set</button>
+          <SubmitButton className="btn btn-primary self-start" pending="Assigning…">
+            Assign study set
+          </SubmitButton>
         </form>
       )}
       <ul className="flex flex-col gap-2">

@@ -11,7 +11,7 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { createDb, type Db } from "@/db";
 import { players, uploadPages, uploads, users } from "@/db/schema";
-import { gaps, jobs, lessons, questionFlags, questions, teachPages, topics } from "@/db/teach-schema";
+import { gaps, jobs, lessons, questionFlags, questionSrs, questions, teachPages, topics } from "@/db/teach-schema";
 
 const askedWith: string[] = [];
 vi.mock("@/teach/ai", () => ({
@@ -436,6 +436,17 @@ describe("teach loop", () => {
     const veerOnly = await svc.practiceSet(teamE.id, pe!.id, "WR", 50, [t2!.id], db);
     expect(veerOnly.length).toBe(3);
     expect(veerOnly.every((x) => x.topicId === t2!.id)).toBe(true);
+
+    // missed questions come back, but never more than half a session while there's new material
+    const { questions: pool } = await svc.approvedFor(teamE.id, "WR", db);
+    const missed = pool.slice(0, 6);
+    await db.insert(questionSrs).values(
+      missed.map((x) => ({ teamId: teamE.id, playerId: pe!.id, questionId: x.id, box: 0, dueAt: new Date(Date.now() - 60_000), seen: 1, correct: 0 })),
+    );
+    const ids = new Set(missed.map((x) => x.id));
+    const next = await svc.practiceSet(teamE.id, pe!.id, "WR", 4, undefined, db);
+    expect(next.length).toBe(4);
+    expect(next.filter((x) => ids.has(x.id)).length).toBe(2);
   });
   it("lists the playbook's drawings by topic for the Playbook tab, team-scoped", { timeout: 60_000 }, async () => {
     const { playbookDrawings, playbookPages, matches } = await import("@/teach/drawings");

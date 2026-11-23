@@ -49,7 +49,7 @@ export async function TeachSection({ teamId, playerId, position }: { teamId: str
           {sets.map((s) => {
             const pct = setScore(s.topicIds);
             return (
-              <Link key={s.id} href={`/study/practice?set=${s.id}`} className="card flex items-center justify-between gap-3 border-brand p-3">
+              <Link key={s.id} href={`/study/set/${s.id}`} className="card flex items-center justify-between gap-3 border-brand p-3">
                 <div className="min-w-0">
                   <div className="font-semibold">{s.name}</div>
                   <div className="truncate text-xs text-muted">

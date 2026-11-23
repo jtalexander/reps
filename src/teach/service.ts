@@ -748,13 +748,31 @@ export async function practiceSet(teamId: string, playerId: string, group: Audie
     (await database.select({ id: topics.id }).from(topics).where(and(eq(topics.teamId, teamId), eq(topics.inInstall, true)))).map((t) => t.id),
   );
   const now = Date.now();
-  const scored = pool.map((q) => {
+  // three piles: missed or due for review, never seen (install first), seen and not due yet
+  const due: Array<{ q: (typeof pool)[number]; score: number }> = [];
+  const fresh: typeof due = [];
+  const later: typeof due = [];
+  for (const q of pool) {
     const s = by.get(q.id);
-    const score = !s ? (install.has(q.topicId) ? 0 : 1) + Math.random() : s.dueAt.getTime() <= now ? -(now - s.dueAt.getTime()) / DAY - (5 - s.box) : 2 + (s.dueAt.getTime() - now) / DAY + Math.random();
-    return { q, score };
-  });
-  scored.sort((a, b) => a.score - b.score);
-  return scored.slice(0, count).map((s) => publicQuestion(s.q));
+    if (!s) fresh.push({ q, score: (install.has(q.topicId) ? 0 : 1) + Math.random() });
+    else if (s.dueAt.getTime() <= now) due.push({ q, score: -(now - s.dueAt.getTime()) / DAY - (5 - s.box) });
+    else later.push({ q, score: s.dueAt.getTime() + Math.random() * DAY });
+  }
+  for (const pile of [due, fresh, later]) pile.sort((a, b) => a.score - b.score);
+  // At most half a session is review while there's new material, so a player
+  // who misses a few doesn't get the same quiz back the next time.
+  const picked: typeof due = [];
+  const reviewCap = fresh.length ? Math.ceil(count / 2) : count;
+  picked.push(...due.slice(0, reviewCap));
+  picked.push(...fresh.slice(0, count - picked.length));
+  if (picked.length < count) picked.push(...due.slice(reviewCap, reviewCap + count - picked.length));
+  if (picked.length < count) picked.push(...later.slice(0, count - picked.length));
+  // mixed order, so a session doesn't open with the same questions
+  for (let i = picked.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [picked[i], picked[j]] = [picked[j]!, picked[i]!];
+  }
+  return picked.map((s) => publicQuestion(s.q));
 }
 
 export async function completeLesson(teamId: string, playerId: string, lessonId: string, database: Db = db) {

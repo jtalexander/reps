@@ -57,6 +57,11 @@ export function LearnFlow({ lessons, check, pages }: { lessons: Lesson[]; check:
         >
           {check.length ? `Got it — check me (${check.length} questions)` : "Got it"}
         </button>
+        {check.length > 0 && (
+          <button className="btn btn-ghost min-h-11" onClick={() => setStep("check")}>
+            Already know it? Skip to the questions
+          </button>
+        )}
       </div>
     );
 
