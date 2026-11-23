@@ -193,9 +193,11 @@ const formationId: Gen = (play, all, ctx, rand) => {
   const correct = formationLabel(play.data);
   if (isUnknown(play.data.formation.name)) return [];
   const pool = all.map((p) => formationLabel(p.data));
-  // also offer the mirror name as a distractor
-  if (play.data.formation.strength === "left" || play.data.formation.strength === "right")
-    pool.push(`${play.data.formation.name} ${play.data.formation.strength === "left" ? "Right" : "Left"}`);
+  // also offer the mirror name as a distractor: swap RIGHT/LEFT in the name, or add the other side
+  const name = play.data.formation.name;
+  if (/\b(right|left)\b/i.test(name)) pool.push(name.replace(/\b(right|left)\b/gi, (w) => (/right/i.test(w) ? (w === "RIGHT" ? "LEFT" : "Left") : w === "LEFT" ? "RIGHT" : "Right")));
+  else if (play.data.formation.strength === "left" || play.data.formation.strength === "right")
+    pool.push(`${name} ${play.data.formation.strength === "left" ? "Right" : "Left"}`);
   const { choices, answer } = choicesFrom(correct, pool, rand);
   if (choices.length < 2) return [];
   return [

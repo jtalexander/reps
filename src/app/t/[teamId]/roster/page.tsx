@@ -3,7 +3,8 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { players } from "@/db/schema";
 import { requireCoach } from "@/server/teams";
-import { addPlayersAction, removePlayerAction, updatePlayerAction } from "../actions";
+import { addPlayersAction, deletePlayerAction, removePlayerAction, updatePlayerAction } from "../actions";
+import { ConfirmButton } from "./confirm-button";
 
 export const metadata = { title: "Roster" };
 
@@ -20,7 +21,8 @@ export default async function Roster({ params }: PageProps<"/t/[teamId]/roster">
       <div>
         <h1 className="text-4xl">Roster</h1>
         <p className="mt-1 text-sm text-muted">
-          Players join at <strong>/join</strong> with code <span className="font-mono font-bold tracking-widest">{team.joinCode}</span>, then pick their name. First name and last initial is enough — nothing else is collected.
+          Players join at <strong>/join</strong> with code <span className="font-mono font-bold tracking-widest">{team.joinCode}</span>, then pick their name. First name and last initial is enough — nothing else is collected. <b>Remove</b> takes a player off the roster but keeps their answers;{" "}
+          <b>Delete for good</b> erases them and everything they did.
         </p>
       </div>
       <form action={addPlayersAction.bind(null, teamId)} className="card flex flex-col gap-3 p-4">
@@ -54,6 +56,13 @@ export default async function Roster({ params }: PageProps<"/t/[teamId]/roster">
                 <button formAction={removePlayerAction.bind(null, teamId, p.id)} className="btn text-sm text-muted underline">
                   Remove
                 </button>
+                <ConfirmButton
+                  formAction={deletePlayerAction.bind(null, teamId, p.id)}
+                  message={`Delete ${p.name} and all their answers for good? This can't be undone.`}
+                  className="btn text-sm text-bad underline"
+                >
+                  Delete for good
+                </ConfirmButton>
               </form>
             </li>
           ))}

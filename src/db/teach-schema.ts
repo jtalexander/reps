@@ -274,3 +274,21 @@ export const askLog = pgTable(
   },
   (t) => [index("ask_log_team").on(t.teamId, t.createdAt)],
 );
+
+/** One Claude call: who it was for and how many tokens it used (for spend and budgets). */
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: id(),
+    teamId: uuid().references(() => teams.id, { onDelete: "cascade" }),
+    /** the job or action kind it ran under (write_topic, grade, ...) */
+    kind: text().notNull(),
+    /** the AI step (decode, gaps, write, grade, ...) */
+    step: text().notNull(),
+    model: text().notNull(),
+    inputTokens: integer().notNull().default(0),
+    outputTokens: integer().notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ai_usage_team_time").on(t.teamId, t.createdAt)],
+);

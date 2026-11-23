@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { lessons, questions, topics } from "@/db/teach-schema";
 import { requireCoach } from "@/server/teams";
 import { pageRefs } from "@/teach/page-images";
-import { inPile } from "@/teach/service";
+import { focusTopicIds, inPile } from "@/teach/service";
 import { ReviewQueue } from "./review-queue";
 
 export const metadata = { title: "Approve lessons and questions" };
@@ -22,6 +22,11 @@ export default async function Review({ params, searchParams }: PageProps<"/t/[te
   if (topicId) {
     lw.push(eq(lessons.topicId, topicId));
     qw.push(eq(questions.topicId, topicId));
+  }
+  const focus = topicId ? null : await focusTopicIds(teamId);
+  if (focus) {
+    lw.push(inArray(lessons.topicId, [...focus]));
+    qw.push(inArray(questions.topicId, [...focus]));
   }
   const ls = await db.select().from(lessons).where(and(...lw)).orderBy(asc(lessons.sort));
   const qs = await db.select().from(questions).where(and(...qw)).orderBy(asc(questions.sort));

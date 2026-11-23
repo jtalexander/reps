@@ -28,6 +28,12 @@ export default async function Join({ searchParams }: PageProps<"/join">) {
         {e && <p className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad">That code didn&apos;t match a team. Check it with your coach.</p>}
         <button className="btn btn-accent text-base">Next</button>
       </form>
+      <p className="mt-auto pt-6 text-xs text-muted">
+        Reps saves your name, position and answers so your coach can see how you&apos;re doing.{" "}
+        <a className="underline" href="/privacy">
+          Privacy
+        </a>
+      </p>
     </main>
   );
 }

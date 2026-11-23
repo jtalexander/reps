@@ -16,7 +16,7 @@ import { teams, uploadPages } from "@/db/schema";
 import { jobs, questions, teachPages, topics } from "@/db/teach-schema";
 import { BACKGROUND_PATH, onNetlify, signWorker } from "./dispatch";
 import { namingMaterial } from "./naming";
-import { accountProblem, claimNextJob, executeJob, failJob, prepareDecode } from "./service";
+import { accountProblem, claimNextJob, executeJob, failJob, focusTopicIds, prepareDecode } from "./service";
 
 export const WORKERS = 3;
 /** Stop taking new jobs after this long, leaving room for the last one inside 15 minutes. */
@@ -104,7 +104,10 @@ async function advanceRun(teamId: string, database: Db): Promise<number | null> 
   if (!won) return null; // another worker moved it on
 
   const next = STAGES[stage + 1] ?? "done";
-  const ts = await database.select().from(topics).where(and(eq(topics.teamId, teamId), eq(topics.archived, false))).orderBy(asc(topics.sort));
+  const focus = await focusTopicIds(teamId, database);
+  const ts = (await database.select().from(topics).where(and(eq(topics.teamId, teamId), eq(topics.archived, false))).orderBy(asc(topics.sort))).filter(
+    (t) => !focus || focus.has(t.id),
+  );
   if (next === "questions") {
     // alongside the questions: draft the naming rules once the pages are read (never over the coach's own)
     const [team] = await database.select({ naming: teams.naming }).from(teams).where(eq(teams.id, teamId));

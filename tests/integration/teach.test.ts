@@ -311,6 +311,17 @@ describe("teach loop", () => {
     expect(verifyJob(lost.id, signJob(job.id))).toBe(false);
     expect(verifyJob(job.id, "nope")).toBe(false);
   });
+  /** Wait until a team's whole-playbook run has ended; an extra inline worker can finish it a moment after workTeam returns. */
+  async function runEnded(teamId: string) {
+    const run = await import("@/teach/playbook-run");
+    for (let i = 0; i < 200 && (await run.runProgress(teamId, db)); i++) await new Promise((r) => setTimeout(r, 100));
+    for (let i = 0; i < 50; i++) {
+      const busy = await db.select().from(jobs).where(and(eq(jobs.teamId, teamId), sql`${jobs.status} in ('queued', 'running')`));
+      if (!busy.length) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return run.lastRun(teamId, db);
+  }
   it("reads a whole playbook on the server: every step once, in order, even with two workers at once", { timeout: 180_000 }, async () => {
     const { createUpload, renderPages } = await import("@/server/ingest");
     const run = await import("@/teach/playbook-run");
@@ -325,6 +336,7 @@ describe("teach loop", () => {
     expect((await run.startPlaybookRun(teamC.id, up.id, db)).id).toBe(r.id); // one run at a time
     expect((await run.runProgress(teamC.id, db))?.stage).toBe("reading");
     await Promise.all([run.workTeam(teamC.id, null, 120_000, db), run.workTeam(teamC.id, null, 120_000, db)]);
+    await runEnded(teamC.id);
     // 2 pages read, 1 topic asked, 1 sort, 1 topic written, naming rules drafted once: nothing twice
     expect(calls().map((n, i) => n - before[i]!)).toEqual([2, 1, 1, 1, 1]);
     expect((await (await import("@/teach/naming")).getNaming(teamC.id, db)).naming).not.toBeNull();
@@ -337,6 +349,7 @@ describe("teach loop", () => {
     // running it again only does what's missing (here: nothing)
     const again = await run.startPlaybookRun(teamC.id, up.id, db);
     await run.workTeam(teamC.id, null, 60_000, db);
+    await runEnded(teamC.id);
     expect(calls().map((n, i) => n - before[i]!)).toEqual([2, 1, 2, 1, 1]); // just the cheap re-sort; the naming rules aren't redrafted
     expect((await db.select().from(jobs).where(eq(jobs.id, again.id)))[0]!.status).toBe("done");
     // stop drops queued work; other teams' runs are untouched
@@ -372,8 +385,8 @@ describe("teach loop", () => {
     // credits back: the next tap does both pages and finishes
     await run.startPlaybookRun(teamD.id, up.id, db);
     await run.workTeam(teamD.id, null, 120_000, db);
+    expect(await runEnded(teamD.id)).toEqual({ status: "done", error: null, failedSteps: 0 });
     expect(vi.mocked(ai.decodePage).mock.calls.length - decodes).toBe(3);
-    expect(await run.lastRun(teamD.id, db)).toEqual({ status: "done", error: null, failedSteps: 0 });
   });
   it("keeps the review to a core set per topic, with the rest in reserve, and puts the install first", { timeout: 120_000 }, async () => {
     const svc = await import("@/teach/service");
@@ -546,8 +559,13 @@ describe("teach loop", () => {
     await savePlayData(teamF.id, made[0]!.id, made[0]!.data, { level: "high_school", database: db });
     expect(await statusOf()).toBe("draft");
     await approvePlay(teamF.id, made[0]!.id, coachId, "high_school", db);
-    // converted plays stay out of the old play quizzes for now
-    expect(await approvedPlays(teamF.id, undefined, db)).toEqual([]);
+    // approved real plays are quizzed: the QB is asked about his job (he carries it)
+    expect((await approvedPlays(teamF.id, undefined, db)).map((p) => p.name)).toEqual(["VEER RIGHT vs 4-3"]);
+    const { quizPlays } = await import("@/server/quiz");
+    const { candidates } = await import("@/domain/quiz");
+    const { EMPTY_TERMS } = await import("@/domain/terms");
+    const qp = await quizPlays(teamF.id, undefined, db);
+    expect(candidates(qp, { terms: EMPTY_TERMS, level: "high_school", positions: ["QB"], allowFlip: false }).map((c) => c.type)).toContain("assignment");
     const { groupByFront } = await import("@/domain/fronts");
     const named = [{ name: "VEER RIGHT vs 4-3" }, { name: "VEER RIGHT vs 5-2" }, { name: "SMASH" }];
     expect(groupByFront(named, true).map((g) => [g.base, g.items.map((x) => x.front)])).toEqual([

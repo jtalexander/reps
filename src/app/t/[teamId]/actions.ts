@@ -10,6 +10,8 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { players, plays, studySets, teams } from "@/db/schema";
 import { topics } from "@/db/teach-schema";
+import { newCoachInvite, removeCoach, stopCoachInvite } from "@/server/coaches";
+import { deleteAllPlayers, deletePlayer } from "@/server/player-data";
 import { ConceptSchema } from "@/domain/concepts";
 import { LEVELS, readiness, type Level } from "@/domain/readiness";
 import { TermsSchema } from "@/domain/terms";
@@ -26,7 +28,9 @@ import {
 } from "@/server/ingest";
 import {
   approvePlay,
+  createBuiltPlay,
   getPlay,
+  isConverted,
   restatusAll,
   savePlayData,
   saveTeamConcept,
@@ -248,13 +252,20 @@ export async function createSetAction(teamId: string, fd: FormData): Promise<voi
     .from(topics)
     .where(and(eq(topics.teamId, teamId), inArray(topics.id, topicIds)));
   const ok = new Set(owned.map((o) => o.id));
-  await db.insert(studySets).values({
-    teamId,
+  const values = {
     name,
     dueDate: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
     topicIds: topicIds.filter((id) => ok.has(id)),
     positions,
-  });
+  };
+  // editing an existing set (this team's only), or a new one
+  const setId = String(fd.get("setId") ?? "");
+  if (/^[0-9a-f-]{36}$/i.test(setId)) {
+    await db.update(studySets).set(values).where(and(eq(studySets.teamId, teamId), eq(studySets.id, setId)));
+    revalidatePath(`/t/${teamId}/sets`);
+    redirect(`/t/${teamId}/sets?saved=${encodeURIComponent(name)}`);
+  }
+  await db.insert(studySets).values({ teamId, ...values });
   revalidatePath(`/t/${teamId}/sets`);
   redirect(`/t/${teamId}/sets?made=${encodeURIComponent(name)}`);
 }
@@ -272,8 +283,9 @@ export async function saveSettingsAction(teamId: string, fd: FormData): Promise<
   const name = String(fd.get("name") ?? "").trim().slice(0, 80) || team.name;
   const allowFlip = fd.get("allowFlip") === "on";
   const groupFronts = fd.get("groupFronts") === "on";
+  const shareAnswers = fd.get("shareAnswers") === "on";
   const nextLevel = LEVELS.includes(level) ? level : team.level;
-  await db.update(teams).set({ name, level: nextLevel, allowFlip, groupFronts }).where(eq(teams.id, teamId));
+  await db.update(teams).set({ name, level: nextLevel, allowFlip, groupFronts, shareAnswers }).where(eq(teams.id, teamId));
   if (nextLevel !== team.level) await restatusAll(teamId, nextLevel);
   revalidatePath(`/t/${teamId}`, "layout");
 }
@@ -296,4 +308,67 @@ export async function resetJoinCodeAction(teamId: string): Promise<void> {
   const { team } = await requireCoach(teamId);
   await db.update(teams).set({ joinCode: newJoinCode(), joinCodeVersion: team.joinCodeVersion + 1 }).where(eq(teams.id, teamId));
   revalidatePath(`/t/${teamId}/settings`);
+}
+
+// ---------- coaches ----------
+async function requireOwner(teamId: string) {
+  const c = await requireCoach(teamId);
+  if (c.role !== "owner") throw new Error("Only the team's owner can do that.");
+  return c;
+}
+
+export async function newCoachInviteAction(teamId: string): Promise<void> {
+  await requireOwner(teamId);
+  await newCoachInvite(teamId);
+  revalidatePath(`/t/${teamId}/settings`);
+}
+
+export async function stopCoachInviteAction(teamId: string): Promise<void> {
+  await requireOwner(teamId);
+  await stopCoachInvite(teamId);
+  revalidatePath(`/t/${teamId}/settings`);
+}
+
+export async function removeCoachAction(teamId: string, userId: string): Promise<void> {
+  await requireOwner(teamId);
+  if (/^[0-9a-f-]{36}$/i.test(userId)) await removeCoach(teamId, userId);
+  revalidatePath(`/t/${teamId}/settings`);
+}
+
+// ---------- player data ----------
+/** Delete one player and everything Reps saved about them. */
+export async function deletePlayerAction(teamId: string, playerId: string): Promise<void> {
+  await requireCoach(teamId);
+  if (/^[0-9a-f-]{36}$/i.test(playerId)) await deletePlayer(teamId, playerId);
+  revalidatePath(`/t/${teamId}/roster`);
+}
+
+/** Owner only, typed confirmation: delete every player on the team and all their data. */
+export async function deleteAllPlayersAction(teamId: string, fd: FormData): Promise<void> {
+  await requireOwner(teamId);
+  if (String(fd.get("confirm") ?? "").trim().toUpperCase() !== "DELETE") redirect(`/t/${teamId}/settings?deleted=no#players`);
+  const n = await deleteAllPlayers(teamId);
+  revalidatePath(`/t/${teamId}`, "layout");
+  redirect(`/t/${teamId}/settings?deleted=${n}#players`);
+}
+
+// ---------- play builder ----------
+/** Save a play drawn in the builder: a new one, or changes to a drawn or converted play (back to "to check"). */
+export async function saveBuiltPlayAction(teamId: string, playId: string | null, data: unknown): Promise<Result<{ playId: string }>> {
+  try {
+    const { team } = await requireCoach(teamId);
+    if (playId) {
+      if (!/^[0-9a-f-]{36}$/i.test(playId)) throw new Error("Play not found.");
+      const current = await getPlay(teamId, playId);
+      if (!current || !isConverted(current)) throw new Error("Only drawn or converted plays open in the builder.");
+      await savePlayData(teamId, playId, data, { level: team.level });
+      revalidatePath(`/t/${teamId}/plays`);
+      return { ok: true, playId };
+    }
+    const id = await createBuiltPlay(teamId, data);
+    revalidatePath(`/t/${teamId}/plays`);
+    return { ok: true, playId: id };
+  } catch (err) {
+    return fail(err);
+  }
 }

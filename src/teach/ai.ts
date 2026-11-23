@@ -14,6 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { NamingSchema } from "@/domain/naming";
+import { recordUsage } from "./usage";
 
 export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5";
 type Effort = "low" | "medium" | "high";
@@ -40,6 +41,7 @@ async function structured<T extends z.ZodType>(
   content: Anthropic.ContentBlockParam[],
   effort: Effort,
   maxTokens: number,
+  step = "other",
 ): Promise<z.infer<T>> {
   const client = new Anthropic({ timeout: 10 * 60 * 1000, maxRetries: 2 });
   let last: unknown;
@@ -52,6 +54,7 @@ async function structured<T extends z.ZodType>(
         output_config: { effort, format: zodOutputFormat(schema) },
         messages: [{ role: "user", content }],
       });
+      await recordUsage(MODEL, res.usage, step);
       if (res.stop_reason === "refusal") throw new Error("The model declined this request.");
       if (res.stop_reason === "max_tokens") throw new Error("The answer was too long to finish. Try fewer pages at once.");
       if (!res.parsed_output) throw new Error("The model returned nothing usable.");
@@ -111,6 +114,7 @@ export async function decodePage(page: PageImage, knownTopics: string[]): Promis
     ],
     "high",
     16000,
+    "decode",
   );
 }
 
@@ -139,7 +143,7 @@ const GAPS_SYSTEM = `${VOICE}
 Coaches put part of their offense in the playbook and keep the rest in their head. You are looking at one topic of the playbook (the pages and the facts already taken from them). List what a player at each position would still need in order to execute or understand it, but the playbook doesn't say. Examples: a pass play with no read or progression for the QB; a formation that doesn't say where a player aligns or how deep; a term used but never defined; rules for #1 and #2 but not #3; a cadence word whose meaning isn't explained; a contradiction between pages.
 Ask only what matters for teaching this topic, most important first, at most 8. Don't ask about things the coach already answered, and don't ask about anything another topic of the playbook covers (you get the list of other topics with what each one covers); a gap is something the whole playbook leaves out. Offer a suggested answer only when one is reasonable and common; it will be shown to the coach as a suggestion to approve or correct.`;
 
-export async function findGaps(topic: string, facts: string, pages: PageImage[], answered: string, otherTopics = ""): Promise<Gaps> {
+export async function findGaps(topic: string, facts: string, pages: PageImage[], answered: string, otherTopics = "", shared = ""): Promise<Gaps> {
   return structured(
     GapsSchema,
     GAPS_SYSTEM,
@@ -147,11 +151,12 @@ export async function findGaps(topic: string, facts: string, pages: PageImage[],
       ...imageBlocks(pages),
       {
         type: "text",
-        text: `Topic: ${topic}\n\nFacts taken from these pages:\n${facts}\n\nAlready answered by the coach:\n${answered || "nothing yet"}\n\nOther topics in this playbook and what they cover (don't ask about these here):\n${otherTopics || "none"}\n\nList the gaps.`,
+        text: `Topic: ${topic}\n\nFacts taken from these pages:\n${facts}\n\nAlready answered by the coach:\n${answered || "nothing yet"}\n\nOther topics in this playbook and what they cover (don't ask about these here):\n${otherTopics || "none"}\n\n${shared ? `How other coaches answered questions about the same football concept (use only to make your suggested answers better and more typical; the concept may be called something else here, so write every suggestion in THIS playbook's terms, and never mention other coaches or teams):\n${shared}\n\n` : ""}List the gaps.`,
       },
     ],
     "medium",
     8000,
+    "gaps",
   );
 }
 
@@ -182,6 +187,7 @@ export async function triageGaps(list: string, perTopic: number): Promise<Triage
     [{ type: "text", text: `Per-topic limit: ${perTopic}\n\nQuestions, as [topic] question (why):\n${list}\n\nSort them.` }],
     "medium",
     16000,
+    "triage",
   );
 }
 
@@ -209,6 +215,7 @@ export async function pickCore(topic: string, list: string, limit: number, appro
     [{ type: "text", text: `Topic: ${topic}\nLimit: ${limit}\n\n${already}Draft questions, as number. [who it's for] (format) question -> answer:\n${list}\n\nPick the core set.` }],
     "low",
     4000,
+    "core",
   );
 }
 
@@ -285,6 +292,7 @@ export async function writeTopic(topic: string, facts: string, answered: string,
     ],
     "high",
     20000,
+    "write",
   );
 }
 
@@ -302,6 +310,7 @@ export async function gradeOpen(prompt: string, modelAnswer: string, keyPoints: 
     [{ type: "text", text: `Question: ${prompt}\nModel answer: ${modelAnswer}\nKey points:\n- ${keyPoints.join("\n- ")}\n\nPlayer's answer: ${answer || "(blank)"}` }],
     "low",
     2000,
+    "grade",
   );
 }
 
@@ -318,6 +327,7 @@ export async function askPlaybook(question: string, position: string, material: 
     [{ type: "text", text: `Approved material:\n${material}\n\nPlayer's position: ${position}\nQuestion: ${question}` }],
     "low",
     2000,
+    "ask",
   );
 }
 
@@ -383,6 +393,7 @@ ${naming}
     ],
     "high",
     12000,
+    "drawing",
   );
 }
 
@@ -407,5 +418,6 @@ export async function draftNaming(material: string) {
 Write the team's naming rules.` }],
     "high",
     24000,
+    "naming",
   );
 }

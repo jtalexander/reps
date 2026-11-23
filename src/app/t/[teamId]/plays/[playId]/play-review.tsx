@@ -46,6 +46,8 @@ export function PlayReview(props: {
   nextId: string | null;
   /** converted from a Teach drawing: approve once the drawing matches; reads come from Teach */
   converted?: boolean;
+  /** drawn in the play builder (not converted from a page) */
+  built?: boolean;
 }) {
   const router = useRouter();
   const [data, setData] = useState<PlayData>(props.initial);
@@ -176,10 +178,16 @@ export function PlayReview(props: {
       </div>
 
       {/* checklist */}
+      {props.converted && (
+        <Link href={`/t/${props.teamId}/plays/build?play=${props.playId}`} className="self-start text-sm font-semibold underline">
+          Move players and lines in the play builder
+        </Link>
+      )}
       {props.converted ? (
         <div className={`p-3 text-sm ${status === "approved" && !dirty ? "bg-ok-bg text-ok" : "border border-line"}`}>
-          <strong>{status === "approved" && !dirty ? "Approved." : "Converted from your drawing."}</strong> Check that every player, route and block matches your page, fix
-          anything off, then approve. Reads and coaching points come from the topic&apos;s lessons in Teach.
+          <strong>{status === "approved" && !dirty ? "Approved." : props.built ? "Drawn in the play builder." : "Converted from your drawing."}</strong>{" "}
+          {props.built ? "Check every player, route and block, then approve." : "Check that every player, route and block matches your page, fix anything off, then approve."}{" "}
+          Reads and coaching points come from the topic&apos;s lessons in Teach.
         </div>
       ) : r.missing.length > 0 ? (
         <div className="rounded-xl border border-warn/40 bg-warn-bg p-3">

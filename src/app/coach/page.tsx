@@ -32,7 +32,8 @@ export default async function CoachHome() {
             <li key={t.id}>
               <Link href={`/t/${t.id}`} className="card flex items-center justify-between p-4 hover:border-ink">
                 <span className="font-semibold">{t.name}</span>
-                <span className="text-sm text-muted">{LEVEL_LABEL[t.level]}</span>
+                <span className="text-right text-sm text-muted">
+                  {LEVEL_LABEL[t.level]}                </span>
               </Link>
             </li>
           ))}

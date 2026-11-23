@@ -6,11 +6,13 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
-import { players, uploadPages } from "@/db/schema";
+import { players, teams, uploadPages } from "@/db/schema";
 import { askLog, attempts, gaps, jobs, lessonProgress, lessons, questionFlags, questionSrs, questions, teachPages, topics } from "@/db/teach-schema";
 import { media } from "@/media/store";
 import { convertDrawing } from "./convert";
 import { runNaming } from "./naming";
+import { sharedAnswers } from "./shared";
+import { withAi } from "./usage";
 import { pngSize } from "./png";
 import { askPlaybook, decodePage, findGaps, gradeOpen, pickCore, triageGaps, writeTopic, type PageImage } from "./ai";
 import { QuestionDataSchema, type Audience, type Box, type DiagramRegion, type Fact, type QuestionData, type QuestionImage } from "./types";
@@ -106,6 +108,10 @@ export function accountProblem(message: string | null | undefined): string | nul
 }
 
 export async function executeJob(job: typeof jobs.$inferSelect, database: Db = db) {
+  return withAi(job.teamId, job.kind, () => executeJobInner(job, database));
+}
+
+async function executeJobInner(job: typeof jobs.$inferSelect, database: Db) {
   const jobId = job.id;
   try {
     let result: Record<string, number> | null = null;
@@ -264,7 +270,8 @@ async function runGaps(teamId: string, topicId: string, database: Db) {
       return `- ${o.name}: ${(sums.length ? sums : [o.summary ?? ""]).join(" ").slice(0, 400)}`;
     })
     .join("\n");
-  const out = await findGaps(m.topic.name, m.factText, imgs.map((i) => i.img), m.answered, otherText);
+  const shared = await sharedAnswers(teamId, m.topic.name, 20, database);
+  const out = await findGaps(m.topic.name, m.factText, imgs.map((i) => i.img), m.answered, otherText, shared);
   // Replace open questions from an earlier pass; keep anything the coach handled.
   await database.delete(gaps).where(and(eq(gaps.teamId, teamId), eq(gaps.topicId, topicId), eq(gaps.status, "open")));
   if (out.gaps.length)
@@ -546,6 +553,24 @@ export async function setInstall(teamId: string, topicId: string, on: boolean, d
 }
 
 /** Start a new install: take every topic out. */
+/**
+ * With "only the install" on (and an install picked), the topics Teach asks
+ * about, writes and reviews; null = every topic.
+ */
+export async function focusTopicIds(teamId: string, database: Db = db): Promise<Set<string> | null> {
+  const [team] = await database.select({ on: teams.installOnly }).from(teams).where(eq(teams.id, teamId));
+  if (!team?.on) return null;
+  const ids = await database
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.teamId, teamId), eq(topics.inInstall, true), eq(topics.archived, false)));
+  return ids.length ? new Set(ids.map((t) => t.id)) : null;
+}
+
+export async function setInstallOnly(teamId: string, on: boolean, database: Db = db) {
+  await database.update(teams).set({ installOnly: on }).where(eq(teams.id, teamId));
+}
+
 export async function clearInstall(teamId: string, database: Db = db) {
   await database.update(topics).set({ inInstall: false }).where(and(eq(topics.teamId, teamId), eq(topics.inInstall, true)));
 }
@@ -704,7 +729,7 @@ export async function gradeAttempt(
     reveal = { target: d.target, targetLabel: d.targetLabel };
   } else {
     const text = typeof args.given === "string" ? args.given.slice(0, 2000) : "";
-    const g = await gradeOpen(q.prompt, d.modelAnswer, d.keyPoints, text);
+    const g = await withAi(args.teamId, "grade", () => gradeOpen(q.prompt, d.modelAnswer, d.keyPoints, text));
     score = Math.max(0, Math.min(1, g.score));
     feedback = g.feedback;
     gradedBy = "ai";
@@ -790,7 +815,7 @@ export async function ask(teamId: string, playerId: string, group: Audience, pos
     ...qs.map((q) => `QUIZ ITEM [pages ${q.sourcePages.join(", ")}]: ${q.prompt} — ${q.explanation}`),
     ...answeredGaps.map((g) => `COACH ANSWER: ${g.question} — ${g.answer}`),
   ].join("\n\n");
-  const out = material ? await askPlaybook(question.slice(0, 500), position, material) : { answered: false, answer: "Your coach hasn't approved anything to learn yet.", source_pages: [] };
+  const out = material ? await withAi(teamId, "ask", () => askPlaybook(question.slice(0, 500), position, material)) : { answered: false, answer: "Your coach hasn't approved anything to learn yet.", source_pages: [] };
   await database.insert(askLog).values({ teamId, playerId, question: question.slice(0, 500), answer: out.answer, sourcePages: out.source_pages, answered: out.answered });
   return out;
 }

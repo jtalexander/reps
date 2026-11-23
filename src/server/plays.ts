@@ -4,7 +4,7 @@
  * first (requireCoach); every query here is scoped by teamId.
  */
 import "server-only";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { plays, teamConcepts, teams } from "@/db/schema";
 import {
@@ -59,8 +59,27 @@ export function withConcept(data: PlayData, concepts: Concept[]): PlayData {
   return concept ? applyConcept(data, concept) : data;
 }
 
-/** A play Reps converted from one of Teach's drawings (not the old play reader). */
-export const isConverted = (row: { aiRaw: unknown }) => Boolean((row.aiRaw as { drawingKey?: string } | null)?.drawingKey);
+/**
+ * A play converted from one of Teach's drawings or drawn in the play builder
+ * (not the old play reader): approved once the coach confirms the drawing;
+ * reads come from Teach.
+ */
+export const isConverted = (row: { aiRaw: unknown }) => {
+  const raw = row.aiRaw as { drawingKey?: string; built?: boolean } | null;
+  return Boolean(raw?.drawingKey || raw?.built);
+};
+
+/** A play the coach drew in the play builder. */
+export const isBuilt = (row: { aiRaw: unknown }) => Boolean((row.aiRaw as { built?: boolean } | null)?.built);
+
+export async function createBuiltPlay(teamId: string, input: unknown, database: Db = db) {
+  const data = PlayDataSchema.parse(input);
+  const [row] = await database
+    .insert(plays)
+    .values({ teamId, ...columnsFor(data), sourceText: "", aiRaw: { built: true }, extraction: "done", status: "draft" })
+    .returning({ id: plays.id });
+  return row!.id;
+}
 
 export async function savePlayData(
   teamId: string,
@@ -162,8 +181,7 @@ export async function restatusAll(teamId: string, level: Level, database: Db = d
 }
 
 export async function approvedPlays(teamId: string, ids?: string[], database: Db = db) {
-  // plays converted from Teach's drawings stay out of the old play quizzes until quizzes on real plays are built
-  const where = [eq(plays.teamId, teamId), eq(plays.status, "approved"), eq(plays.archived, false), sql`${plays.aiRaw}->>'drawingKey' is null`];
+  const where = [eq(plays.teamId, teamId), eq(plays.status, "approved"), eq(plays.archived, false)];
   if (ids?.length) where.push(inArray(plays.id, ids));
   return database.select().from(plays).where(and(...where)).orderBy(asc(plays.sourcePage), asc(plays.boxIndex));
 }

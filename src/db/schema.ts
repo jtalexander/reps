@@ -115,6 +115,14 @@ export const teams = pgTable("teams", {
   allowFlip: boolean().notNull().default(true),
   /** show a play's "vs front" drawings as one play with a version per front (coach preference) */
   groupFronts: boolean().notNull().default(true),
+  /** Teach only asks about and reviews this week's install topics (the rest wait) */
+  installOnly: boolean().notNull().default(false),
+  /** secret in the link that adds an assistant coach to the team (null = no link yet) */
+  coachInviteCode: text().unique(),
+  /** monthly AI budget in dollars; Reps warns at 80% (null = no budget) */
+  aiBudgetUsd: integer(),
+  /** this team's approved answers help Reps' suggestions for other coaches (as concepts, never names) */
+  shareAnswers: boolean().notNull().default(true),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

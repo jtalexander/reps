@@ -4,13 +4,14 @@ import { db } from "@/db";
 import { uploads } from "@/db/schema";
 import { teachPages } from "@/db/teach-schema";
 import { hasApiKey } from "@/ingest/extract";
-import { requireCoach } from "@/server/teams";
+import { requireCoach, teamsForUser } from "@/server/teams";
 import { lastRun, runProgress } from "@/teach/playbook-run";
 import { openFlags, topicOverview } from "@/teach/service";
 import { TriageButton } from "./triage-button";
 import { DecodePanel } from "./decode-panel";
-import { ClearInstall } from "./install-button";
+import { ClearInstall, InstallOnlyToggle, InstallToggle as InstallToggleInline } from "./install-button";
 import { PlaybookRunCard } from "./playbook-run-card";
+import { CopyFromTeam } from "./copy-from-team";
 import { TopicRow } from "./topic-row";
 
 export const metadata = { title: "Teach" };
@@ -20,7 +21,8 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
   const sp = await searchParams;
   const preUpload = typeof sp.upload === "string" ? sp.upload : null;
   const prePages = typeof sp.pages === "string" ? sp.pages : "";
-  await requireCoach(teamId);
+  const { team, user } = await requireCoach(teamId);
+  const otherTeams = (await teamsForUser(user.id)).filter((t) => t.id !== teamId);
   // Reading splits any page it needs, so partly split uploads count too.
   const ups = await db
     .select()
@@ -50,12 +52,15 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       }),
       { gaps: 0, drafts: 0, reserve: 0, live: 0 },
     );
-  const totals = sum(topics);
   const install = topics.filter((t) => t.inInstall);
+  // "only the install": Teach's counts, next step and list are the install; the rest wait
+  const focused = team.installOnly && install.length > 0;
+  const working = focused ? install : topics;
+  const totals = sum(working);
   const installTotals = sum(install);
   const decoded = pageStats.find((s) => s.status === "decoded")?.n ?? 0;
   const flagged = new Set((await openFlags(teamId)).map((f) => f.question.id)).size;
-  const optional = topics.reduce((a, t) => a + t.gapsOptional, 0);
+  const optional = working.reduce((a, t) => a + t.gapsOptional, 0);
   const run = await runProgress(teamId);
   const last = run ? null : await lastRun(teamId);
   const lead = ups[0];
@@ -68,8 +73,8 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       )[0]!.n
     : 0;
   const pagesLeft = lead ? Math.max(0, lead.pageCount - leadRead) : 0;
-  const topicsLeft = topics.filter((t) => !t.gapsFoundAt || !t.generatedAt || t.questionsUnsorted > 0).length;
-  const firstTodo = topics.find((t) => t.gapsOpen > 0 || t.lessonsDraft + t.questionsDraft > 0);
+  const topicsLeft = working.filter((t) => !t.gapsFoundAt || !t.generatedAt || t.questionsUnsorted > 0).length;
+  const firstTodo = working.find((t) => t.gapsOpen > 0 || t.lessonsDraft + t.questionsDraft > 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -121,6 +126,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
             </p>
             {install.length > 0 && <ClearInstall teamId={teamId} count={install.length} />}
           </div>
+          {install.length > 0 && <InstallOnlyToggle teamId={teamId} on={team.installOnly} />}
           {install.length === 0 ? (
             <p className="text-sm text-muted">
               Pick what you&apos;re teaching now: tap <b>+ Add to install</b> on those topics below. They come first here, in your review, and on your players&apos; Study page.
@@ -182,9 +188,11 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       {topics.length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="font-semibold">Topics</h2>
-          <p className="text-sm text-muted">One topic per thing players learn, named from your playbook. Rename or merge them, then find gaps and write lessons for each.</p>
+          <p className="text-sm text-muted">
+            One topic per thing players learn, named from your playbook.{focused ? " Only this week's install is shown; Reps asks about and writes for these first." : ""}
+          </p>
           <ul className="flex flex-col gap-2">
-            {topics.map((t) => (
+            {working.map((t) => (
               <TopicRow
                 key={t.id}
                 teamId={teamId}
@@ -205,6 +213,26 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
               />
             ))}
           </ul>
+          {focused && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted">
+                {topics.length - install.length} other topics wait until you add them to an install
+              </summary>
+              <ul className="mt-2 flex flex-col gap-1">
+                {topics
+                  .filter((t) => !t.inInstall)
+                  .map((t) => (
+                    <li key={t.id} className="flex items-center justify-between gap-2 border-t border-line py-1.5">
+                      <Link href={`/t/${teamId}/teach/topic/${t.id}`} className="underline">
+                        {t.name}
+                      </Link>
+                      <InstallToggleInline teamId={teamId} topicId={t.id} on={false} />
+                    </li>
+                  ))}
+              </ul>
+            </details>
+          )}
+          {otherTeams.length > 0 && <CopyFromTeam teamId={teamId} teams={otherTeams.map((t) => ({ id: t.id, name: t.name }))} />}
           <div className="mt-2 flex flex-wrap items-center gap-4">
             <Link href={`/t/${teamId}/teach/results`} className="text-sm underline">
               Player results →

@@ -11,6 +11,7 @@ import { WORKERS, dispatchWorkers, startPlaybookRun, stopPlaybookRun } from "@/t
 import { requireCoach } from "@/server/teams";
 import type { Naming } from "@/domain/naming";
 import { saveNaming } from "@/teach/naming";
+import { copyFromTeam } from "@/teach/reuse";
 import { approveConvertedTopic, queueConversions, retryConversion } from "@/teach/convert-run";
 import {
   acceptSuggestions,
@@ -18,6 +19,7 @@ import {
   approveTopic,
   clearInstall,
   setInstall,
+  setInstallOnly,
   jobStatus,
   mergeTopics,
   newJob,
@@ -353,6 +355,32 @@ export async function retryConversionAction(teamId: string, playId: string): Pro
     await retryConversion(teamId, playId, await origin());
     revalidatePath(`/t/${teamId}/plays/converted`);
     return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Teach only asks about and reviews the install topics (or every topic again). */
+export async function setInstallOnlyAction(teamId: string, on: boolean): Promise<R<object>> {
+  try {
+    await requireCoach(teamId);
+    await setInstallOnly(teamId, on);
+    revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Bring this coach's work over from another of their teams (both must be theirs). */
+export async function copyFromTeamAction(teamId: string, fromTeamId: string): Promise<R<{ topics: number; answers: number; lessons: number; questions: number; naming: number }>> {
+  try {
+    const { user } = await requireCoach(teamId);
+    if (!/^[0-9a-f-]{36}$/i.test(fromTeamId)) throw new Error("Pick a team.");
+    await requireCoach(fromTeamId);
+    const r = await copyFromTeam(fromTeamId, teamId, user.id);
+    revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true, ...r };
   } catch (e) {
     return fail(e);
   }

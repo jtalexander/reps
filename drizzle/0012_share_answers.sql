@@ -1,0 +1,1 @@
+ALTER TABLE "teams" ADD COLUMN "share_answers" boolean DEFAULT true NOT NULL;

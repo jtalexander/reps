@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { focusTopicIds } from "@/teach/service";
 import { db } from "@/db";
 import { gaps, topics } from "@/db/teach-schema";
 import { requireCoach } from "@/server/teams";
@@ -17,6 +18,8 @@ export default async function Interview({ params, searchParams }: PageProps<"/t/
   const statuses = show === "done" ? (["answered", "approved", "skipped"] as const) : (["open"] as const);
   const where = [eq(gaps.teamId, teamId), inArray(gaps.status, [...statuses])];
   if (topicId) where.push(eq(gaps.topicId, topicId));
+  const focus = topicId ? null : await focusTopicIds(teamId);
+  if (focus) where.push(inArray(gaps.topicId, [...focus]));
   // open questions: the main ones by default, the optional pile on request; repeats are answered through the original
   if (show !== "done") where.push(eq(gaps.priority, optionalPile ? "optional" : "key"), isNull(gaps.dupOf));
   const rows = await db

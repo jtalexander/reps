@@ -14,7 +14,7 @@ const POSITION_GROUPS = ["QB", "RB", "WR", "TE", "OL"];
 /** Assign topics (this week's game plan) with a due date; players practice just those. */
 export default async function Sets({ params, searchParams }: PageProps<"/t/[teamId]/sets">) {
   const { teamId } = await params;
-  const { made } = await searchParams;
+  const { made, saved, edit } = await searchParams;
   await requireCoach(teamId);
   const sets = await db.select().from(studySets).where(eq(studySets.teamId, teamId)).orderBy(desc(studySets.createdAt));
   // topics with approved quiz questions, install first
@@ -26,6 +26,8 @@ export default async function Sets({ params, searchParams }: PageProps<"/t/[team
     .groupBy(topics.id)
     .orderBy(desc(topics.inInstall), asc(topics.sort));
   const names = new Map(ready.map((t) => [t.id, t.name]));
+  const editing = typeof edit === "string" ? sets.find((s) => s.id === edit && s.topicIds.length > 0) : undefined;
+  const checked = (topicId: string, inInstall: boolean) => (editing ? editing.topicIds.includes(topicId) : inInstall);
 
   return (
     <div className="flex flex-col gap-6">
@@ -40,6 +42,15 @@ export default async function Sets({ params, searchParams }: PageProps<"/t/[team
           Assigned “{made.slice(0, 80)}”. Players see it at the top of their Study screen. It&apos;s in the list below.
         </p>
       )}
+      {typeof saved === "string" && saved && <p className="border border-ok bg-ok-bg px-3 py-2 text-sm font-semibold text-ok">Saved your changes to “{saved.slice(0, 80)}”.</p>}
+      {editing && (
+        <p className="text-sm">
+          Editing <b>{editing.name}</b>.{" "}
+          <Link className="text-muted underline" href={`/t/${teamId}/sets`}>
+            Cancel
+          </Link>
+        </p>
+      )}
       {ready.length === 0 ? (
         <p className="card p-4 text-sm text-muted">
           Approve some topics in{" "}
@@ -49,19 +60,24 @@ export default async function Sets({ params, searchParams }: PageProps<"/t/[team
           first. Only topics with approved questions can go in a study set.
         </p>
       ) : (
-        <form key={typeof made === "string" ? made : "new"} action={createSetAction.bind(null, teamId)} className="card flex flex-col gap-3 p-4">
+        <form
+          key={editing?.id ?? (typeof made === "string" ? made : typeof saved === "string" ? saved : "new")}
+          action={createSetAction.bind(null, teamId)}
+          className={`card flex flex-col gap-3 p-4 ${editing ? "border-brand" : ""}`}
+        >
+          {editing && <input type="hidden" name="setId" value={editing.id} />}
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="label" htmlFor="name">
                 Name
               </label>
-              <input id="name" name="name" className="input" placeholder="Week 6 game plan" required />
+              <input id="name" name="name" className="input" placeholder="Week 6 game plan" defaultValue={editing?.name ?? ""} required />
             </div>
             <div>
               <label className="label" htmlFor="dueDate">
                 Due
               </label>
-              <input id="dueDate" name="dueDate" type="date" className="input" />
+              <input id="dueDate" name="dueDate" type="date" className="input" defaultValue={editing?.dueDate ?? ""} />
             </div>
           </div>
           <fieldset>
@@ -69,7 +85,7 @@ export default async function Sets({ params, searchParams }: PageProps<"/t/[team
             <div className="grid max-h-80 gap-1 overflow-y-auto border border-line p-2 sm:grid-cols-2">
               {ready.map((t) => (
                 <label key={t.id} className="flex min-h-9 items-center gap-2 text-sm">
-                  <input type="checkbox" name="topicIds" value={t.id} defaultChecked={t.inInstall} className="h-5 w-5" />
+                  <input type="checkbox" name="topicIds" value={t.id} defaultChecked={checked(t.id, t.inInstall)} className="h-5 w-5" />
                   <span className="truncate">
                     {t.name} <span className="text-xs text-muted">· {t.n}</span>
                     {t.inInstall && <span className="ml-1.5 bg-brand px-1 font-label text-[10px] font-bold tracking-widest text-brand-ink uppercase">Install</span>}
@@ -83,13 +99,13 @@ export default async function Sets({ params, searchParams }: PageProps<"/t/[team
             <div className="flex flex-wrap gap-3">
               {POSITION_GROUPS.map((g) => (
                 <label key={g} className="flex items-center gap-1 text-sm">
-                  <input type="checkbox" name="positions" value={g} className="h-5 w-5" /> {g}
+                  <input type="checkbox" name="positions" value={g} defaultChecked={editing?.positions.includes(g)} className="h-5 w-5" /> {g}
                 </label>
               ))}
             </div>
           </fieldset>
-          <SubmitButton className="btn btn-primary self-start" pending="Assigning…">
-            Assign study set
+          <SubmitButton className="btn btn-primary self-start" pending={editing ? "Saving…" : "Assigning…"}>
+            {editing ? "Save changes" : "Assign study set"}
           </SubmitButton>
         </form>
       )}
@@ -105,9 +121,16 @@ export default async function Sets({ params, searchParams }: PageProps<"/t/[team
                   {s.positions.length ? ` · ${s.positions.join(", ")}` : " · everyone"}
                 </div>
               </div>
-              <form action={deleteSetAction.bind(null, teamId, s.id)}>
-                <button className="text-sm text-muted underline">Delete</button>
-              </form>
+              <span className="flex items-center gap-3">
+                {s.topicIds.length > 0 && (
+                  <Link className="text-sm underline" href={`/t/${teamId}/sets?edit=${s.id}`}>
+                    Edit
+                  </Link>
+                )}
+                <form action={deleteSetAction.bind(null, teamId, s.id)}>
+                  <button className="text-sm text-muted underline">Delete</button>
+                </form>
+              </span>
             </div>
             {s.topicIds.length > 0 && <p className="mt-1 text-xs text-muted">{s.topicIds.map((id) => names.get(id) ?? "(no approved questions)").join(" · ")}</p>}
           </li>

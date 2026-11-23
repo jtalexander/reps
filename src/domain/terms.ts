@@ -67,6 +67,7 @@ export function term(terms: Terms, kind: TermKind, key: string): string {
 }
 
 export function blockLabel(type: string): string {
+  if (!type || type === "unknown") return "Block";
   return BLOCK_LABEL[type] ?? title(type);
 }
 export function assignmentLabel(type: string): string {

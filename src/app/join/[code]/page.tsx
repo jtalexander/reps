@@ -57,6 +57,12 @@ export default async function Pick({ params }: PageProps<"/join/[code]">) {
           </li>
         ))}
       </ul>
+      <p className="mt-auto pt-6 text-xs text-muted">
+        Reps saves your name, position and answers so your coach can see how you&apos;re doing.{" "}
+        <a className="underline" href="/privacy">
+          Privacy
+        </a>
+      </p>
     </main>
   );
 }

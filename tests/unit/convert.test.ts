@@ -33,3 +33,14 @@ describe("drawing -> play", () => {
     expect(toPlayData(drawingToExtracted({ ...d, kind: "formation" }, "X"), (x, y) => [x, y]).play_type).toBe("unknown");
   });
 });
+
+describe("formation quiz", () => {
+  it("mirrors a formation name by swapping RIGHT and LEFT, not adding a side", async () => {
+    const { questionsFor } = await import("@/domain/quiz");
+    const { emptyPlay } = await import("@/domain/play");
+    const { EMPTY_TERMS } = await import("@/domain/terms");
+    const data = { ...emptyPlay("SPREAD RIGHT ZOOT, SMASH"), formation: { name: "SPREAD RIGHT ZOOT", personnel: "unknown", strength: "right" as const, backfield_alignment: "unknown" } };
+    const [q] = questionsFor("formation_id", { id: "p1", data, qbReady: false }, [{ id: "p1", data, qbReady: false }], { terms: EMPTY_TERMS, level: "youth", positions: ["X"], allowFlip: false }, 1);
+    expect(q!.choices.map((c) => c.label).sort()).toEqual(["SPREAD LEFT ZOOT", "SPREAD RIGHT ZOOT"]);
+  });
+});

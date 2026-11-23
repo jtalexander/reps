@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { safeCall } from "@/lib/safe-call";
-import { clearInstallAction, setInstallAction } from "./actions";
+import { clearInstallAction, setInstallAction, setInstallOnlyAction } from "./actions";
 
 /** Put a topic in or out of the install the team is learning now. */
 export function InstallToggle({ teamId, topicId, on, size = "sm" }: { teamId: string; topicId: string; on: boolean; size?: "sm" | "md" }) {
@@ -49,5 +49,30 @@ export function ClearInstall({ teamId, count }: { teamId: string; count: number 
     >
       {busy ? "Clearing…" : "Start a new install"}
     </button>
+  );
+}
+
+/** "Only work on the install": Teach asks about, writes and reviews just these topics; the rest wait. */
+export function InstallOnlyToggle({ teamId, on }: { teamId: string; on: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        className="h-5 w-5"
+        checked={on}
+        disabled={busy}
+        onChange={async (e) => {
+          setBusy(true);
+          await safeCall(() => setInstallOnlyAction(teamId, e.target.checked), "Saving");
+          setBusy(false);
+          router.refresh();
+        }}
+      />
+      <span>
+        <b>Only work on the install.</b> Reps asks you about, writes and has you review just these topics; the rest wait until you add them.
+      </span>
+    </label>
   );
 }

@@ -99,6 +99,11 @@ export default async function Converted({ params, searchParams }: PageProps<"/t/
     );
   }
 
+  const drawn = await db
+    .select({ id: plays.id, name: plays.name, status: plays.status })
+    .from(plays)
+    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false), sql`(${plays.aiRaw}->>'built')::boolean`))
+    .orderBy(asc(plays.name));
   const install = list.filter((x) => x.inInstall);
   const installLeft = install.reduce((n, x) => n + x.keys.filter((k) => !byKey.has(k)).length, 0);
   return (
@@ -122,6 +127,26 @@ export default async function Converted({ params, searchParams }: PageProps<"/t/
         <ConvertButton teamId={teamId} which="install" label={`Convert this week's install (${installLeft} drawing${installLeft === 1 ? "" : "s"})`} />
       )}
       {install.length === 0 && <p className="text-sm text-muted">Tip: put topics in this week&apos;s install on Teach and they come first here.</p>}
+      <section className="card flex flex-col gap-2 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold">Plays you drew · {drawn.length}</span>
+          <Link href={`/t/${teamId}/plays/build`} className="btn btn-outline">
+            Draw a play
+          </Link>
+        </div>
+        {drawn.length > 0 && (
+          <ul className="flex flex-col text-sm">
+            {drawn.map((d) => (
+              <li key={d.id} className="flex justify-between border-t border-line py-1.5">
+                <Link href={`/t/${teamId}/plays/${d.id}`} className="underline">
+                  {d.name}
+                </Link>
+                <span className="text-xs text-muted">{d.status === "approved" ? "approved" : "to check"}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <ul className="flex flex-col gap-2">
         {list.map((x) => {
           const s = stat(x.keys);

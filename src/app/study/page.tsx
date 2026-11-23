@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { and, desc, eq, lte, sql } from "drizzle-orm";
+import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { answers, srsItems, studySets } from "@/db/schema";
-import { inGroups } from "@/domain/positions";
+import { answers, srsItems } from "@/db/schema";
 import { QUIZ_TYPE_LABEL, typesForPositions } from "@/domain/quiz";
 import { requirePlayer } from "@/server/player-session";
 import { quizPlays } from "@/server/quiz";
@@ -14,10 +13,6 @@ export const metadata = { title: "Study" };
 export default async function StudyHome({ searchParams }: PageProps<"/study">) {
   const { empty } = await searchParams;
   const me = await requirePlayer();
-  const sets = (await db.select().from(studySets).where(eq(studySets.teamId, me.team.id)).orderBy(desc(studySets.createdAt))).filter(
-    // old play-reader sets only; topic sets show in the Teach section
-    (s) => s.playIds.length > 0 && s.topicIds.length === 0 && inGroups(me.position, s.positions),
-  );
   const plays = await quizPlays(me.team.id);
   const [due] = await db
     .select({ n: sql<number>`count(*)::int` })
@@ -57,64 +52,38 @@ export default async function StudyHome({ searchParams }: PageProps<"/study">) {
 
       <TeachSection teamId={me.team.id} playerId={me.player.id} position={me.position} />
 
-      {empty && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">No questions for that yet. Your coach may still be approving plays.</p>}
+      {empty && <p className="bg-warn-bg px-3 py-2 text-sm text-warn">No questions for that yet. Your coach may still be approving plays.</p>}
 
-      {plays.length === 0 ? null : (
-        <>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="card p-3">
-              <div className="text-xs text-muted">Due for review</div>
-              <div className="text-2xl font-bold">{due?.n ?? 0}</div>
-            </div>
-            <div className="card p-3">
-              <div className="text-xs text-muted">This week</div>
-              <div className="text-2xl font-bold">{week?.t ? `${Math.round((week.c / week.t) * 100)}%` : "—"}</div>
-              <div className="text-xs text-muted">{week?.t ?? 0} answers</div>
-            </div>
+      {plays.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-semibold">Real plays</h2>
+            <span className="text-xs text-muted">
+              {plays.length} approved · {due?.n ?? 0} due{week?.t ? ` · ${Math.round((week.c / week.t) * 100)}% this week` : ""}
+            </span>
           </div>
-
-          {sets.length > 0 && (
-            <section className="flex flex-col gap-2">
-              <h2 className="font-semibold">Assigned</h2>
-              {sets.map((s) => (
-                <form key={s.id} action={startQuizAction} className="card flex items-center justify-between gap-3 p-3">
-                  <input type="hidden" name="setId" value={s.id} />
-                  <div>
-                    <div className="font-semibold">{s.name}</div>
-                    <div className="text-xs text-muted">
-                      {s.playIds.length} plays{s.dueDate ? ` · due ${new Date(s.dueDate + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}` : ""}
-                    </div>
-                  </div>
-                  <button className="btn btn-accent">Start</button>
-                </form>
-              ))}
-            </section>
-          )}
-
-          <form action={startQuizAction} className="flex flex-col gap-2">
-            <button name="mode" value="mixed" className="btn btn-primary min-h-14 text-base">
-              Quiz me — 10 questions
+          <form action={startQuizAction} className="grid grid-cols-2 gap-2">
+            <button name="mode" value="mixed" className="btn btn-primary min-h-12">
+              Quiz me on plays
             </button>
-            <button name="mode" value="speed" className="btn btn-accent min-h-14 text-base">
+            <button name="mode" value="speed" className="btn btn-accent min-h-12">
               ⚡ Speed round
             </button>
           </form>
-
-          <Link href="/study/plays" className="btn btn-ghost min-h-12">
-            Study my plays ({plays.length})
+          <Link href="/study/plays" className="btn btn-ghost min-h-11">
+            See my plays ({plays.length})
           </Link>
-
-          <section>
-            <h2 className="mb-2 text-sm font-semibold text-muted">Practice one thing</h2>
-            <form action={startQuizAction} className="grid grid-cols-2 gap-2">
+          <details>
+            <summary className="cursor-pointer text-sm text-muted">Practice one kind of question</summary>
+            <form action={startQuizAction} className="mt-2 grid grid-cols-2 gap-2">
               {types.map((t) => (
-                <button key={t} name="mode" value={t} className="btn btn-ghost min-h-12 text-xs">
+                <button key={t} name="mode" value={t} className="btn btn-ghost min-h-11 text-xs">
                   {QUIZ_TYPE_LABEL[t]}
                 </button>
               ))}
             </form>
-          </section>
-        </>
+          </details>
+        </section>
       )}
     </main>
   );

@@ -1,0 +1,1 @@
+ALTER TABLE "teams" ADD COLUMN "install_only" boolean DEFAULT false NOT NULL;

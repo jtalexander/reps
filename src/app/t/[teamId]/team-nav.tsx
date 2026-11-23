@@ -7,7 +7,6 @@ const ITEMS = [
   ["/teach", "Teach"],
   ["/plays", "Playbook"],
   ["/uploads", "Upload"],
-  ["/concepts", "Concepts"],
   ["/sets", "Study sets"],
   ["/roster", "Roster"],
   ["/results", "Results"],

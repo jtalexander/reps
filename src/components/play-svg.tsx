@@ -4,7 +4,7 @@
  * can hide routes, flip, animate, and overlay a defensive look.
  * Units are yards: x from the ball (right +), y downfield (+). SVG y = TOP - y.
  */
-import { useId } from "react";
+import { useId, useRef } from "react";
 import { buildLook, defenderForKey, playSideSign, type DefensiveLook, type Front } from "@/domain/defense";
 import { flipPlay, isLineman, type Coverage, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTE_BY_KEY, outsideSign, routePath } from "@/domain/routes";
@@ -34,6 +34,10 @@ export interface PlaySvgProps {
   compact?: boolean;
   /** zoom to the players and their lines (a drawing of just the line and backs fills the frame) */
   fit?: boolean;
+  /** play builder: drag players; called with the new spot in yards (snapped to half yards) */
+  onPlayerDrag?: (id: string, x: number, y: number) => void;
+  /** play builder: the selected player gets a ring */
+  selected?: string | null;
 }
 
 /** Field area a play uses: every player, the end of every line, motion ends and defenders. */
@@ -96,6 +100,16 @@ function reactionVector(reaction: string, def: { x: number; y: number }, play: P
 
 export function PlaySvg(props: PlaySvgProps) {
   const uid = useId().replace(/:/g, "");
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragging = useRef<string | null>(null);
+  const toYards = (e: React.PointerEvent): [number, number] | null => {
+    const svg = svgRef.current;
+    const m = svg?.getScreenCTM();
+    if (!svg || !m) return null;
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    const snap = (v: number) => Math.round(v * 2) / 2;
+    return [snap(pt.x), snap(TOP - pt.y)];
+  };
   const data = props.flip ? flipPlay(props.data) : props.data;
   const hide = props.hide ?? "none";
   const look: DefensiveLook | null = props.coverage || props.readKey ? buildLook(data, props.coverage ?? "cover_3", props.front ?? "4-3") : null;
@@ -184,7 +198,25 @@ export function PlaySvg(props: PlaySvgProps) {
   const viewBox = `${vx} ${sy(yMax)} ${vw} ${yMax - yMin}`;
 
   return (
-    <svg viewBox={viewBox} className={props.className} role="img" aria-label={data.name} style={{ color: "var(--ink)" }}>
+    <svg
+      ref={svgRef}
+      viewBox={viewBox}
+      className={props.className}
+      role="img"
+      aria-label={data.name}
+      style={{ color: "var(--ink)", touchAction: props.onPlayerDrag ? "none" : undefined }}
+      onPointerMove={
+        props.onPlayerDrag
+          ? (e) => {
+              if (!dragging.current) return;
+              const at = toYards(e);
+              if (at) props.onPlayerDrag!(dragging.current, at[0], at[1]);
+            }
+          : undefined
+      }
+      onPointerUp={() => (dragging.current = null)}
+      onPointerLeave={() => (dragging.current = null)}
+    >
       <defs>
         <marker id={`arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
           <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
@@ -257,14 +289,27 @@ export function PlaySvg(props: PlaySvgProps) {
 
       {!props.routeOnly && lines}
       {!props.routeOnly &&
-        data.players.map((p) => {
+        data.players.map((p, idx) => {
           const isC = p.id === "C";
           const hl = props.highlight === p.id;
           const tap = props.onPlayerTap ? () => props.onPlayerTap!(p.id) : undefined;
           const r = isLineman(p.id) ? 0.6 : 0.9;
           return (
-            <g key={p.id + p.x} onClick={tap} style={tap ? { cursor: "pointer" } : undefined}>
-              {tap && <circle cx={p.x} cy={sy(p.y)} r={1.6} fill="transparent" />}
+            <g
+              key={`${p.id}:${idx}`}
+              onClick={tap}
+              onPointerDown={
+                props.onPlayerDrag && !props.flip
+                  ? (e) => {
+                      dragging.current = p.id;
+                      (e.target as Element).setPointerCapture?.(e.pointerId);
+                    }
+                  : undefined
+              }
+              style={tap || props.onPlayerDrag ? { cursor: props.onPlayerDrag ? "grab" : "pointer" } : undefined}
+            >
+              {(tap || props.onPlayerDrag) && <circle cx={p.x} cy={sy(p.y)} r={1.6} fill="transparent" />}
+              {props.selected === p.id && <circle cx={p.x} cy={sy(p.y)} r={1.4} fill="none" stroke="var(--brand)" strokeWidth={0.25} />}
               {isC ? (
                 <rect x={p.x - r * 0.8} y={sy(p.y) - r * 0.8} width={r * 1.6} height={r * 1.6} fill={hl ? "var(--hl)" : "var(--card)"} stroke="currentColor" strokeWidth={0.18} />
               ) : (
