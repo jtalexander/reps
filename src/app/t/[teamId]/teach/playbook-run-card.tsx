@@ -71,7 +71,7 @@ export function PlaybookRunCard({
         ) : null}
         <p className="text-sm text-muted">
           {pagesLeft
-            ? `Reps reads the ${pagesLeft} pages it hasn't read yet, finds its questions for every topic, sorts them, and writes draft lessons and quiz questions.`
+            ? `Reps reads the ${pagesLeft} pages it hasn't read yet, finds its questions for every topic, drafts your naming rules, sorts the questions, and writes draft lessons and quiz questions.`
             : `Everything is read. Reps finishes the ${topicsLeft} topic${topicsLeft === 1 ? "" : "s"} that still need something: its questions for you, draft lessons and quiz questions, or picking the few must-know questions you review first.`}{" "}
           It runs on Reps&apos; server, so you can close this page. Anything already done is kept. Nothing reaches players until you approve it.
         </p>
@@ -95,7 +95,7 @@ export function PlaybookRunCard({
   const at = ORDER.indexOf(progress.stage);
   const steps = [
     { title: "Reading pages", note: `${progress.pages.read} of ${progress.pages.total}${progress.pages.failed ? ` · ${progress.pages.failed} couldn't be read` : ""}` },
-    { title: "Finding Reps' questions", note: `${progress.topics.asked} of ${progress.topics.total} topics` },
+    { title: "Finding Reps' questions", note: `${progress.topics.asked} of ${progress.topics.total} topics, plus your naming rules` },
     { title: "Sorting questions", note: at > 2 ? "Done" : "One pass over every topic" },
     { title: "Writing drafts", note: `${progress.topics.written} of ${progress.topics.total} topics` },
     { title: "Choosing core questions", note: at > 4 ? "Done" : "About 5 must-know questions per topic" },

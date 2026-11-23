@@ -1,7 +1,7 @@
 /**
  * Whole-playbook run: one tap reads every page, finds Reps' questions for
- * every topic, sorts them, and writes draft lessons and questions, all on the
- * server so the coach can close the page.
+ * every topic (and drafts the team's naming rules), sorts them, and writes
+ * draft lessons and questions, all on the server so the coach can close the page.
  *
  * A run is a `jobs` row (kind "playbook", status running, result.stage) plus
  * ordinary queued jobs. Workers (background functions on Netlify, the dev
@@ -12,9 +12,10 @@
  */
 import { and, asc, desc, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
-import { uploadPages } from "@/db/schema";
+import { teams, uploadPages } from "@/db/schema";
 import { jobs, questions, teachPages, topics } from "@/db/teach-schema";
 import { BACKGROUND_PATH, onNetlify, signWorker } from "./dispatch";
+import { namingMaterial } from "./naming";
 import { accountProblem, claimNextJob, executeJob, failJob, prepareDecode } from "./service";
 
 export const WORKERS = 3;
@@ -38,7 +39,7 @@ export async function activeRun(teamId: string, database: Db = db): Promise<Job 
 }
 
 /** Queue jobs in this order (claims go oldest first). */
-async function enqueue(teamId: string, kind: "decode_page" | "find_gaps" | "write_topic" | "triage" | "pick_core", refs: string[], database: Db) {
+async function enqueue(teamId: string, kind: "decode_page" | "find_gaps" | "write_topic" | "triage" | "pick_core" | "naming", refs: string[], database: Db) {
   if (!refs.length) return 0;
   const base = Date.now();
   await database.insert(jobs).values(refs.map((ref, i) => ({ teamId, kind, ref, createdAt: new Date(base + i) })));
@@ -104,7 +105,12 @@ async function advanceRun(teamId: string, database: Db): Promise<number | null> 
 
   const next = STAGES[stage + 1] ?? "done";
   const ts = await database.select().from(topics).where(and(eq(topics.teamId, teamId), eq(topics.archived, false))).orderBy(asc(topics.sort));
-  if (next === "questions") return enqueue(teamId, "find_gaps", ts.filter((t) => !t.gapsFoundAt).map((t) => t.id), database);
+  if (next === "questions") {
+    // alongside the questions: draft the naming rules once the pages are read (never over the coach's own)
+    const [team] = await database.select({ naming: teams.naming }).from(teams).where(eq(teams.id, teamId));
+    const naming = team && !team.naming && (await namingMaterial(teamId, database)) ? await enqueue(teamId, "naming", [teamId], database) : 0;
+    return naming + (await enqueue(teamId, "find_gaps", ts.filter((t) => !t.gapsFoundAt).map((t) => t.id), database));
+  }
   if (next === "sorting") return enqueue(teamId, "triage", [teamId], database);
   if (next === "writing") return enqueue(teamId, "write_topic", ts.filter((t) => !t.generatedAt).map((t) => t.id), database);
   if (next === "picking") {

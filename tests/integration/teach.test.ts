@@ -319,14 +319,15 @@ describe("teach loop", () => {
     const teamC = await createTeam(db, coachId, "Teach C", "high_school");
     const up = await createUpload(teamC.id, coachId, "c.pdf", new Uint8Array(readFileSync(SPARTANS)), db);
     await renderPages(teamC.id, up.id, 1, 2, db);
-    const calls = () => [ai.decodePage, ai.findGaps, ai.triageGaps, ai.writeTopic].map((f) => vi.mocked(f).mock.calls.length);
+    const calls = () => [ai.decodePage, ai.findGaps, ai.triageGaps, ai.writeTopic, ai.draftNaming].map((f) => vi.mocked(f).mock.calls.length);
     const before = calls();
     const r = await run.startPlaybookRun(teamC.id, up.id, db);
     expect((await run.startPlaybookRun(teamC.id, up.id, db)).id).toBe(r.id); // one run at a time
     expect((await run.runProgress(teamC.id, db))?.stage).toBe("reading");
     await Promise.all([run.workTeam(teamC.id, null, 120_000, db), run.workTeam(teamC.id, null, 120_000, db)]);
-    // 2 pages read, 1 topic asked, 1 sort, 1 topic written: nothing twice
-    expect(calls().map((n, i) => n - before[i]!)).toEqual([2, 1, 1, 1]);
+    // 2 pages read, 1 topic asked, 1 sort, 1 topic written, naming rules drafted once: nothing twice
+    expect(calls().map((n, i) => n - before[i]!)).toEqual([2, 1, 1, 1, 1]);
+    expect((await (await import("@/teach/naming")).getNaming(teamC.id, db)).naming).not.toBeNull();
     expect(await run.runProgress(teamC.id, db)).toBeNull();
     const [done] = await db.select().from(jobs).where(eq(jobs.id, r.id));
     expect(done!.status).toBe("done");
@@ -336,7 +337,7 @@ describe("teach loop", () => {
     // running it again only does what's missing (here: nothing)
     const again = await run.startPlaybookRun(teamC.id, up.id, db);
     await run.workTeam(teamC.id, null, 60_000, db);
-    expect(calls().map((n, i) => n - before[i]!)).toEqual([2, 1, 2, 1]); // just the cheap re-sort
+    expect(calls().map((n, i) => n - before[i]!)).toEqual([2, 1, 2, 1, 1]); // just the cheap re-sort; the naming rules aren't redrafted
     expect((await db.select().from(jobs).where(eq(jobs.id, again.id)))[0]!.status).toBe("done");
     // stop drops queued work; other teams' runs are untouched
     await renderPages(teamC.id, up.id, 3, 3, db);
