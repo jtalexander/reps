@@ -204,4 +204,82 @@ describe("coach tools", () => {
     await db.update(teams).set({ shareAnswers: false }).where(eq(teams.id, s.id));
     expect(await sharedAnswers(t.id, "Zarkmills concept", 20, db)).toBe("");
   });
+
+  it("keeps a new team's AI off until the admin turns it on, and stops it at the monthly cap", async () => {
+    const { createTeam } = await import("@/server/teams");
+    const usage = await import("@/teach/usage");
+    const admin = await import("@/server/admin");
+    const stamp = Date.now();
+    const [newbie] = await db.insert(users).values({ name: "New", email: `new${stamp}@x.test` }).returning();
+    const t = await createTeam(db, newbie!.id, "Gate", "youth");
+    expect(t.aiAccess).toBe("pending");
+    expect(await usage.aiBlockedReason(t.id, db)).toBe(usage.AI_NOT_ON);
+    await expect(usage.withAi(t.id, "x", () => usage.checkAi(db))).rejects.toBeInstanceOf(usage.AiBlocked);
+
+    await admin.setAiAccess(t.id, "on", db);
+    expect(await usage.aiBlockedReason(t.id, db)).toBeNull();
+    await usage.withAi(t.id, "x", () => usage.checkAi(db)); // no throw
+    // the coach is vetted now: their next team starts with AI on
+    expect((await createTeam(db, newbie!.id, "Gate 2", "youth")).aiAccess).toBe("on");
+
+    // $6 spent against a $5 cap: blocked; raise the cap and it runs again
+    await usage.withAi(t.id, "write_topic", () => usage.recordUsage("claude-opus-5-5", { input_tokens: 1_000_000, output_tokens: 100_000 }, "write"));
+    await admin.setAiCap(t.id, 5, db);
+    expect(await usage.aiBlockedReason(t.id, db)).toBe(usage.AI_LIMIT);
+    await admin.setAiCap(t.id, 50, db);
+    expect(await usage.aiBlockedReason(t.id, db)).toBeNull();
+    await admin.setAiAccess(t.id, "off", db);
+    expect(await usage.aiBlockedReason(t.id, db)).toBe(usage.AI_OFF);
+
+    // the admin list shows the team, its owner and its spend
+    const row = (await admin.adminTeams(db)).find((x) => x.id === t.id)!;
+    expect(row.ownerEmail).toBe(`new${stamp}@x.test`);
+    expect(row.spend).toBeCloseTo(6);
+    expect(row.cap).toBe(50);
+    expect(row.access).toBe("off");
+    expect(await admin.isAdmin(newbie!.id, db)).toBe(false);
+  });
+
+  it("grades own-words answers with a word check while AI is off; players still get an answer to questions", async () => {
+    const { createTeam } = await import("@/server/teams");
+    const svc = await import("@/teach/service");
+    const [u] = await db.insert(users).values({ name: "Off", email: `off${Date.now()}@x.test` }).returning();
+    const t = await createTeam(db, u!.id, "AI off", "youth");
+    const [p] = await db.insert(players).values({ teamId: t.id, name: "Kid" }).returning();
+    const [tp] = await db.insert(topics).values({ teamId: t.id, name: "Smash", nameKey: "SMASH" }).returning();
+    const [q] = await db
+      .insert(questions)
+      .values({ teamId: t.id, topicId: tp!.id, format: "open", prompt: "What is Smash?", data: { kind: "open", modelAnswer: "Hitch and corner", keyPoints: ["outside hitch", "slot corner route"] }, explanation: "x", status: "approved", sort: 0 })
+      .returning();
+    const r = await svc.gradeAttempt({ teamId: t.id, playerId: p!.id, questionId: q!.id, given: "The slot runs a corner route, outside guy a hitch", responseMs: 1, mode: "practice" }, db);
+    expect(r.correct).toBe(true);
+    expect(r.feedback).toMatch(/coach's answer/);
+    expect(svc.keyPointScore("corner", ["outside hitch", "slot corner route"])).toBe(0);
+    await db.insert(lessons).values({ teamId: t.id, topicId: tp!.id, audience: "ALL", title: "Smash", body: "Hitch and corner.", status: "approved", sort: 0 });
+    const out = await svc.ask(t.id, p!.id, "ALL", "QB", "What is Smash?", db);
+    expect(out.answer).toMatch(/Ask your coach/);
+  });
+
+  it("the database itself refuses to link one team's rows to another team's", async () => {
+    const { createTeam } = await import("@/server/teams");
+    const a = await createTeam(db, ownerId, "Guard A", "youth");
+    const b = await createTeam(db, ownerId, "Guard B", "youth");
+    const [ta] = await db.insert(topics).values({ teamId: a.id, name: "Guarded", nameKey: "GUARDED" }).returning();
+    const [pb] = await db.insert(players).values({ teamId: b.id, name: "Kid" }).returning();
+    // a gap on team B under team A's topic
+    await expect(db.insert(gaps).values({ teamId: b.id, topicId: ta!.id, question: "?" })).rejects.toThrow();
+    // team A's question flagged by team B's player
+    const [qa] = await db.insert(questions).values(choice(a.id, ta!.id, 0)).returning();
+    const { questionFlags } = await import("@/db/teach-schema");
+    await expect(db.insert(questionFlags).values({ teamId: a.id, questionId: qa!.id, playerId: pb!.id, note: "x" })).rejects.toThrow();
+    // moving a row to another team without its parent is refused too
+    const [ga] = await db.insert(gaps).values({ teamId: a.id, topicId: ta!.id, question: "?" }).returning();
+    await expect(db.update(gaps).set({ teamId: b.id }).where(eq(gaps.id, ga!.id))).rejects.toThrow();
+  });
+
+  it("finds the same concept across teams through Postgres' concept words", async () => {
+    const { conceptWords } = await import("@/teach/shared");
+    const [r] = await db.insert(topics).values({ teamId: (await (await import("@/server/teams")).createTeam(db, ownerId, "Words", "youth")).id, name: "Mills / Memphis vs 4-3 (Right)", nameKey: "MILLSMEMPHIS" }).returning();
+    expect([...r!.conceptWords!].sort()).toEqual([...new Set(conceptWords("Mills / Memphis vs 4-3 (Right)"))].sort());
+  });
 });

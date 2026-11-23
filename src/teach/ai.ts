@@ -14,7 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { NamingSchema } from "@/domain/naming";
-import { recordUsage } from "./usage";
+import { checkAi, recordUsage } from "./usage";
 
 export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5";
 type Effort = "low" | "medium" | "high";
@@ -43,6 +43,7 @@ async function structured<T extends z.ZodType>(
   maxTokens: number,
   step = "other",
 ): Promise<z.infer<T>> {
+  await checkAi();
   const client = new Anthropic({ timeout: 10 * 60 * 1000, maxRetries: 2 });
   let last: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {

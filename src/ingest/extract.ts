@@ -7,6 +7,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { EXTRACTION_SYSTEM, ExtractedSchema, toPlayData, type Extracted } from "@/domain/extraction";
 import type { PlayData } from "@/domain/play";
+import { checkAi, recordUsage } from "@/teach/usage";
 import { calibrate, scaleFor } from "./calibrate";
 
 export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5";
@@ -22,6 +23,7 @@ export interface ExtractResult {
 }
 
 export async function askModel(png: Uint8Array, width: number, height: number, text: string, client = new Anthropic()): Promise<Extracted> {
+  await checkAi();
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -48,6 +50,7 @@ export async function askModel(png: Uint8Array, width: number, height: number, t
           },
         ],
       });
+      await recordUsage(MODEL, response.usage, "drawing");
       if (response.stop_reason === "refusal") throw new Error("The model declined to read this card.");
       if (response.stop_reason === "max_tokens") throw new Error("The model ran out of room on this card.");
       if (!response.parsed_output) throw new Error("The model returned nothing usable.");

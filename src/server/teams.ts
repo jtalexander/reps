@@ -56,10 +56,17 @@ export function newJoinCode(): string {
 }
 
 export async function createTeam(database: Db, userId: string, name: string, level: Level): Promise<Team> {
+  // A coach the admin already approved (owns a team with AI on) doesn't wait again.
+  const [vetted] = await database
+    .select({ id: teams.id })
+    .from(teams)
+    .innerJoin(teamCoaches, and(eq(teamCoaches.teamId, teams.id), eq(teamCoaches.userId, userId), eq(teamCoaches.role, "owner")))
+    .where(eq(teams.aiAccess, "on"))
+    .limit(1);
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       return await database.transaction(async (tx) => {
-        const [team] = await tx.insert(teams).values({ name, level, joinCode: newJoinCode() }).returning();
+        const [team] = await tx.insert(teams).values({ name, level, joinCode: newJoinCode(), aiAccess: vetted ? "on" : "pending" }).returning();
         await tx.insert(teamCoaches).values({ teamId: team!.id, userId, role: "owner" });
         return team!;
       });

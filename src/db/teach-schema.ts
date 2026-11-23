@@ -68,10 +68,14 @@ export const topics = pgTable(
     /** in the install the team is learning now: first in line for the coach and the players */
     inInstall: boolean().notNull().default(false),
     archived: boolean().notNull().default(false),
+    /** the name's concept words (see reps_concept_words / conceptWords in teach/shared.ts), kept by Postgres for shared learning */
+    conceptWords: text()
+      .array()
+      .generatedAlwaysAs(sql`reps_concept_words(name)`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex("topics_team_name").on(t.teamId, t.nameKey)],
+  (t) => [uniqueIndex("topics_team_name").on(t.teamId, t.nameKey), index("topics_concept_words").using("gin", t.conceptWords)],
 );
 
 /** A question Reps asks the coach to fill a gap in the playbook. */

@@ -7,6 +7,7 @@ import { hasApiKey } from "@/ingest/extract";
 import { requireCoach, teamsForUser } from "@/server/teams";
 import { lastRun, runProgress } from "@/teach/playbook-run";
 import { openFlags, topicOverview } from "@/teach/service";
+import { aiBlockedReason } from "@/teach/usage";
 import { TriageButton } from "./triage-button";
 import { DecodePanel } from "./decode-panel";
 import { ClearInstall, InstallOnlyToggle, InstallToggle as InstallToggleInline } from "./install-button";
@@ -61,6 +62,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
   const decoded = pageStats.find((s) => s.status === "decoded")?.n ?? 0;
   const flagged = new Set((await openFlags(teamId)).map((f) => f.question.id)).size;
   const optional = working.reduce((a, t) => a + t.gapsOptional, 0);
+  const blocked = await aiBlockedReason(teamId);
   const run = await runProgress(teamId);
   const last = run ? null : await lastRun(teamId);
   const lead = ups[0];
@@ -86,6 +88,8 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       </div>
 
       {!hasApiKey() && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">The server has no Anthropic API key, so Reps can&apos;t read pages yet.</p>}
+
+      {blocked && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm font-semibold text-warn">{blocked}</p>}
 
       {flagged > 0 && (
         <Link href={`/t/${teamId}/teach/flags`} className="rounded-lg bg-warn-bg px-3 py-2 text-sm font-semibold text-warn">

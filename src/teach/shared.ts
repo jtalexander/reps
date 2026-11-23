@@ -6,12 +6,12 @@
  * switch) contribute, and suggestions never say where they came from: the
  * model is told to use them as football knowledge in this team's own words.
  */
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, arrayOverlaps, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { teams } from "@/db/schema";
 import { gaps, topics } from "@/db/teach-schema";
 
-/** Words too common to say two topics are the same concept. */
+/** Words too common to say two topics are the same concept. Keep in step with reps_concept_words() (drizzle/0015). */
 const COMMON = new Set(["THE", "AND", "VS", "OUR", "PLAY", "PLAYS", "PASS", "RUN", "GAME", "RIGHT", "LEFT", "PROTECTION", "FORMATIONS", "FORMATION", "BASE"]);
 
 export const conceptWords = (name: string) =>
@@ -23,21 +23,25 @@ export const conceptWords = (name: string) =>
 
 /** Up to `limit` answered questions from sharing teams' topics that look like the same concept. */
 export async function sharedAnswers(teamId: string, topicName: string, limit = 20, database: Db = db): Promise<string> {
-  const words = conceptWords(topicName);
+  const words = [...new Set(conceptWords(topicName))];
   if (!words.length) return "";
-  const sharing = await database.select({ id: teams.id }).from(teams).where(and(eq(teams.shareAnswers, true), ne(teams.id, teamId)));
-  if (!sharing.length) return "";
-  const theirTopics = (
-    await database
-      .select({ id: topics.id, name: topics.name })
-      .from(topics)
-      .where(and(inArray(topics.teamId, sharing.map((t) => t.id)), eq(topics.archived, false)))
-  ).filter((t) => conceptWords(t.name).some((w) => words.includes(w)));
-  if (!theirTopics.length) return "";
+  // One indexed query: topics.concept_words is kept by Postgres (GIN index), so
+  // this stays fast however many teams share.
   const rows = await database
     .select({ question: gaps.question, answer: gaps.answer })
     .from(gaps)
-    .where(and(inArray(gaps.topicId, theirTopics.map((t) => t.id)), inArray(gaps.status, ["answered", "approved"])))
+    .innerJoin(topics, eq(topics.id, gaps.topicId))
+    .innerJoin(teams, eq(teams.id, gaps.teamId))
+    .where(
+      and(
+        ne(gaps.teamId, teamId),
+        eq(teams.shareAnswers, true),
+        eq(topics.archived, false),
+        arrayOverlaps(topics.conceptWords, words),
+        inArray(gaps.status, ["answered", "approved"]),
+        isNotNull(gaps.answer),
+      ),
+    )
     .orderBy(desc(gaps.answeredAt))
     .limit(limit);
   return rows

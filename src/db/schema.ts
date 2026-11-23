@@ -119,12 +119,22 @@ export const teams = pgTable("teams", {
   installOnly: boolean().notNull().default(false),
   /** secret in the link that adds an assistant coach to the team (null = no link yet) */
   coachInviteCode: text().unique(),
-  /** monthly AI budget in dollars; Reps warns at 80% (null = no budget) */
+  /** monthly AI cap in dollars, set by the Reps admin; AI stops when reached (null = the default cap) */
   aiBudgetUsd: integer(),
+  /** whether Reps may run AI for this team: new teams wait for the Reps admin */
+  aiAccess: text().$type<"pending" | "on" | "off">().notNull().default("pending"),
   /** this team's approved answers help Reps' suggestions for other coaches (as concepts, never names) */
   shareAnswers: boolean().notNull().default(true),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+/** People who run Reps itself: they see every team on /admin and turn AI on or off. */
+export const admins = pgTable("admins", {
+  userId: uuid()
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: createdAt(),
 });
 
 export const teamCoaches = pgTable(

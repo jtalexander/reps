@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { LEVELS, LEVEL_LABEL, type Level } from "@/domain/readiness";
+import { isAdmin } from "@/server/admin";
 import { createTeam, requireUser, teamsForUser } from "@/server/teams";
 import { SignOut } from "./sign-out";
 
@@ -20,11 +21,19 @@ async function create(fd: FormData) {
 export default async function CoachHome() {
   const user = await requireUser();
   const teams = await teamsForUser(user.id);
+  const admin = await isAdmin(user.id);
   return (
     <main className="mx-auto w-full max-w-xl flex-1 px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-4xl">Your teams</h1>
-        <SignOut />
+        <div className="flex items-center gap-3">
+          {admin && (
+            <Link href="/admin" className="text-sm underline">
+              Admin
+            </Link>
+          )}
+          <SignOut />
+        </div>
       </div>
       {teams.length > 0 && (
         <ul className="mb-8 flex flex-col gap-2">
@@ -32,8 +41,7 @@ export default async function CoachHome() {
             <li key={t.id}>
               <Link href={`/t/${t.id}`} className="card flex items-center justify-between p-4 hover:border-ink">
                 <span className="font-semibold">{t.name}</span>
-                <span className="text-right text-sm text-muted">
-                  {LEVEL_LABEL[t.level]}                </span>
+                <span className="text-right text-sm text-muted">{LEVEL_LABEL[t.level]}</span>
               </Link>
             </li>
           ))}

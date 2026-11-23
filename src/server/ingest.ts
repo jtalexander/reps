@@ -15,6 +15,7 @@ import { extractPlay, hasApiKey, askModel } from "@/ingest/extract";
 import { pdfInfo, renderDocPage, textIn, withPdf } from "@/ingest/pdf";
 import { MAX_UPLOAD_BYTES, UPLOAD_CHUNK_BYTES } from "@/domain/limits";
 import { media } from "@/media/store";
+import { withAi } from "@/teach/usage";
 import { conceptsForTeam, statusFor, withConcept } from "./plays";
 
 const DPI = 144;
@@ -228,7 +229,7 @@ export async function extractPlayRow(teamId: string, playId: string, opts: { dat
   try {
     const crop = await media().get(row.cropKey);
     if (!crop) throw new Error("Crop image missing.");
-    const result = await extractPlay(crop.bytes, row.cropWidth ?? 0, row.cropHeight ?? 0, row.sourceText, opts.reader);
+    const result = await withAi(teamId, "drawing", () => extractPlay(crop.bytes, row.cropWidth ?? 0, row.cropHeight ?? 0, row.sourceText, opts.reader));
     if (!result.isPlay || !result.data) {
       await database.update(plays).set({ extraction: "not_a_play", aiRaw: result.raw, archived: true }).where(eq(plays.id, playId));
       return null;

@@ -12,7 +12,7 @@ import { media } from "@/media/store";
 import { convertDrawing } from "./convert";
 import { runNaming } from "./naming";
 import { sharedAnswers } from "./shared";
-import { withAi } from "./usage";
+import { AI_LIMIT, AI_NOT_ON, AI_OFF, AiBlocked, withAi } from "./usage";
 import { pngSize } from "./png";
 import { askPlaybook, decodePage, findGaps, gradeOpen, pickCore, triageGaps, writeTopic, type PageImage } from "./ai";
 import { QuestionDataSchema, type Audience, type Box, type DiagramRegion, type Fact, type QuestionData, type QuestionImage } from "./types";
@@ -102,6 +102,9 @@ export const KEY_TURNED_DOWN = "Anthropic turned down Reps' API key. Check ANTHR
 export function accountProblem(message: string | null | undefined): string | null {
   if (!message) return null;
   if (message === OUT_OF_CREDITS || message === KEY_TURNED_DOWN) return message;
+  if (message.includes(AI_NOT_ON)) return AI_NOT_ON;
+  if (message.includes(AI_OFF)) return AI_OFF;
+  if (message.includes(AI_LIMIT)) return AI_LIMIT;
   if (/credit balance is too low/i.test(message)) return OUT_OF_CREDITS;
   if (/authentication_error|invalid x-api-key|permission_error/i.test(message)) return KEY_TURNED_DOWN;
   return null;
@@ -703,6 +706,18 @@ export function publicQuestion(q: typeof questions.$inferSelect): PublicQuestion
 const DAY = 86_400_000;
 const BOX_DAYS = [0, 1, 2, 4, 8, 16];
 
+/** Share of key points the answer mentions (half of a point's longer words present). Used when AI grading is off. */
+export function keyPointScore(answer: string, keyPoints: string[]): number {
+  if (!keyPoints.length) return 0;
+  const said = new Set(answer.toLowerCase().match(/[a-z0-9]+/g) ?? []);
+  const hit = keyPoints.filter((kp) => {
+    const words = (kp.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length >= 4);
+    if (!words.length) return false;
+    return words.filter((w) => said.has(w)).length >= Math.ceil(words.length / 2);
+  }).length;
+  return hit / keyPoints.length;
+}
+
 export async function gradeAttempt(
   args: { teamId: string; playerId: string; questionId: string; given: unknown; responseMs: number; mode: "learn" | "practice" },
   database: Db = db,
@@ -729,10 +744,18 @@ export async function gradeAttempt(
     reveal = { target: d.target, targetLabel: d.targetLabel };
   } else {
     const text = typeof args.given === "string" ? args.given.slice(0, 2000) : "";
-    const g = await withAi(args.teamId, "grade", () => gradeOpen(q.prompt, d.modelAnswer, d.keyPoints, text));
-    score = Math.max(0, Math.min(1, g.score));
-    feedback = g.feedback;
-    gradedBy = "ai";
+    try {
+      const g = await withAi(args.teamId, "grade", () => gradeOpen(q.prompt, d.modelAnswer, d.keyPoints, text));
+      score = Math.max(0, Math.min(1, g.score));
+      feedback = g.feedback;
+      gradedBy = "ai";
+    } catch (err) {
+      if (!(err instanceof AiBlocked)) throw err;
+      // AI is off or capped: a plain word check against the key points keeps the quiz going
+      score = keyPointScore(text, d.keyPoints);
+      feedback = "Check your answer against your coach's answer below.";
+      gradedBy = "auto";
+    }
     reveal = { modelAnswer: d.modelAnswer, keyPoints: d.keyPoints };
   }
   const correct = score >= 0.7;
@@ -815,7 +838,15 @@ export async function ask(teamId: string, playerId: string, group: Audience, pos
     ...qs.map((q) => `QUIZ ITEM [pages ${q.sourcePages.join(", ")}]: ${q.prompt} — ${q.explanation}`),
     ...answeredGaps.map((g) => `COACH ANSWER: ${g.question} — ${g.answer}`),
   ].join("\n\n");
-  const out = material ? await withAi(teamId, "ask", () => askPlaybook(question.slice(0, 500), position, material)) : { answered: false, answer: "Your coach hasn't approved anything to learn yet.", source_pages: [] };
+  let out: { answered: boolean; answer: string; source_pages: number[] } = { answered: false, answer: "Your coach hasn't approved anything to learn yet.", source_pages: [] };
+  if (material) {
+    try {
+      out = await withAi(teamId, "ask", () => askPlaybook(question.slice(0, 500), position, material));
+    } catch (err) {
+      if (!(err instanceof AiBlocked)) throw err;
+      out = { answered: false, answer: "Reps can't answer questions right now. Ask your coach.", source_pages: [] };
+    }
+  }
   await database.insert(askLog).values({ teamId, playerId, question: question.slice(0, 500), answer: out.answer, sourcePages: out.source_pages, answered: out.answered });
   return out;
 }

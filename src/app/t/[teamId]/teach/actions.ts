@@ -12,6 +12,7 @@ import { requireCoach } from "@/server/teams";
 import type { Naming } from "@/domain/naming";
 import { saveNaming } from "@/teach/naming";
 import { copyFromTeam } from "@/teach/reuse";
+import { aiBlockedReason } from "@/teach/usage";
 import { approveConvertedTopic, queueConversions, retryConversion } from "@/teach/convert-run";
 import {
   acceptSuggestions,
@@ -33,6 +34,12 @@ import {
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+
+/** Refuse to queue AI work while the team's AI is off or over its monthly cap. */
+async function aiReady(teamId: string) {
+  const why = await aiBlockedReason(teamId);
+  if (why) throw new Error(why);
+}
 
 function parsePages(spec: string, max: number): number[] {
   const out = new Set<number>();
@@ -83,6 +90,7 @@ async function origin() {
 async function startJob(teamId: string, kind: "decode_page" | "find_gaps" | "write_topic" | "triage" | "naming", ref: string): Promise<R<{ jobId: string }>> {
   try {
     await requireCoach(teamId);
+    await aiReady(teamId);
     const job = await newJob(teamId, kind, ref);
     await dispatchJob(job.id, await origin());
     return { ok: true, jobId: job.id };
@@ -250,6 +258,7 @@ export async function startPlaybookRunAction(teamId: string, uploadId: string): 
   try {
     await requireCoach(teamId);
     if (!/^[0-9a-f-]{36}$/i.test(uploadId)) throw new Error("Pick a playbook.");
+    await aiReady(teamId);
     await startPlaybookRun(teamId, uploadId);
     await dispatchWorkers(teamId, await origin(), WORKERS);
     revalidatePath(`/t/${teamId}/teach`);
@@ -263,6 +272,7 @@ export async function startPlaybookRunAction(teamId: string, uploadId: string): 
 export async function keepGoingAction(teamId: string): Promise<R> {
   try {
     await requireCoach(teamId);
+    await aiReady(teamId);
     await dispatchWorkers(teamId, await origin(), WORKERS);
     return { ok: true };
   } catch (e) {
@@ -326,6 +336,7 @@ export async function convertTopicsAction(teamId: string, which: "install" | str
   try {
     await requireCoach(teamId);
     const pick = which === "install" ? "install" : which.filter((x) => TOPIC_ID.test(x)).slice(0, 100);
+    await aiReady(teamId);
     const r = await queueConversions(teamId, pick, await origin());
     revalidatePath(`/t/${teamId}/plays/converted`);
     return { ok: true, ...r };
@@ -352,6 +363,7 @@ export async function retryConversionAction(teamId: string, playId: string): Pro
   try {
     await requireCoach(teamId);
     if (!TOPIC_ID.test(playId)) throw new Error("That play wasn't found.");
+    await aiReady(teamId);
     await retryConversion(teamId, playId, await origin());
     revalidatePath(`/t/${teamId}/plays/converted`);
     return { ok: true };
