@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState, useTransition } from "react";
 import { flagQuestionAction, gradeAction } from "@/app/study/teach-actions";
+import { FieldDiagram } from "@/components/field-diagram";
 import { PageView } from "@/components/page-view";
 import { VoiceButton } from "@/components/voice-button";
 import type { PageRef } from "@/teach/page-images";
@@ -108,6 +109,8 @@ export function QuestionRunner({
         <span>{score.right} right</span>
       </div>
       <h2 className="text-lg leading-snug font-semibold">{q.prompt}</h2>
+
+      {q.diagram && <FieldDiagram diagram={q.diagram} />}
 
       {page && (
         <PageView

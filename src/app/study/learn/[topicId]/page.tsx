@@ -29,7 +29,7 @@ export default async function Learn({ params }: PageProps<"/study/learn/[topicId
       </Link>
       <h1 className="text-4xl">{topic.name}</h1>
       <LearnFlow
-        lessons={mine.map((l) => ({ id: l.id, title: l.title, body: l.body, audience: l.audience, sourcePages: l.sourcePages }))}
+        lessons={mine.map((l) => ({ id: l.id, title: l.title, body: l.body, audience: l.audience, sourcePages: l.sourcePages, diagram: l.diagram }))}
         check={check}
         pages={await pageRefs(me.team.id)}
       />

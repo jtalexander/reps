@@ -8,6 +8,7 @@ import { requireCoach, teamsForUser } from "@/server/teams";
 import { lastRun, runProgress } from "@/teach/playbook-run";
 import { openFlags, topicOverview } from "@/teach/service";
 import { aiBlockedReason } from "@/teach/usage";
+import { libraryState } from "@/library/sync";
 import { TriageButton } from "./triage-button";
 import { DecodePanel } from "./decode-panel";
 import { ClearInstall, InstallOnlyToggle, InstallToggle as InstallToggleInline } from "./install-button";
@@ -63,6 +64,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
   const flagged = new Set((await openFlags(teamId)).map((f) => f.question.id)).size;
   const optional = working.reduce((a, t) => a + t.gapsOptional, 0);
   const blocked = await aiBlockedReason(teamId);
+  const basicsAdded = [...(await libraryState(teamId)).values()].filter((s) => !s.archived).length;
   const run = await runProgress(teamId);
   const last = run ? null : await lastRun(teamId);
   const lead = ups[0];
@@ -90,6 +92,17 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       {!hasApiKey() && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">The server has no Anthropic API key, so Reps can&apos;t read pages yet.</p>}
 
       {blocked && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm font-semibold text-warn">{blocked}</p>}
+
+      <Link href={`/t/${teamId}/basics`} className="card flex items-center justify-between gap-3 p-4 hover:border-ink">
+        <span>
+          <span className="block font-semibold">Football basics</span>
+          <span className="block text-sm text-muted">
+            Ready-made lessons and quizzes on offense, defense and special teams, concepts and technique.{" "}
+            {basicsAdded ? `${basicsAdded} topic${basicsAdded === 1 ? "" : "s"} added.` : "Nothing added yet."}
+          </span>
+        </span>
+        <span aria-hidden>→</span>
+      </Link>
 
       {flagged > 0 && (
         <Link href={`/t/${teamId}/teach/flags`} className="rounded-lg bg-warn-bg px-3 py-2 text-sm font-semibold text-warn">

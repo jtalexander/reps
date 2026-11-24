@@ -15,6 +15,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { NamingSchema } from "@/domain/naming";
 import { checkAi, recordUsage } from "./usage";
+import { AUDIENCES } from "./types";
 
 export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5";
 type Effort = "low" | "medium" | "high";
@@ -141,7 +142,7 @@ export type Gaps = z.infer<typeof GapsSchema>;
 
 const GAPS_SYSTEM = `${VOICE}
 
-Coaches put part of their offense in the playbook and keep the rest in their head. You are looking at one topic of the playbook (the pages and the facts already taken from them). List what a player at each position would still need in order to execute or understand it, but the playbook doesn't say. Examples: a pass play with no read or progression for the QB; a formation that doesn't say where a player aligns or how deep; a term used but never defined; rules for #1 and #2 but not #3; a cadence word whose meaning isn't explained; a contradiction between pages.
+Coaches put part of their offense, defense or special teams in the playbook and keep the rest in their head. You are looking at one topic of the playbook (the pages and the facts already taken from them). List what a player at each position would still need in order to execute or understand it, but the playbook doesn't say. Examples: a pass play with no read or progression for the QB; a formation that doesn't say where a player aligns or how deep; a term used but never defined; rules for #1 and #2 but not #3; a cadence word whose meaning isn't explained; a contradiction between pages.
 Ask only what matters for teaching this topic, most important first, at most 8. Don't ask about things the coach already answered, and don't ask about anything another topic of the playbook covers (you get the list of other topics with what each one covers); a gap is something the whole playbook leaves out. Offer a suggested answer only when one is reasonable and common; it will be shown to the coach as a suggestion to approve or correct.`;
 
 export async function findGaps(topic: string, facts: string, pages: PageImage[], answered: string, otherTopics = "", shared = ""): Promise<Gaps> {
@@ -226,7 +227,7 @@ export const WrittenTopicSchema = z.object({
   lessons: z
     .array(
       z.object({
-        audience: z.enum(["ALL", "QB", "RB", "WR", "TE", "OL"]).describe("who it's for; write ALL lessons for what everyone needs (cadence, calls), position lessons for jobs"),
+        audience: z.enum(AUDIENCES).describe("who it's for; write ALL lessons for what everyone needs (cadence, calls), position lessons for jobs"),
         title: z.string(),
         body: z.string().describe("a short lesson in plain words for a player, 80-250 words, using the coach's terms; short paragraphs or bullet lines starting with '- '"),
         source_pages: z.array(z.number().int()),
@@ -236,7 +237,7 @@ export const WrittenTopicSchema = z.object({
   questions: z
     .array(
       z.object({
-        audience: z.array(z.enum(["ALL", "QB", "RB", "WR", "TE", "OL"])),
+        audience: z.array(z.enum(AUDIENCES)),
         format: z.enum(["choice", "tap", "order", "open"]),
         prompt: z.string(),
         choices: z.array(z.string()).describe("choice: 3-4 options, the first is correct (they are shuffled later); other formats: empty"),

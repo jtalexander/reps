@@ -1,7 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { FieldDiagram } from "@/components/field-diagram";
 import { PageView } from "@/components/page-view";
+import type { Diagram } from "@/library/types";
 import { QuestionRunner } from "@/components/question-runner";
 import type { PageRef } from "@/teach/page-images";
 import type { PublicQuestion } from "@/teach/service";
@@ -15,6 +17,7 @@ interface Lesson {
   body: string;
   audience: string;
   sourcePages: number[];
+  diagram?: Diagram | null;
 }
 
 /** Learn, then check: read the lessons, then answer a few questions on them. */
@@ -32,6 +35,7 @@ export function LearnFlow({ lessons, check, pages }: { lessons: Lesson[]; check:
             <div className="text-xs text-muted">{AUDIENCE_LABEL[l.audience as keyof typeof AUDIENCE_LABEL] ?? l.audience}</div>
             <h2 className="text-lg font-semibold">{l.title}</h2>
             <LessonBody text={l.body} />
+            {l.diagram && <FieldDiagram diagram={l.diagram} />}
             {l.sourcePages.length > 0 && (
               <div className="flex flex-wrap gap-2 text-xs">
                 {l.sourcePages.map((p) =>

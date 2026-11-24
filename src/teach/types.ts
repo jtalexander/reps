@@ -61,7 +61,7 @@ export type QuestionData = z.infer<typeof QuestionDataSchema>;
 export const QuestionImageSchema = z.object({ pageNo: z.number().int(), box: BoxSchema.nullable() });
 export type QuestionImage = z.infer<typeof QuestionImageSchema>;
 
-export const AUDIENCES = ["ALL", "QB", "RB", "WR", "TE", "OL"] as const;
+export const AUDIENCES = ["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "LB", "DB", "SP"] as const;
 export type Audience = (typeof AUDIENCES)[number];
 export const AUDIENCE_LABEL: Record<Audience, string> = {
   ALL: "Everyone",
@@ -70,12 +70,16 @@ export const AUDIENCE_LABEL: Record<Audience, string> = {
   WR: "Receivers",
   TE: "Tight ends",
   OL: "Offensive line",
+  DL: "Defensive line",
+  LB: "Linebackers",
+  DB: "Defensive backs",
+  SP: "Kickers, punters & snappers",
 };
 
 /** Map a player's position (as the coach writes it) to an audience group. */
 export function audienceOf(position: string, groups: Record<string, string[]>): Audience {
   const p = position.toUpperCase();
-  for (const a of ["QB", "RB", "WR", "TE", "OL"] as const) if (a === p || (groups[a] ?? []).includes(p)) return a;
+  for (const a of AUDIENCES) if (a === p || (groups[a] ?? []).includes(p)) return a;
   return "ALL";
 }
 

@@ -5,11 +5,12 @@ import { studySets } from "@/db/schema";
 import { questions, topics } from "@/db/teach-schema";
 import { SubmitButton } from "@/components/submit-button";
 import { requireCoach } from "@/server/teams";
+import { AUDIENCES } from "@/teach/types";
 import { createSetAction, deleteSetAction } from "../actions";
 
 export const metadata = { title: "Study sets" };
 
-const POSITION_GROUPS = ["QB", "RB", "WR", "TE", "OL"];
+const POSITION_GROUPS = AUDIENCES.filter((a) => a !== "ALL");
 
 /** Assign topics (this week's game plan) with a due date; players practice just those. */
 export default async function Sets({ params, searchParams }: PageProps<"/t/[teamId]/sets">) {

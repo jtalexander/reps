@@ -6,7 +6,7 @@
  * team's own undecided drafts move to the reserve pile. Naming rules come
  * over when the team has none. Nothing goes live without approval.
  */
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { teams } from "@/db/schema";
 import { gaps, lessons, questions, topics } from "@/db/teach-schema";
@@ -24,7 +24,8 @@ export async function copyFromTeam(fromTeamId: string, toTeamId: string, userId:
     naming = 1;
   }
 
-  const fromTopics = await database.select().from(topics).where(and(eq(topics.teamId, fromTeamId), eq(topics.archived, false))).orderBy(asc(topics.sort));
+  // Football basics topics come from the library, not the coach: each team adds its own
+  const fromTopics = await database.select().from(topics).where(and(eq(topics.teamId, fromTeamId), eq(topics.archived, false), isNull(topics.libraryKey))).orderBy(asc(topics.sort));
   const toTopics = await database.select().from(topics).where(and(eq(topics.teamId, toTeamId), eq(topics.archived, false)));
   const byKey = new Map(toTopics.map((t) => [t.nameKey, t]));
   const out = { naming, topics: 0, answers: 0, lessons: 0, questions: 0 };

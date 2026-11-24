@@ -125,6 +125,8 @@ export const teams = pgTable("teams", {
   aiAccess: text().$type<"pending" | "on" | "off">().notNull().default("pending"),
   /** this team's approved answers help Reps' suggestions for other coaches (as concepts, never names) */
   shareAnswers: boolean().notNull().default(true),
+  /** Football basics: the coach's pick where coaches teach it differently, { styleKey: optionKey } */
+  libraryStyles: jsonb().$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

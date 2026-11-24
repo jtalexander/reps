@@ -8,6 +8,7 @@
 import { sql } from "drizzle-orm";
 import { type AnyPgColumn, boolean, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { Fact, DiagramRegion, QuestionData, QuestionImage } from "@/teach/types";
+import type { Diagram } from "@/library/types";
 import { players, teams, uploadPages, uploads, users } from "./schema";
 
 const id = () => uuid().primaryKey().defaultRandom();
@@ -68,6 +69,9 @@ export const topics = pgTable(
     /** in the install the team is learning now: first in line for the coach and the players */
     inInstall: boolean().notNull().default(false),
     archived: boolean().notNull().default(false),
+    /** set when the topic came from the Football basics library: its key and the version copied */
+    libraryKey: text(),
+    libraryVersion: integer(),
     /** the name's concept words (see reps_concept_words / conceptWords in teach/shared.ts), kept by Postgres for shared learning */
     conceptWords: text()
       .array()
@@ -120,6 +124,8 @@ export const lessons = pgTable(
     title: text().notNull(),
     body: text().notNull(),
     sourcePages: integer().array().notNull().default(sql`'{}'::int[]`),
+    /** a field drawing (Football basics lessons) */
+    diagram: jsonb().$type<Diagram | null>(),
     status: text().$type<"draft" | "approved" | "rejected">().notNull().default("draft"),
     approvedBy: uuid().references(() => users.id, { onDelete: "set null" }),
     approvedAt: timestamp({ withTimezone: true }),
@@ -144,6 +150,8 @@ export const questions = pgTable(
     data: jsonb().$type<QuestionData>().notNull(),
     explanation: text().notNull(),
     image: jsonb().$type<QuestionImage | null>(),
+    /** a field drawing (Football basics questions) */
+    diagram: jsonb().$type<Diagram | null>(),
     sourcePages: integer().array().notNull().default(sql`'{}'::int[]`),
     status: text().$type<"draft" | "approved" | "rejected">().notNull().default("draft"),
     /**

@@ -16,6 +16,7 @@ import { AI_LIMIT, AI_NOT_ON, AI_OFF, AiBlocked, withAi } from "./usage";
 import { pngSize } from "./png";
 import { askPlaybook, decodePage, findGaps, gradeOpen, pickCore, triageGaps, writeTopic, type PageImage } from "./ai";
 import { QuestionDataSchema, type Audience, type Box, type DiagramRegion, type Fact, type QuestionData, type QuestionImage } from "./types";
+import type { Diagram } from "@/library/types";
 
 export const topicKey = (name: string) => name.toUpperCase().replace(/[^A-Z0-9#&' -]+/g, " ").replace(/\s+/g, " ").trim();
 
@@ -621,8 +622,13 @@ export async function reviewQuestion(
   await database.update(questions).set(set).where(and(eq(questions.teamId, teamId), eq(questions.id, id)));
 }
 
+/** The team's playbook topics and where each stands (Football basics topics need no coach work and live on the Basics page). */
 export async function topicOverview(teamId: string, database: Db = db) {
-  const ts = await database.select().from(topics).where(and(eq(topics.teamId, teamId), eq(topics.archived, false))).orderBy(asc(topics.sort));
+  const ts = await database
+    .select()
+    .from(topics)
+    .where(and(eq(topics.teamId, teamId), eq(topics.archived, false), isNull(topics.libraryKey)))
+    .orderBy(asc(topics.sort));
   const count = async (table: typeof lessons | typeof questions) =>
     database
       .select({ topicId: table.topicId, status: table.status, n: sql<number>`count(*)::int` })
@@ -693,10 +699,12 @@ export type PublicQuestion = {
   choices?: Array<{ id: string; text: string }>;
   items?: string[];
   image: QuestionImage | null;
+  /** Football basics field drawing */
+  diagram: Diagram | null;
 };
 
 export function publicQuestion(q: typeof questions.$inferSelect): PublicQuestion {
-  const base = { id: q.id, topicId: q.topicId, format: q.format, prompt: q.prompt, image: q.image ?? null };
+  const base = { id: q.id, topicId: q.topicId, format: q.format, prompt: q.prompt, image: q.image ?? null, diagram: q.diagram ?? null };
   const d = q.data;
   if (d.kind === "choice") return { ...base, choices: d.choices };
   if (d.kind === "order") return { ...base, items: shuffleOnce(d.items) };

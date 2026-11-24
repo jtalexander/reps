@@ -64,7 +64,7 @@ export async function TeachSection({ teamId, playerId, position }: { teamId: str
         </div>
       )}
       <div className="flex items-baseline justify-between">
-        <h2 className="font-semibold">Learn your offense</h2>
+        <h2 className="font-semibold">Learn it</h2>
         <span className="text-xs text-muted">{AUDIENCE_LABEL[group]}</span>
       </div>
       <ul className="flex flex-col gap-2">
