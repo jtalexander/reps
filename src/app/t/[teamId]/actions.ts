@@ -17,7 +17,8 @@ import { LEVELS, readiness, type Level } from "@/domain/readiness";
 import { TermsSchema } from "@/domain/terms";
 import { lineupFor, type LineupResult } from "@/teach/lineup";
 import { drawPlay, type DrawResult } from "@/teach/play-draw";
-import { PlayerSchema } from "@/domain/play";
+import { nameDrawnPlay, type NameGuess } from "@/teach/name-drawing";
+import { PlayDataSchema, PlayerSchema } from "@/domain/play";
 import { z } from "zod";
 import { requestOrigin } from "@/lib/origin";
 import { TREE_NUMBERS } from "@/domain/route-tree";
@@ -401,6 +402,18 @@ export async function drawPlayAction(teamId: string, call: Record<string, unknow
       await requestOrigin(),
     );
     return { ok: true, result };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** A name for the play the coach drew by hand, in the team's own words (no AI). */
+export async function nameDrawingAction(teamId: string, data: unknown): Promise<Result<{ guess: NameGuess }>> {
+  try {
+    await requireCoach(teamId);
+    const play = PlayDataSchema.parse(data);
+    if (play.players.length > 20) throw new Error("Too many players.");
+    return { ok: true, guess: await nameDrawnPlay(teamId, play) };
   } catch (err) {
     return fail(err);
   }

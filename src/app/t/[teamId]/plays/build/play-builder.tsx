@@ -3,10 +3,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PlaySvg } from "@/components/play-svg";
 import type { Naming } from "@/domain/naming";
-import { emptyPlay, flipPlay, isLineman, PLAY_TYPES, type PlayData, type Player, type Point } from "@/domain/play";
+import { emptyPlay, flipPlay, isLineman, PLAY_TYPES, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTES } from "@/domain/routes";
+import { applyStroke, matchRoute } from "@/domain/sketch";
 import { safeCall } from "@/lib/safe-call";
-import { drawPlayAction, lineupForAction, saveBuiltPlayAction } from "../../actions";
+import { drawPlayAction, lineupForAction, nameDrawingAction, saveBuiltPlayAction } from "../../actions";
 
 const mk = (id: string, x: number, y: number): Player => ({
   id,
@@ -74,7 +75,15 @@ export function PlayBuilder(props: {
   const [msg, setMsg] = useState<string | null>(null);
   const n = props.naming;
   // the call, built from the naming rules
-  const [parts, setParts] = useState({ formation: "", dir: "RIGHT", tag: "", motionPlayer: "", motion: "", play: "", playDir: "" });
+  const [parts, setPartsRaw] = useState({ formation: "", dir: "RIGHT", tag: "", motionPlayer: "", motion: "", play: "", playDir: "" });
+  type Parts = typeof parts;
+  // parts the coach picked himself (Reps' naming leaves them alone) and parts Reps filled in from a drawing
+  const mine = useRef(new Set<keyof Parts>());
+  const auto = useRef<Partial<Parts>>({});
+  const setParts = (next: Parts) => {
+    for (const k of Object.keys(next) as Array<keyof Parts>) if (next[k] !== parts[k]) mine.current.add(k);
+    setPartsRaw(next);
+  };
   const [ownName, setOwnName] = useState(props.start && props.start.name !== "unknown" ? props.start.name : "");
   const built = useMemo(() => {
     const t = (s: string) => s.trim();
@@ -92,6 +101,8 @@ export function PlayBuilder(props: {
   useEffect(() => {
     const call = { formation: parts.formation.trim(), dir: parts.dir, tag: parts.tag.trim() };
     if (!call.formation) return;
+    // Reps named this formation from where the coach put the players: leave them there
+    if (auto.current.formation === parts.formation && auto.current.dir === parts.dir && auto.current.tag === parts.tag) return;
     const ask = JSON.stringify(call);
     asked.current = ask;
     let tries = 0;
@@ -113,7 +124,7 @@ export function PlayBuilder(props: {
         ...d,
         players: l.players.map((np) => {
           const old = d.players.find((o) => o.id === np.id);
-          return old ? { ...np, assignment_type: old.assignment_type, route: old.route, block: old.block, path: old.path } : np;
+          return old ? { ...np, assignment_type: old.assignment_type, route: old.route, block: old.block, path: old.path, line: old.line } : np;
         }),
       }));
       setLineupVersion((v) => v + 1);
@@ -135,6 +146,8 @@ export function PlayBuilder(props: {
   }, [data]);
   useEffect(() => {
     const call = { ...parts };
+    if (auto.current.play === call.play && auto.current.playDir === call.playDir) call.play = "";
+    if (auto.current.motion === call.motion && auto.current.motionPlayer === call.motionPlayer) call.motion = "";
     if (!call.play.trim() && !(call.motion.trim() && call.motionPlayer)) return;
     const ask = JSON.stringify([call, lineupVersion]);
     drawAsked.current = ask;
@@ -159,7 +172,7 @@ export function PlayBuilder(props: {
         players: res.jobs
           ? d.players.map((p) => {
               const j = res.jobs!.find((x) => x.id === p.id);
-              return j ? { ...p, assignment_type: j.assignment_type, route: j.route, block: j.block, path: j.path } : { ...p, assignment_type: "unknown", route: null, block: null, path: null };
+              return j ? { ...p, assignment_type: j.assignment_type, route: j.route, block: j.block, path: j.path, line: null } : { ...p, assignment_type: "unknown", route: null, block: null, path: null, line: null };
             })
           : d.players,
       }));
@@ -172,6 +185,58 @@ export function PlayBuilder(props: {
     };
   }, [parts.play, parts.playDir, parts.motion, parts.motionPlayer, lineupVersion, props.teamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Drawing by hand: a pen, the coach's strokes (with undo), and a name from the team's words
+  const [mode, setMode] = useState<"move" | "draw">("move");
+  const [pen, setPen] = useState<Line>({ style: "solid", end: "arrow" });
+  const [history, setHistory] = useState<PlayData[]>([]);
+  const typeGuess = useRef<PlayData["play_type"] | null>(null);
+  const [drawNote, setDrawNote] = useState<string | null>(null);
+  const [sketched, setSketched] = useState(0);
+  const [nameNote, setNameNote] = useState<{ lines: string[]; same: { id: string; name: string } | null } | null>(null);
+  const routeName = (k: string) => ROUTES.find((r) => r.key === k)?.label ?? k;
+  const onDraw = (id: string, pts: Point[]) => {
+    setHistory((h) => [...h.slice(-49), data]);
+    const r = applyStroke(data, id, pts, pen, routeName);
+    // a run once someone carries the ball, a pass once there are routes (unless the coach picked the type)
+    const carry = r.data.players.some((p) => p.assignment_type === "carry");
+    const routes = r.data.players.some((p) => p.route);
+    if (r.data.play_type === "unknown" || r.data.play_type === typeGuess.current) {
+      const t = carry ? "run" : routes ? "pass" : r.data.play_type;
+      typeGuess.current = t;
+      r.data.play_type = t;
+    }
+    setData(r.data);
+    setSel(id);
+    setDrawNote(r.said);
+    setSketched((v) => v + 1);
+  };
+  const undo = () => {
+    const prev = history[history.length - 1];
+    if (!prev) return;
+    setHistory((h) => h.slice(0, -1));
+    setData(prev);
+    setDrawNote(null);
+    setSketched((v) => v + 1);
+  };
+  useEffect(() => {
+    if (!sketched) return;
+    let stale = false;
+    const t = setTimeout(async () => {
+      const r = await safeCall(() => nameDrawingAction(props.teamId, dataRef.current), "Naming the play");
+      if (stale || !r.ok) return;
+      const g = r.guess;
+      const fill: Partial<Parts> = {};
+      for (const [k, v] of Object.entries(g.parts) as Array<[keyof Parts, string]>) if (!mine.current.has(k)) fill[k] = v;
+      auto.current = { ...auto.current, ...fill };
+      setPartsRaw((cur) => ({ ...cur, ...fill }));
+      setNameNote({ lines: g.notes, same: g.same });
+    }, 700);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
+  }, [sketched, props.teamId]);
+
   const me = data.players.find((p) => p.id === sel) ?? null;
   const set = (fn: (d: PlayData) => PlayData) => setData((d) => fn(d));
   const setPlayer = (id: string, patch: Partial<Player>) =>
@@ -180,11 +245,21 @@ export function PlayBuilder(props: {
 
   const setJob = (j: Job) => {
     if (!me) return;
-    if (j === "route") setPlayer(me.id, { assignment_type: "route", route: { name: "go", depth_yards: "unknown", break_direction: "unknown", notes: null, path: null }, block: null, path: null });
-    else if (j === "block") setPlayer(me.id, { assignment_type: "block", block: { type: "base", target: null, path: [[0, 0], [0, 1.2]] }, route: null, path: null });
-    else if (j === "carry" || j === "fake") setPlayer(me.id, { assignment_type: j, path: runPath(1.3, me), route: null, block: null });
-    else if (j === "pass_pro") setPlayer(me.id, { assignment_type: "pass_pro", block: { type: "pass_pro", target: null, path: [[0, 0], [0, -1]] }, route: null, path: null });
-    else setPlayer(me.id, { assignment_type: "unknown", route: null, block: null, path: null });
+    const drawn = me.line ? (me.route?.path ?? me.block?.path ?? me.path) : null;
+    if (drawn && j !== "none" && j !== "pass_pro") {
+      const line = { ...me.line!, end: j === "block" ? ("t" as const) : me.line!.end === "t" ? ("arrow" as const) : me.line!.end, style: j === "fake" ? ("dotted" as const) : me.line!.style === "dotted" && j !== "route" ? ("solid" as const) : me.line!.style };
+      const r = j === "route" ? matchRoute(drawn, me) : null;
+      if (j === "route") setPlayer(me.id, { assignment_type: "route", route: { name: r?.key ?? "custom", depth_yards: r && r.depth > 0 ? r.depth : "unknown", break_direction: r?.break_direction ?? "unknown", notes: null, path: drawn }, block: null, path: null, line });
+      else if (j === "block") setPlayer(me.id, { assignment_type: "block", block: { type: "base", target: null, path: drawn }, route: null, path: null, line });
+      else setPlayer(me.id, { assignment_type: j, path: drawn, route: null, block: null, line });
+      return;
+    }
+    if (j === "route") setPlayer(me.id, { assignment_type: "route", route: { name: "go", depth_yards: "unknown", break_direction: "unknown", notes: null, path: null }, block: null, path: null, line: null });
+    else if (j === "block") setPlayer(me.id, { assignment_type: "block", block: { type: "base", target: null, path: [[0, 0], [0, 1.2]] }, route: null, path: null, line: null });
+    else if (j === "carry" || j === "fake") setPlayer(me.id, { assignment_type: j, path: runPath(1.3, me), route: null, block: null, line: null });
+    else if (j === "pass_pro") setPlayer(me.id, { assignment_type: "pass_pro", block: { type: "pass_pro", target: null, path: [[0, 0], [0, -1]] }, route: null, path: null, line: null });
+    else setPlayer(me.id, { assignment_type: "unknown", route: null, block: null, path: null, line: null });
+    if (j === "none" && data.motion?.player === me.id) set((d) => ({ ...d, motion: null }));
   };
 
   const save = async () => {
@@ -257,6 +332,22 @@ export function PlayBuilder(props: {
             ))}
           </div>
         )}
+        {nameNote && (
+          <div className="flex flex-col text-sm text-muted" aria-live="polite">
+            {nameNote.same && (
+              <span className="text-ok">
+                This looks like{" "}
+                <a className="underline" href={`/t/${props.teamId}/plays/${nameNote.same.id}`}>
+                  {nameNote.same.name}
+                </a>{" "}
+                from your playbook.
+              </span>
+            )}
+            {nameNote.lines.map((l) => (
+              <span key={l}>{l}</span>
+            ))}
+          </div>
+        )}
         {lineupNote && (
           <p className={`text-sm ${lineupNote.tone === "ok" ? "text-ok" : lineupNote.tone === "warn" ? "text-warn" : "text-muted"}`} aria-live="polite">
             {lineupNote.text}
@@ -268,15 +359,67 @@ export function PlayBuilder(props: {
         </label>
       </section>
 
-      <div className="card overflow-hidden p-1">
-        <PlaySvg
-          data={data}
-          selected={sel}
-          onPlayerTap={(id) => setSel(id === sel ? null : id)}
-          onPlayerDrag={(id, x, y) => setPlayer(id, { x, y: Math.min(y, 0), on_ball: y > -0.75 })}
-          className="block w-full select-none"
-        />
-      </div>
+      <section className="card flex flex-col gap-2 p-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex overflow-hidden rounded border border-line text-sm" role="group" aria-label="What touching the field does">
+            {(
+              [
+                ["move", "Move players"],
+                ["draw", "Draw lines"],
+              ] as const
+            ).map(([m, label]) => (
+              <button key={m} onClick={() => setMode(m)} className={`px-3 py-1.5 ${mode === m ? "bg-brand text-brand-ink" : ""}`} aria-pressed={mode === m}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {mode === "draw" && (
+            <>
+              <PenGroup
+                label="Line"
+                value={pen.style}
+                onChange={(style) => setPen({ style, end: style === "squiggly" ? "none" : pen.end === "none" && pen.style === "squiggly" ? "arrow" : pen.end })}
+                options={[
+                  ["solid", "Solid", <path key="s" d="M2 6 H26" />],
+                  ["dotted", "Dotted", <path key="d" d="M2 6 H26" strokeDasharray="3 2.5" />],
+                  ["squiggly", "Squiggly (motion)", <path key="z" d="M2 6 L5 3 L8 9 L11 3 L14 9 L17 3 L20 9 L23 3 L26 6" />],
+                ]}
+              />
+              <PenGroup
+                label="End"
+                value={pen.end}
+                disabled={pen.style === "squiggly"}
+                onChange={(end) => setPen({ ...pen, end })}
+                options={[
+                  ["arrow", "Arrow", <path key="a" d="M2 6 H22 M18 2 L24 6 L18 10" />],
+                  ["t", "T (block)", <path key="t" d="M2 6 H22 M22 1.5 V10.5" strokeWidth={2} />],
+                  ["none", "None", <path key="n" d="M2 6 H24" />],
+                ]}
+              />
+              <button className="border border-line px-2 py-1 text-sm disabled:opacity-40" onClick={undo} disabled={!history.length}>
+                Undo
+              </button>
+            </>
+          )}
+        </div>
+        {mode === "draw" && (
+          <p className="text-xs text-muted">
+            Touch a player and draw his line with your finger or mouse. Squiggly is motion before the snap. End in a T for a block. Draw from where his motion ends for what he does after it.
+            {drawNote ? <span className="text-ok"> Got it: {drawNote}.</span> : null}
+          </p>
+        )}
+        <div className="overflow-hidden">
+          <PlaySvg
+            data={data}
+            selected={sel}
+            onPlayerTap={(id) => setSel(id === sel ? null : id)}
+            onPlayerDrag={mode === "move" ? (id, x, y) => setPlayer(id, { x, y: Math.min(y, 0), on_ball: y > -0.75 }) : undefined}
+            pen={mode === "draw" ? pen : null}
+            onDraw={onDraw}
+            className="block w-full select-none"
+          />
+        </div>
+      </section>
       <div className="flex flex-wrap gap-3 text-sm">
         <button className="underline" onClick={() => set((d) => flipPlay(d))}>
           Flip left/right
@@ -331,7 +474,8 @@ export function PlayBuilder(props: {
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1 text-xs">
                 Route
-                <select className="input w-auto" value={me.route.name} onChange={(e) => setPlayer(me.id, { route: { ...me.route!, name: e.target.value, depth_yards: "unknown" } })}>
+                <select className="input w-auto" value={me.route.name} onChange={(e) => setPlayer(me.id, { route: { ...me.route!, name: e.target.value, depth_yards: me.route!.path ? me.route!.depth_yards : "unknown" } })}>
+                  {me.route.name === "custom" && <option value="custom">His own route</option>}
                   {ROUTES.map((r) => (
                     <option key={r.key} value={r.key}>
                       {r.label}
@@ -339,6 +483,10 @@ export function PlayBuilder(props: {
                   ))}
                 </select>
               </label>
+              {me.line && me.route.path ? (
+                <span className="pb-2 text-xs text-muted">Drawn by hand. Pick the route name if Reps got it wrong; your drawing stays.</span>
+              ) : (
+              <>
               <label className="flex flex-col gap-1 text-xs">
                 Depth (yards)
                 <input
@@ -362,6 +510,8 @@ export function PlayBuilder(props: {
                 />
                 Break the other way
               </label>
+              </>
+              )}
             </div>
           )}
           {job === "block" && me.block && (
@@ -377,7 +527,7 @@ export function PlayBuilder(props: {
                   ["Pull left", [[0, 0], [0, -1], [-5, -1], [-6, 1]]],
                 ] as Array<[string, Point[]]>
               ).map(([label, path]) => (
-                <button key={label} className="border border-line px-2 py-1" onClick={() => setPlayer(me.id, { block: { ...me.block!, path } })}>
+                <button key={label} className="border border-line px-2 py-1" onClick={() => setPlayer(me.id, { block: { ...me.block!, path }, line: null })}>
                   {label}
                 </button>
               ))}
@@ -398,7 +548,7 @@ export function PlayBuilder(props: {
           )}
         </section>
       ) : (
-        <p className="text-sm text-muted">Tap a player to give him a job. Drag to move him.</p>
+        <p className="text-sm text-muted">{mode === "draw" ? "Touch a player and draw his line, or tap him to pick his job." : "Tap a player to give him a job. Drag to move him."}</p>
       )}
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur">
@@ -409,6 +559,30 @@ export function PlayBuilder(props: {
           <span className="text-sm text-muted">{msg ?? (name ? name : "Give the play a name first.")}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A row of pen buttons, each a little picture of the line. */
+function PenGroup<T extends string>({ label, value, options, onChange, disabled }: { label: string; value: T; options: Array<[T, string, React.ReactNode]>; onChange: (v: T) => void; disabled?: boolean }) {
+  return (
+    <div className={`flex items-center gap-1 text-xs ${disabled ? "opacity-40" : ""}`} role="group" aria-label={label}>
+      <span className="text-muted">{label}</span>
+      {options.map(([v, name, icon]) => (
+        <button
+          key={v}
+          title={name}
+          aria-label={name}
+          aria-pressed={value === v}
+          disabled={disabled}
+          onClick={() => onChange(v)}
+          className={`rounded border px-1.5 py-1 ${value === v ? "border-brand bg-brand text-brand-ink" : "border-line"}`}
+        >
+          <svg width="28" height="12" viewBox="0 0 28 12" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            {icon}
+          </svg>
+        </button>
+      ))}
     </div>
   );
 }

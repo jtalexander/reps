@@ -4,9 +4,9 @@
  * can hide routes, flip, animate, and overlay a defensive look.
  * Units are yards: x from the ball (right +), y downfield (+). SVG y = TOP - y.
  */
-import { useId, useRef } from "react";
+import { useId, useRef, useState } from "react";
 import { buildLook, defenderForKey, playSideSign, type DefensiveLook, type Front } from "@/domain/defense";
-import { flipPlay, isLineman, type Coverage, type PlayData, type Player, type Point } from "@/domain/play";
+import { flipPlay, isLineman, type Coverage, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTE_BY_KEY, outsideSign, routePath } from "@/domain/routes";
 
 const TOP = 22;
@@ -38,6 +38,10 @@ export interface PlaySvgProps {
   onPlayerDrag?: (id: string, x: number, y: number) => void;
   /** play builder: the selected player gets a ring */
   selected?: string | null;
+  /** play builder: draw lines by hand with this pen (touch a player and drag) instead of moving players */
+  pen?: Line | null;
+  /** the hand-drawn line in field yards, starting at the player (or where his motion ends) */
+  onDraw?: (id: string, pts: Point[]) => void;
 }
 
 /** Field area a play uses: every player, the end of every line, motion ends and defenders. */
@@ -48,6 +52,7 @@ function extent(data: PlayData, strength: string, extra: Array<{ x: number; y: n
     pts.push([p.x, p.y], start);
     const rel = p.route ? routePath(p.route, p, strength) : p.block?.path ?? p.path;
     for (const [dx, dy] of rel ?? []) pts.push([start[0] + dx, start[1] + dy]);
+    if (data.motion?.player === p.id) for (const [dx, dy] of data.motion.path ?? []) pts.push([p.x + dx, p.y + dy]);
   }
   for (const d of extra) pts.push([d.x, d.y]);
   const xs = pts.map((q) => q[0]);
@@ -59,18 +64,27 @@ const sy = (y: number) => TOP - y;
 const toPath = (pts: Point[], ox: number, oy: number) =>
   pts.map(([x, y], i) => `${i ? "L" : "M"}${(ox + x).toFixed(2)} ${sy(oy + y).toFixed(2)}`).join(" ");
 
-function zigzag(from: Point, to: Point): string {
-  const [x0, y0] = from;
-  const [x1, y1] = to;
-  const len = Math.hypot(x1 - x0, y1 - y0);
-  const n = Math.max(4, Math.round(len / 0.8));
-  const nx = -(y1 - y0) / (len || 1);
-  const ny = (x1 - x0) / (len || 1);
-  let d = `M${x0} ${sy(y0)}`;
+/** A squiggly (motion) line along field points. */
+function zigzag(...pts: Point[]): string {
+  const segs: Array<{ a: Point; b: Point; len: number; at: number }> = [];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const len = Math.hypot(pts[i]![0] - pts[i - 1]![0], pts[i]![1] - pts[i - 1]![1]);
+    if (len > 0) segs.push({ a: pts[i - 1]!, b: pts[i]!, len, at: total });
+    total += len;
+  }
+  const [x0, y0] = pts[0]!;
+  let d = `M${x0.toFixed(2)} ${sy(y0).toFixed(2)}`;
+  if (!segs.length) return d;
+  const n = Math.max(4, Math.round(total / 0.8));
   for (let i = 1; i <= n; i++) {
-    const t = i / n;
-    const amp = i === n ? 0 : (i % 2 ? 0.35 : -0.35);
-    d += ` L${(x0 + (x1 - x0) * t + nx * amp).toFixed(2)} ${sy(y0 + (y1 - y0) * t + ny * amp).toFixed(2)}`;
+    const t = (i / n) * total;
+    const g = segs.find((x) => t <= x.at + x.len + 1e-9) ?? segs[segs.length - 1]!;
+    const f = (t - g.at) / g.len;
+    const nx = -(g.b[1] - g.a[1]) / g.len;
+    const ny = (g.b[0] - g.a[0]) / g.len;
+    const amp = i === n ? 0 : i % 2 ? 0.35 : -0.35;
+    d += ` L${(g.a[0] + (g.b[0] - g.a[0]) * f + nx * amp).toFixed(2)} ${sy(g.a[1] + (g.b[1] - g.a[1]) * f + ny * amp).toFixed(2)}`;
   }
   return d;
 }
@@ -102,6 +116,14 @@ export function PlaySvg(props: PlaySvgProps) {
   const uid = useId().replace(/:/g, "");
   const svgRef = useRef<SVGSVGElement>(null);
   const dragging = useRef<string | null>(null);
+  const stroke = useRef<{ id: string; pts: Point[] } | null>(null);
+  const [live, setLive] = useState<Point[] | null>(null);
+  const rawYards = (e: React.PointerEvent): Point | null => {
+    const m = svgRef.current?.getScreenCTM();
+    if (!m) return null;
+    const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    return [pt.x, TOP - pt.y];
+  };
   const toYards = (e: React.PointerEvent): [number, number] | null => {
     const svg = svgRef.current;
     const m = svg?.getScreenCTM();
@@ -129,22 +151,26 @@ export function PlaySvg(props: PlaySvgProps) {
     const start: Point = data.motion && data.motion.player === p.id && data.motion.end ? data.motion.end : [p.x, p.y];
     const dim = props.highlight && p.id !== props.highlight && hide !== "player";
     const op = dim ? 0.35 : 1;
+    // a line the coach drew by hand keeps its look (dotted, arrow or T); otherwise Reps' usual look for the job
+    const hand = p.line;
+    const dash = (usual?: string) => (hand ? (hand.style === "dotted" ? "0.6 0.5" : undefined) : usual);
+    const end = (usual: string) =>
+      hand ? (hand.end === "arrow" ? `url(#${usual === "block" ? "arrow" : usual}-${uid})` : hand.end === "t" ? `url(#block-${uid})` : undefined) : `url(#${usual}-${uid})`;
+    const d = (pts: Point[]) => (hand?.style === "squiggly" ? zigzag(...pts.map(([x, y]) => [start[0] + x, start[1] + y] as Point)) : toPath(pts, start[0], start[1]));
     if (p.route) {
       const pts = routePath(p.route, p, strength);
       if (pts) {
         lines.push(
-          <path key={`r${i}`} d={toPath(pts, start[0], start[1])} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.28} fill="none" markerEnd={`url(#arrow-${uid})`} opacity={op} style={{ animationDelay: data.motion ? "0.9s" : "0s" }} />,
+          <path key={`r${i}`} d={d(pts)} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.28} strokeDasharray={dash()} fill="none" markerEnd={end("arrow")} opacity={op} style={{ animationDelay: data.motion ? "0.9s" : "0s" }} />,
         );
       }
     } else if (p.block) {
       const pts = p.block.path && p.block.path.length >= 2 ? p.block.path : ([[0, 0], [0, 1.2]] as Point[]);
-      lines.push(
-        <path key={`b${i}`} d={toPath(pts, start[0], start[1])} stroke="currentColor" strokeWidth={0.24} fill="none" markerEnd={`url(#block-${uid})`} opacity={op} />,
-      );
+      lines.push(<path key={`b${i}`} d={d(pts)} stroke="currentColor" strokeWidth={0.24} strokeDasharray={dash()} fill="none" markerEnd={end("block")} opacity={op} />);
     } else if (p.path && p.path.length >= 2) {
       const carry = p.assignment_type === "carry";
       lines.push(
-        <path key={`c${i}`} d={toPath(p.path, start[0], start[1])} className={props.animate ? "draw" : undefined} stroke={carry ? "var(--carry)" : "currentColor"} strokeWidth={0.3} strokeDasharray={p.assignment_type === "fake" ? "0.6 0.5" : undefined} fill="none" markerEnd={`url(#${carry ? "arrowc" : "arrow"}-${uid})`} opacity={op} />,
+        <path key={`c${i}`} d={d(p.path)} className={props.animate ? "draw" : undefined} stroke={carry ? "var(--carry)" : "currentColor"} strokeWidth={0.3} strokeDasharray={dash(p.assignment_type === "fake" ? "0.6 0.5" : undefined)} fill="none" markerEnd={end(carry ? "arrowc" : "arrow")} opacity={op} />,
       );
     }
   });
@@ -152,7 +178,9 @@ export function PlaySvg(props: PlaySvgProps) {
   // motion
   if (data.motion && data.motion.end && !props.routeOnly && hide !== "all") {
     const p = data.players.find((x) => x.id === data.motion!.player);
-    if (p) lines.push(<path key="motion" d={zigzag([p.x, p.y], data.motion.end)} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.2} fill="none" />);
+    const m = data.motion;
+    const pts: Point[] | null = p ? (m.path && m.path.length >= 2 ? m.path.map(([x, y]) => [p.x + x, p.y + y] as Point) : [[p.x, p.y], m.end!]) : null;
+    if (pts) lines.push(<path key="motion" d={zigzag(...pts)} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.2} fill="none" />);
   } else if (data.motion && !data.motion.end && !props.routeOnly && hide !== "all") {
     const p = data.players.find((x) => x.id === data.motion!.player);
     if (p) {
@@ -204,17 +232,60 @@ export function PlaySvg(props: PlaySvgProps) {
       className={props.className}
       role="img"
       aria-label={data.name}
-      style={{ color: "var(--ink)", touchAction: props.onPlayerDrag ? "none" : undefined }}
-      onPointerMove={
-        props.onPlayerDrag
+      style={{ color: "var(--ink)", touchAction: props.onPlayerDrag || props.pen ? "none" : undefined, cursor: props.pen ? "crosshair" : undefined }}
+      onPointerDown={
+        props.pen
           ? (e) => {
-              if (!dragging.current) return;
-              const at = toYards(e);
-              if (at) props.onPlayerDrag!(dragging.current, at[0], at[1]);
+              // start at the nearest player, or where his motion ends
+              const at = rawYards(e);
+              if (!at) return;
+              let best: { id: string; dist: number; from: Point } | null = null;
+              for (const p of data.players) {
+                const spots: Point[] = [[p.x, p.y]];
+                if (data.motion?.player === p.id && data.motion.end && props.pen!.style !== "squiggly") spots.unshift(data.motion.end);
+                for (const s of spots) {
+                  const dist = Math.hypot(s[0] - at[0], s[1] - at[1]);
+                  if (dist < 2.2 && (!best || dist < best.dist - 0.3)) best = { id: p.id, dist, from: s };
+                }
+              }
+              if (!best) return;
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              stroke.current = { id: best.id, pts: [best.from] };
+              setLive([best.from]);
             }
           : undefined
       }
-      onPointerUp={() => (dragging.current = null)}
+      onPointerMove={(e) => {
+        if (props.pen && stroke.current) {
+          const at = rawYards(e);
+          const pts = stroke.current.pts;
+          const last = pts[pts.length - 1]!;
+          if (at && Math.hypot(at[0] - last[0], at[1] - last[1]) > 0.15) {
+            pts.push(at);
+            setLive([...pts]);
+          }
+          return;
+        }
+        if (!props.onPlayerDrag || !dragging.current) return;
+        const at = toYards(e);
+        if (at) props.onPlayerDrag(dragging.current, at[0], at[1]);
+      }}
+      onPointerUp={() => {
+        dragging.current = null;
+        const s = stroke.current;
+        stroke.current = null;
+        setLive(null);
+        if (!s) return;
+        let len = 0;
+        for (let i = 1; i < s.pts.length; i++) len += Math.hypot(s.pts[i]![0] - s.pts[i - 1]![0], s.pts[i]![1] - s.pts[i - 1]![1]);
+        if (len < 1) props.onPlayerTap?.(s.id); // a tap, not a line
+        else props.onDraw?.(s.id, s.pts);
+      }}
+      onPointerCancel={() => {
+        dragging.current = null;
+        stroke.current = null;
+        setLive(null);
+      }}
       onPointerLeave={() => (dragging.current = null)}
     >
       <defs>
@@ -292,21 +363,21 @@ export function PlaySvg(props: PlaySvgProps) {
         data.players.map((p, idx) => {
           const isC = p.id === "C";
           const hl = props.highlight === p.id;
-          const tap = props.onPlayerTap ? () => props.onPlayerTap!(p.id) : undefined;
+          const tap = props.onPlayerTap && !props.pen ? () => props.onPlayerTap!(p.id) : undefined;
           const r = isLineman(p.id) ? 0.6 : 0.9;
           return (
             <g
               key={`${p.id}:${idx}`}
               onClick={tap}
               onPointerDown={
-                props.onPlayerDrag && !props.flip
+                props.onPlayerDrag && !props.flip && !props.pen
                   ? (e) => {
                       dragging.current = p.id;
                       (e.target as Element).setPointerCapture?.(e.pointerId);
                     }
                   : undefined
               }
-              style={tap || props.onPlayerDrag ? { cursor: props.onPlayerDrag ? "grab" : "pointer" } : undefined}
+              style={props.pen ? undefined : tap || props.onPlayerDrag ? { cursor: props.onPlayerDrag ? "grab" : "pointer" } : undefined}
             >
               {(tap || props.onPlayerDrag) && <circle cx={p.x} cy={sy(p.y)} r={1.6} fill="transparent" />}
               {props.selected === p.id && <circle cx={p.x} cy={sy(p.y)} r={1.4} fill="none" stroke="var(--brand)" strokeWidth={0.25} />}
@@ -332,6 +403,18 @@ export function PlaySvg(props: PlaySvgProps) {
           );
         })}
       {lone}
+      {live && live.length > 1 && (
+        <path
+          d={props.pen?.style === "squiggly" ? zigzag(...live) : toPath(live, 0, 0)}
+          stroke="var(--brand)"
+          strokeWidth={0.3}
+          strokeDasharray={props.pen?.style === "dotted" ? "0.6 0.5" : undefined}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          pointerEvents="none"
+        />
+      )}
     </svg>
   );
 }

@@ -61,6 +61,7 @@ function lineupOf(players: Player[], mirror: boolean): Player[] {
     route: null,
     block: null,
     path: null,
+    line: null,
   }));
 }
 

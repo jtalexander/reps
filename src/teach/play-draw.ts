@@ -181,5 +181,5 @@ function moveMotion(src: PlayData, m: Motion, lineup: Player[], moverId: string,
   if (!to) return null;
   const end: Point | null = m.end && from ? [Math.round((to.x + (m.end[0] - from.x) * (mirror ? -1 : 1)) * 10) / 10, Math.round((to.y + (m.end[1] - from.y)) * 10) / 10] : null;
   const dir = m.direction === "left" || m.direction === "right" ? (mirror ? (m.direction === "left" ? "right" : "left") : m.direction) : m.direction;
-  return { ...m, player: moverId, direction: dir, end };
+  return { ...m, player: moverId, direction: dir, end, ...(m.path ? { path: mirror ? flipPts(m.path) : m.path } : {}) };
 }

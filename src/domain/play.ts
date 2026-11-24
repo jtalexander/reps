@@ -105,6 +105,13 @@ export const BlockSchema = z.object({
   path: z.array(point).nullable().default(null),
 });
 
+/** How a coach drew a player's line by hand: solid, dotted or squiggly, ending in an arrow, a T or nothing. */
+export const LineSchema = z.object({
+  style: z.enum(["solid", "dotted", "squiggly"]),
+  end: z.enum(["arrow", "t", "none"]),
+});
+export type Line = z.infer<typeof LineSchema>;
+
 export const PlayerSchema = z.object({
   id: str,
   /** the player's position in the coach's system (often equal to id) */
@@ -120,6 +127,8 @@ export const PlayerSchema = z.object({
   /** ball carrier path / fake path / lead path, relative to the player */
   path: z.array(point).nullable().default(null),
   notes: str.nullable().default(null),
+  /** drawn by hand in the play builder: how the line looks (absent = Reps' usual look for the job) */
+  line: LineSchema.nullable().optional(),
 });
 export type Player = z.infer<typeof PlayerSchema>;
 
@@ -130,6 +139,8 @@ export const MotionSchema = z.object({
   timing: maybe(z.enum(["at_snap", "set"])),
   /** where the player ends up at the snap, yards from the ball */
   end: point.nullable().default(null),
+  /** the motion's path as drawn, relative to the player (absent = straight to `end`) */
+  path: z.array(point).nullable().optional(),
 });
 export type Motion = z.infer<typeof MotionSchema>;
 
@@ -286,7 +297,7 @@ export function flipPlay(play: PlayData): PlayData {
     ...play,
     formation: { ...play.formation, strength: lr(play.formation.strength) },
     motion: play.motion
-      ? { ...play.motion, direction: lr(play.motion.direction), end: play.motion.end ? [-play.motion.end[0], play.motion.end[1]] : null }
+      ? { ...play.motion, direction: lr(play.motion.direction), end: play.motion.end ? [-play.motion.end[0], play.motion.end[1]] : null, ...(play.motion.path ? { path: mirror(play.motion.path) } : {}) }
       : null,
     players: play.players.map((p) => ({
       ...p,

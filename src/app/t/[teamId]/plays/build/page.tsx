@@ -65,7 +65,7 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
         </Link>
         <h1 className="text-4xl">{editing ? "Edit play" : "Draw a play"}</h1>
         <p className="text-sm text-muted">
-          Drag players into place. Tap one to give him a route, block or carry. Build the name from your naming rules, then save and approve it like any play.
+          Drag players into place, then draw each line by hand or tap a player to pick his job. Reps names the play from your naming rules. Save and approve it like any play.
         </p>
       </div>
       <PlayBuilder teamId={teamId} naming={naming} start={start} playId={editing} lineups={lineups} fromId={fromId} />
