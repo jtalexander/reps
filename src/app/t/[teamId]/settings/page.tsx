@@ -1,5 +1,8 @@
 import { LEVELS, LEVEL_LABEL } from "@/domain/readiness";
-import { TermsSchema } from "@/domain/terms";
+import { term, TermsSchema } from "@/domain/terms";
+import { COMMON_TREE, TREE_NUMBERS, treeFromPlaybook } from "@/domain/route-tree";
+import { ROUTES } from "@/domain/routes";
+import { SubmitButton } from "@/components/submit-button";
 import { requireCoach } from "@/server/teams";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -10,6 +13,7 @@ import {
   newCoachInviteAction,
   removeCoachAction,
   resetJoinCodeAction,
+  saveRouteTreeAction,
   saveSettingsAction,
   stopCoachInviteAction,
 } from "../actions";
@@ -19,8 +23,12 @@ export const metadata = { title: "Settings" };
 
 export default async function Settings({ params, searchParams }: PageProps<"/t/[teamId]/settings">) {
   const { teamId } = await params;
-  const { deleted } = await searchParams;
+  const { deleted, routes } = await searchParams;
   const { team, role, user } = await requireCoach(teamId);
+  const terms = TermsSchema.parse(team.terms ?? {});
+  const fromPlaybook = team.routeTree ? null : treeFromPlaybook(team.naming?.route_tree);
+  const tree = team.routeTree ?? fromPlaybook ?? COMMON_TREE;
+  const treeSource = team.routeTree ? "saved" : fromPlaybook ? "playbook" : "common";
   const owner = role === "owner";
   const coaches = await listCoaches(teamId);
   const data = await playerDataCounts(teamId);
@@ -154,7 +162,48 @@ export default async function Settings({ params, searchParams }: PageProps<"/t/[
         )}
       </section>
 
-      <TermsEditor teamId={teamId} initial={TermsSchema.parse(team.terms ?? {})} />
+      <section id="routes" className="card flex flex-col gap-3 p-4">
+        <h2 className="font-semibold">Route tree</h2>
+        <p className="text-sm text-muted">
+          How your team numbers its routes. Football basics teaches your players this tree (in your route names from Your terminology below), so the numbers they learn match
+          your huddle.
+        </p>
+        {routes === "saved" && <p className="bg-ok-bg px-3 py-2 text-sm text-ok">Saved. Football basics now teaches this tree.</p>}
+        {treeSource === "playbook" && (
+          <p className="bg-suggest-bg px-3 py-2 text-sm text-suggest">Reps found this route tree in your playbook. Check it and save it to use it.</p>
+        )}
+        {treeSource === "common" && <p className="bg-warn-bg px-3 py-2 text-sm text-warn">Not set yet. This is a common tree to start from: change what&apos;s different, then save.</p>}
+        <form action={saveRouteTreeAction.bind(null, teamId)} className="flex flex-col gap-3">
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" name="numbered" value="yes" defaultChecked={tree.numbered} className="h-4 w-4" /> We number our routes
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="numbered" value="no" defaultChecked={!tree.numbered} className="h-4 w-4" /> We call routes by name only
+            </label>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {TREE_NUMBERS.map((n) => (
+              <label key={n} className="flex items-center gap-2 text-sm">
+                <span className="w-6 text-right font-mono font-bold">{n}</span>
+                <select name={`route_${n}`} defaultValue={tree.routes.find((r) => r.n === n)?.route ?? ""} className="input">
+                  <option value="">not used</option>
+                  {ROUTES.filter((r) => r.key !== "screen").map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {term(terms, "routes", r.key)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          <SubmitButton className="btn btn-primary self-start" pending="Saving…">
+            Save route tree
+          </SubmitButton>
+        </form>
+      </section>
+
+      <TermsEditor teamId={teamId} initial={terms} />
     </div>
   );
 }

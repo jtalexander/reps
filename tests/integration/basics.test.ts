@@ -114,4 +114,43 @@ describe("football basics", () => {
     expect(row!.picks[style.key]).toBe(second!.key);
     await expect(sync.setLibraryStyle(t.id, style.key, "nope", userId, db)).rejects.toThrow();
   });
+
+  it("teaches the team's route tree in its words, and rewrites when the coach changes it", async () => {
+    const { createTeam } = await import("@/server/teams");
+    const sync = await import("@/library/sync");
+    const t = await createTeam(db, userId, "Basics routes", "youth");
+    await db.update(teams).set({ terms: { positions: {}, routes: { hitch: "Stop" }, concepts: {}, coverages: {}, read_keys: {} } }).where(eq(teams.id, t.id));
+    await sync.addLibraryTopics(t.id, ["off_route_tree"], userId, db);
+    const [topic] = await db.select().from(topics).where(and(eq(topics.teamId, t.id), eq(topics.libraryKey, "off_route_tree")));
+    let c = await approved(t.id, topic!.id);
+    expect(c.lessons[0]!.body).toMatch(/hasn't set/); // common tree until the coach sets one
+    await sync.saveRouteTree(t.id, { numbered: true, routes: [{ n: "0", route: "hitch" }, { n: "1", route: "slant" }, { n: "2", route: "post" }, { n: "3", route: "go" }] }, userId, db);
+    c = await approved(t.id, topic!.id);
+    expect(c.lessons[0]!.body).toContain("0: Stop");
+    expect(c.lessons[0]!.body).not.toMatch(/hasn't set/);
+    expect(c.questions.some((q) => JSON.stringify(q.data).includes("Stop"))).toBe(true);
+    await sync.saveRouteTree(t.id, { numbered: false, routes: [] }, userId, db);
+    c = await approved(t.id, topic!.id);
+    expect(c.lessons[0]!.title).toBe("Our routes");
+    expect(c.questions.every((q) => !q.prompt.startsWith("What number"))).toBe(true);
+  });
+
+  it("tags each pass concept lesson and finds the team's plays that use it", async () => {
+    const { createTeam } = await import("@/server/teams");
+    const sync = await import("@/library/sync");
+    const plays = await import("@/server/plays");
+    const { emptyPlay } = await import("@/domain/play");
+    const { playsByConcept } = await import("@/library/concept-plays");
+    const t = await createTeam(db, userId, "Basics concepts", "youth");
+    await sync.addLibraryTopics(t.id, ["off_pass_concepts"], userId, db);
+    const [topic] = await db.select().from(topics).where(and(eq(topics.teamId, t.id), eq(topics.libraryKey, "off_pass_concepts")));
+    const tagged = (await approved(t.id, topic!.id)).lessons.filter((l) => l.conceptKey).map((l) => l.conceptKey);
+    expect([...tagged].sort()).toEqual(["smash", "flood", "curl_flat", "slant_flat", "stick", "mesh", "four_verts"].sort());
+    const p = (id: string, x: number, y: number) => ({ id, position: id, x, y, on_ball: y === 0, side: x < 0 ? "left" : "right", split: null, assignment_type: "unknown", route: null, block: null, path: null, notes: null });
+    const id = await plays.createBuiltPlay(t.id, { ...emptyPlay("TRIPS RIGHT, SMASH"), play_type: "pass", players: [p("C", 0, 0), p("QB", 0, -5)] } as never, db);
+    await plays.approvePlay(t.id, id, userId, "youth", db);
+    const found = await playsByConcept(t.id, ["smash", "mesh"], db);
+    expect(found.smash?.map((x) => x.name)).toEqual(["TRIPS RIGHT, SMASH"]);
+    expect(found.mesh).toBeUndefined();
+  });
 });

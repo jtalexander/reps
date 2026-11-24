@@ -18,6 +18,8 @@ interface Lesson {
   audience: string;
   sourcePages: number[];
   diagram?: Diagram | null;
+  /** the team's plays that use this lesson's concept */
+  plays?: { id: string; name: string }[];
 }
 
 /** Learn, then check: read the lessons, then answer a few questions on them. */
@@ -36,6 +38,18 @@ export function LearnFlow({ lessons, check, pages }: { lessons: Lesson[]; check:
             <h2 className="text-lg font-semibold">{l.title}</h2>
             <LessonBody text={l.body} />
             {l.diagram && <FieldDiagram diagram={l.diagram} />}
+            {l.plays && l.plays.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <p className="eyebrow">Our plays that use this</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {l.plays.map((p) => (
+                    <Link key={p.id} href={`/study/plays?play=${p.id}`} className="border border-line bg-card px-2 py-1 font-label text-xs font-bold tracking-wide uppercase hover:border-brand">
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
             {l.sourcePages.length > 0 && (
               <div className="flex flex-wrap gap-2 text-xs">
                 {l.sourcePages.map((p) =>

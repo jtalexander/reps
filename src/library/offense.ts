@@ -3,6 +3,7 @@
  * run plays, pass concepts, reading the defense, protection, option and RPO)
  * and technique (line, ball carrier, quarterback, receivers).
  */
+import { ROUTE_TREE_TOPIC } from "./route-tree";
 import { choice, lesson, open, order, trueFalse } from "./build";
 import { arrow, d, darrow, diagram, front, note, o, oline, proSet, qb, shell, spread, tech, zone } from "./draw";
 import type { Dot, LibTopic, Line } from "./types";
@@ -118,22 +119,6 @@ const JET = diagram({
 
 // ---------- pass concepts ----------
 
-const ROUTE_TREE = diagram({
-  dots: [...oline("none"), qb("under"), o("X", -12, -0.8, true)],
-  lines: [
-    rt([-12, -0.8], [-12, 2], [-16, 2]),
-    rt([-12, -0.8], [-12, 1.5], [-7, 6]),
-    rt([-12, -0.8], [-12, 15], [-14, 12]),
-    rt([-12, -0.8], [-12, 12], [-10.8, 10.5]),
-    rt([-12, -0.8], [-12, 6], [-17, 6]),
-    rt([-12, -0.8], [-12, 8], [-5, 8]),
-    rt([-12, -0.8], [-12, 11], [-17, 17]),
-    rt([-12, -0.8], [-12, 11], [-7, 17]),
-    rt([-12, -0.8], [-12, 20]),
-  ],
-  notes: [note("1", -16.8, 2), note("2", -6.4, 6.6), note("3", -14.8, 11.4), note("4", -10.1, 10.2), note("5", -17.8, 6), note("6", -4.2, 8), note("7", -17.6, 17.6), note("8", -6.4, 17.6), note("9", -12, 21)],
-});
-
 const SLANT = diagram({
   dots: [...oline("right"), qb("gun"), o("RB", 1.5, -5), o("X", -15, -0.8, true), o("Z", 14, -1.8), d("C", -15, 6)],
   lines: [rt([-15, -0.8], [-15, 1.5], [-10, 5.5])],
@@ -173,6 +158,18 @@ const CURL_FLAT = diagram({
   dots: [...spread(), d("NB", -10, 5, true), d("C", -15, 7)],
   lines: [rt([-15, -0.8], [-15, 12], [-14, 10.5]), rt([-8, -1.8], [-9, 1], [-15, 2.5])],
   notes: [note("curl", -12.8, 11), note("flat", -16.8, 2.5)],
+});
+
+const STICK = diagram({
+  dots: [...spread(), d("W", 7.5, 4.5, true), d("C", 14, 6)],
+  lines: [rt([14, -1.8], [14, 18]), rt([4.5, -0.8], [4.5, 5.5], [4, 5]), rt([1.5, -5], [5, -3.5], [11, 0.5])],
+  notes: [note("clear", 15.6, 17), note("stick", 4.5, 7), note("flat", 12.6, 0.8)],
+});
+
+const SLANT_FLAT = diagram({
+  dots: [...spread(), d("NB", -10, 5, true), d("C", -15, 6)],
+  lines: [rt([-15, -0.8], [-15, 1.5], [-10, 5.5]), rt([-8, -1.8], [-9, 0.5], [-15, 2])],
+  notes: [note("slant", -8.6, 6.4), note("flat", -16.6, 2)],
 });
 
 // ---------- reading the defense ----------
@@ -606,34 +603,19 @@ Jet sweep: a receiver runs full speed in motion across the formation. The ball i
     ],
   },
 
+  ROUTE_TREE_TOPIC,
+
   // 4 ------------------------------------------------------------------
   {
     key: "off_pass_concepts",
-    version: 1,
+    version: 2,
     side: "offense",
     category: "concepts",
     name: "Routes and pass concepts",
-    summary: "The route tree, how pass plays stretch a defense (high-low, horizontal, vertical, triangle), and common concepts: smash, flood, stick, mesh, four verts, slant-flat and curl-flat.",
+    summary: "Routes off the tree, how pass plays stretch a defense (high-low, horizontal, vertical, triangle), and the common concepts drawn one by one: smash, flood, curl-flat, slant-flat, stick, mesh and four verts.",
     level: "youth",
     for: ["QB", "WR", "TE", "RB"],
     lessons: [
-      lesson(
-        "ALL",
-        "The route tree",
-        `A route is the path a receiver runs. Many teams number their basic routes in a route tree. A common version:
-- 1 Flat (a quick out)
-- 2 Slant
-- 3 Comeback
-- 4 Curl
-- 5 Out
-- 6 Dig (in)
-- 7 Corner
-- 8 Post
-- 9 Go (also called fly or streak)
-
-In this version, odd numbers break to the outside (toward the sideline) and even numbers break to the inside (toward the middle). The 9 goes straight. Numbers, names and depths vary by team, so learn your playbook's tree. Numbering routes lets a coach give every receiver his route in a short play call.`,
-        { diagram: ROUTE_TREE },
-      ),
       lesson(
         "ALL",
         "Other routes you'll hear",
@@ -661,25 +643,75 @@ The QB usually reads one key defender. Whatever that defender does, throw to the
       ),
       lesson(
         "ALL",
-        "Concepts: smash, flood, curl-flat, slant-flat",
-        `- Smash: the outside receiver runs a hitch (short) and the inside receiver runs a corner (deep and outside). It's a high-low on the cornerback: if he sits on the hitch, throw the corner; if he drops, throw the hitch.
-- Flood: three receivers to one side at three depths: one deep (a go that clears out the deep defender), one in the middle (often an out or a sail route), and one short (a flat).
-- Curl-flat: the outside receiver runs a curl and an inside receiver or a back runs to the flat. It's a high-low on the flat defender: if he widens with the flat, throw the curl; if he sinks under the curl, throw the flat.
-- Slant-flat: the outside receiver runs a slant and the inside receiver runs to the flat. It's a quick throw that puts the flat defender in a bind.`,
-        { diagram: SMASH(false) },
+        "Smash",
+        `Smash puts two receivers on one side. The outside receiver runs a hitch: about 5 yards, stop and turn back to the QB. The inside receiver runs a corner: up about 10 to 12 yards, then break deep toward the sideline.
+
+It's a high-low on the cornerback. If he sits down on the hitch, throw the corner over him. If he drops back to cover the corner, throw the hitch in front of him.
+
+Receivers: get to your depth fast and run your break sharp. The QB is reading the corner, not you.`,
+        { concept: "smash", diagram: SMASH(false) },
       ),
       lesson(
         "ALL",
-        "Concepts: stick, mesh and four verts",
-        `- Stick: the outside receiver runs a clear-out route deep, the next receiver (often the tight end or slot) runs the stick at about 5 or 6 yards, and a back or slot runs to the flat. The QB reads the flat defender: flat or stick.
-- Mesh: two receivers run shallow crossing routes from opposite sides, passing close to each other (about a yard apart). Defenders in man coverage have a hard time getting through the traffic. Receivers just run their routes: running into a defender on purpose to free a teammate is offensive pass interference.
-- Four verts (four verticals): four receivers run deep. Against a defense with only three deep defenders, like Cover 3, someone should be open deep, often an inside receiver on a seam.`,
-        { diagram: MESH },
+        "Flood",
+        `Flood sends three receivers to the same side at three depths, more than the defense has in that area.
+- Deep: the outside receiver runs a go and clears out the deep defender.
+- Middle: the next receiver runs an out or a sail (a deep out) at about 10 to 12 yards.
+- Short: a back or tight end runs to the flat.
+
+The QB reads deep to short. If the deep man is covered, the middle route is usually open. If the middle is covered, throw the flat.`,
+        { concept: "flood", diagram: FLOOD },
+      ),
+      lesson(
+        "ALL",
+        "Curl-flat",
+        `The outside receiver runs a curl: up about 10 to 12 yards, then turn back inside toward the QB. A slot, tight end or back runs to the flat underneath him.
+
+It's a high-low on the flat defender, often an outside linebacker or the nickel. If he widens with the flat route, throw the curl behind him. If he sinks under the curl, throw the flat.
+
+Curl runners: settle in the open window between defenders and show the QB your numbers.`,
+        { concept: "curl_flat", diagram: CURL_FLAT },
+      ),
+      lesson(
+        "ALL",
+        "Slant-flat",
+        `The outside receiver runs a slant: two or three hard steps up, then cut inside at about 45 degrees. The inside receiver runs to the flat.
+
+The two routes cut through the flat defender's area going opposite ways. If he jumps the flat, the slant opens behind him. If he squeezes inside on the slant, throw the flat.
+
+It's a quick throw: the ball comes out on the QB's last step, so receivers have to win right away.`,
+        { concept: "slant_flat", diagram: SLANT_FLAT },
+      ),
+      lesson(
+        "ALL",
+        "Stick",
+        `Stick puts three receivers on one side. The outside receiver runs deep to clear out the defenders over him. The next receiver (often the tight end or slot) runs the stick: about 5 or 6 yards, then settle in the open space facing the QB. A back or slot runs to the flat.
+
+The QB reads the flat defender. If he widens to the flat, throw the stick. If he stays inside on the stick, throw the flat. It's a quick, safe throw against almost any coverage.`,
+        { concept: "stick", diagram: STICK },
+      ),
+      lesson(
+        "ALL",
+        "Mesh",
+        `In mesh, two receivers run shallow crosses from opposite sides, a few yards past the line, passing close to each other (about a yard apart). Defenders chasing them in man coverage run into traffic. Against zone, the crossers keep running and settle in open spots.
+
+Other receivers usually run deeper routes to keep the safeties back.
+
+Run your route and keep going: running into a defender on purpose to free a teammate is offensive pass interference.`,
+        { concept: "mesh", diagram: MESH },
+      ),
+      lesson(
+        "ALL",
+        "Four verts",
+        `Four verticals sends four receivers deep. The outside receivers run go routes and the inside receivers run seams up the field.
+
+Against a defense with three deep defenders, like Cover 3, that's four deep receivers against three deep defenders, so one should come open, often an inside receiver on a seam. Against two deep safeties, the seams split them.
+
+Receivers: get vertical fast and keep your spacing, so one defender can't cover two of you.`,
+        { concept: "four_verts", diagram: FOUR_VERTS(false) },
       ),
     ],
     questions: [
-      choice("ALL", "On many teams' route trees, what do odd-numbered routes do?", "Break to the outside, toward the sideline", ["Break to the inside, toward the middle", "Go deep, past 20 yards", "Belong to the tight end"], "In the common tree, odd routes (1, 3, 5, 7) break out and even routes (2, 4, 6, 8) break in. Your team's tree may differ.", { core: true }),
-      choice("ALL", "Which route is usually number 9 on a common route tree?", "Go (also called fly or streak)", ["Slant", "Flat", "Curl"], "The 9 goes straight down the field."),
       choice("ALL", "What route is the highlighted receiver running?", "Slant", ["Out", "Post", "Curl"], "A short stem, then a sharp angle inside toward the middle: a slant.", { core: true, diagram: SLANT }),
       choice("ALL", "Name the highlighted receiver's route.", "Post", ["Corner", "Go", "Dig"], "Deep stem, then a break inside toward the goal posts: a post.", { diagram: POST }),
       choice("ALL", "What is a high-low stretch?", "Two receivers at different depths in one defender's area, so he can't cover both", ["Two receivers running deep side by side", "One receiver who runs deep and then comes back", "A pass thrown high so it can't be tipped"], "One defender, two depths: whichever he takes, throw the other.", { core: true, minLevel: "middle_school" }),

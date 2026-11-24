@@ -13,6 +13,11 @@ export const WordSchema = z.object({
 });
 export type Word = z.infer<typeof WordSchema>;
 
+export const RouteTreeWordSchema = z.object({
+  number: z.string().describe("the route's number as the playbook writes it, e.g. '2'"),
+  route: z.string().describe("the route name as the playbook writes it, e.g. 'Slant'"),
+});
+
 export const NamingSchema = z.object({
   positions: z
     .array(
@@ -35,8 +40,17 @@ export const NamingSchema = z.object({
   motions: z.array(WordSchema).describe("motion and shift words or numbers"),
   plays: z.array(WordSchema).describe("run, pass, screen and gadget play names, with what each one is"),
   other: z.array(WordSchema).describe("protections, tempos, cadence and audible words, and other calls"),
+  /** older drafts don't have it */
+  route_tree: z.array(RouteTreeWordSchema).optional(),
 });
 export type Naming = z.infer<typeof NamingSchema>;
+
+/** What the model fills in: the same, with the route tree always answered (empty when there's none). */
+export const NamingDraftSchema = NamingSchema.extend({
+  route_tree: z
+    .array(RouteTreeWordSchema)
+    .describe("the numbered route tree if the playbook shows one: each number and the route it calls, e.g. 2 = Slant; empty if the playbook doesn't number routes"),
+});
 
 export const NAMING_LISTS = ["formations", "formation_tags", "backfields", "motions", "plays", "other"] as const;
 export type NamingList = (typeof NAMING_LISTS)[number];

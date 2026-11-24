@@ -7,7 +7,7 @@ import type { Audience } from "@/teach/types";
 import type { Diagram, LibLesson, LibQuestion } from "./types";
 import type { Level } from "@/domain/readiness";
 
-type Opts = { minLevel?: Level; style?: string; diagram?: Diagram; core?: boolean };
+type Opts = { minLevel?: Level; style?: string; diagram?: Diagram; core?: boolean; concept?: string };
 
 const hash = (s: string) => {
   let h = 2166136261;

@@ -15,6 +15,8 @@ import { deleteAllPlayers, deletePlayer } from "@/server/player-data";
 import { ConceptSchema } from "@/domain/concepts";
 import { LEVELS, readiness, type Level } from "@/domain/readiness";
 import { TermsSchema } from "@/domain/terms";
+import { TREE_NUMBERS } from "@/domain/route-tree";
+import { refreshLibraryTopics, saveRouteTree, TEAM_BUILT } from "@/library/sync";
 import type { Box } from "@/ingest/boxes";
 import {
   appendChunk,
@@ -290,13 +292,25 @@ export async function saveSettingsAction(teamId: string, fd: FormData): Promise<
   revalidatePath(`/t/${teamId}`, "layout");
 }
 
+/** The team's route tree from the Settings form: numbered or names only, and the route for each number. */
+export async function saveRouteTreeAction(teamId: string, fd: FormData): Promise<void> {
+  const { user } = await requireCoach(teamId);
+  const numbered = fd.get("numbered") !== "no";
+  const routes = TREE_NUMBERS.map((n) => ({ n, route: String(fd.get(`route_${n}`) ?? "") })).filter((r) => r.route);
+  await saveRouteTree(teamId, { numbered, routes }, user.id);
+  revalidatePath(`/t/${teamId}`, "layout");
+  redirect(`/t/${teamId}/settings?routes=saved#routes`);
+}
+
 export async function saveTermsAction(teamId: string, terms: unknown): Promise<Result> {
   try {
-    await requireCoach(teamId);
+    const { user } = await requireCoach(teamId);
     const parsed = TermsSchema.parse(terms);
     // drop blanks
     for (const group of Object.values(parsed)) for (const k of Object.keys(group)) if (!group[k]?.trim()) delete group[k];
     await db.update(teams).set({ terms: parsed }).where(eq(teams.id, teamId));
+    // Basics topics built from the team's words pick up the new names
+    await refreshLibraryTopics(teamId, TEAM_BUILT, user.id);
     revalidatePath(`/t/${teamId}/settings`);
     return { ok: true };
   } catch (err) {

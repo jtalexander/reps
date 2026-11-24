@@ -8,6 +8,7 @@ import { requirePlayer } from "@/server/player-session";
 import { pageRefs } from "@/teach/page-images";
 import { approvedFor, practiceSet } from "@/teach/service";
 import { audienceOf } from "@/teach/types";
+import { playsByConcept } from "@/library/concept-plays";
 import { LearnFlow } from "./learn-flow";
 
 export const metadata = { title: "Learn" };
@@ -22,6 +23,10 @@ export default async function Learn({ params }: PageProps<"/study/learn/[topicId
   const { lessons } = await approvedFor(me.team.id, group);
   const mine = lessons.filter((l) => l.topicId === topicId).sort((a, b) => (a.audience === "ALL" ? -1 : 1) - (b.audience === "ALL" ? -1 : 1));
   const check = await practiceSet(me.team.id, me.player.id, group, 4, topicId);
+  const ours = await playsByConcept(
+    me.team.id,
+    mine.map((l) => l.conceptKey ?? ""),
+  );
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 px-4 py-5">
       <Link href="/study" className="text-sm text-muted underline">
@@ -29,7 +34,7 @@ export default async function Learn({ params }: PageProps<"/study/learn/[topicId
       </Link>
       <h1 className="text-4xl">{topic.name}</h1>
       <LearnFlow
-        lessons={mine.map((l) => ({ id: l.id, title: l.title, body: l.body, audience: l.audience, sourcePages: l.sourcePages, diagram: l.diagram }))}
+        lessons={mine.map((l) => ({ id: l.id, title: l.title, body: l.body, audience: l.audience, sourcePages: l.sourcePages, diagram: l.diagram, plays: l.conceptKey ? (ours[l.conceptKey] ?? []) : undefined }))}
         check={check}
         pages={await pageRefs(me.team.id)}
       />

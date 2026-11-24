@@ -10,9 +10,10 @@ import { db, type Db } from "@/db";
 import { teams } from "@/db/schema";
 import { lessons, questions, topics } from "@/db/teach-schema";
 import { LEVELS, type Level } from "@/domain/readiness";
+import { cleanTree, type RouteTree } from "@/domain/route-tree";
 import { topicKey } from "@/teach/service";
 import { LIBRARY, LIBRARY_BY_KEY } from "./index";
-import type { LibLesson, LibQuestion, LibStyle, LibTopic } from "./types";
+import type { LibLesson, LibQuestion, LibStyle, LibTopic, TeamCtx } from "./types";
 
 const levelIdx = (l: Level) => LEVELS.indexOf(l);
 
@@ -29,8 +30,9 @@ export function allStyles(): LibStyle[] {
   return [...seen.values()];
 }
 
-/** The lessons and questions of a topic for a team's level and style picks. */
-export function contentFor(t: LibTopic, level: Level, picks: Record<string, string>): { lessons: LibLesson[]; questions: LibQuestion[] } {
+/** The lessons and questions of a topic for a team's level, style picks and (for team-built topics) its setup. */
+export function contentFor(t: LibTopic, level: Level, picks: Record<string, string>, team?: TeamCtx): { lessons: LibLesson[]; questions: LibQuestion[] } {
+  const base = t.build && team ? t.build(team) : { lessons: t.lessons, questions: t.questions };
   const styles = new Map((t.styles ?? []).map((s) => [s.key, styleChoice(s, picks)]));
   const ok = (x: { minLevel?: Level; style?: string }) => {
     if (levelIdx(x.minLevel ?? t.level) > levelIdx(level)) return false;
@@ -38,13 +40,16 @@ export function contentFor(t: LibTopic, level: Level, picks: Record<string, stri
     const [k, o] = x.style.split(":");
     return styles.get(k!) === o;
   };
-  return { lessons: t.lessons.filter(ok), questions: t.questions.filter(ok) };
+  return { lessons: base.lessons.filter(ok), questions: base.questions.filter(ok) };
 }
 
 async function teamInfo(teamId: string, database: Db) {
-  const [team] = await database.select({ level: teams.level, picks: teams.libraryStyles }).from(teams).where(eq(teams.id, teamId));
+  const [team] = await database
+    .select({ level: teams.level, picks: teams.libraryStyles, routeTree: teams.routeTree, terms: teams.terms })
+    .from(teams)
+    .where(eq(teams.id, teamId));
   if (!team) throw new Error("Team not found.");
-  return team;
+  return { ...team, ctx: { routeTree: team.routeTree ?? null, terms: team.terms } satisfies TeamCtx };
 }
 
 /** The team's library topics, by library key. */
@@ -59,7 +64,7 @@ export async function libraryState(teamId: string, database: Db = db) {
 /** Replace a library topic's lessons and questions with the current library content. */
 async function writeContent(teamId: string, topicId: string, t: LibTopic, userId: string | null, database: Db) {
   const team = await teamInfo(teamId, database);
-  const content = contentFor(t, team.level, team.picks);
+  const content = contentFor(t, team.level, team.picks, team.ctx);
   const now = new Date();
   await database.transaction(async (tx) => {
     // lessons carry no answers: replace them; questions may have answers: retire them
@@ -77,6 +82,7 @@ async function writeContent(teamId: string, topicId: string, t: LibTopic, userId
           title: l.title,
           body: l.body,
           diagram: l.diagram ?? null,
+          conceptKey: l.concept ?? null,
           status: "approved" as const,
           approvedBy: userId,
           approvedAt: now,
@@ -173,4 +179,23 @@ export async function setLibraryStyle(teamId: string, styleKey: string, optionKe
     const have = state.get(t.key);
     if (have && !have.archived && (t.styles ?? []).some((s) => s.key === styleKey)) await writeContent(teamId, have.id, t, userId, database);
   }
+}
+
+/** Rewrite these library topics where the team has them (after its route tree or words change). */
+export async function refreshLibraryTopics(teamId: string, keys: string[], userId: string | null, database: Db = db) {
+  const state = await libraryState(teamId, database);
+  for (const key of keys) {
+    const t = LIBRARY_BY_KEY.get(key);
+    const have = state.get(key);
+    if (t && have && !have.archived) await writeContent(teamId, have.id, t, userId, database);
+  }
+}
+
+/** Keys of the library topics built from the team's own setup. */
+export const TEAM_BUILT = LIBRARY.filter((t) => t.build).map((t) => t.key);
+
+/** Save the team's route tree; the Basics topics built from it are rewritten. */
+export async function saveRouteTree(teamId: string, tree: RouteTree, userId: string | null, database: Db = db) {
+  await database.update(teams).set({ routeTree: cleanTree(tree) }).where(eq(teams.id, teamId));
+  await refreshLibraryTopics(teamId, TEAM_BUILT, userId, database);
 }

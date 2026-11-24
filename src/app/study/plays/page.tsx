@@ -6,9 +6,11 @@ import { PlayCards } from "./play-cards";
 
 export const metadata = { title: "My plays" };
 
-export default async function MyPlays() {
+export default async function MyPlays({ searchParams }: PageProps<"/study/plays">) {
+  const { play } = await searchParams;
   const me = await requirePlayer();
   const plays = await quizPlays(me.team.id);
+  const start = Math.max(0, plays.findIndex((p) => p.id === play));
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-3 px-4 py-4">
       <Link href="/study" className="text-sm text-muted underline">
@@ -18,7 +20,7 @@ export default async function MyPlays() {
       {plays.length === 0 ? (
         <p className="card p-4 text-sm text-muted">No approved plays yet.</p>
       ) : (
-        <PlayCards plays={plays.map((p) => ({ id: p.id, data: p.data }))} position={me.position} terms={TermsSchema.parse(me.team.terms ?? {})} />
+        <PlayCards plays={plays.map((p) => ({ id: p.id, data: p.data }))} start={start} position={me.position} terms={TermsSchema.parse(me.team.terms ?? {})} />
       )}
     </main>
   );

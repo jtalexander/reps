@@ -5,6 +5,8 @@
  * approved Teach topics when the coach adds it. No AI runs for it.
  */
 import type { Level } from "@/domain/readiness";
+import type { RouteTree } from "@/domain/route-tree";
+import type { Terms } from "@/domain/terms";
 import type { Audience } from "@/teach/types";
 
 export type Side = "general" | "offense" | "defense" | "special";
@@ -72,6 +74,8 @@ export interface LibLesson extends Common {
   title: string;
   /** plain text; lines starting with "- " are bullets; blank line = new paragraph */
   body: string;
+  /** the concept it teaches (a CONCEPT_LIBRARY key like "smash"): players see the team's plays that use it */
+  concept?: string;
 }
 
 export type LibQuestionData =
@@ -104,4 +108,16 @@ export interface LibTopic {
   styles?: LibStyle[];
   lessons: LibLesson[];
   questions: LibQuestion[];
+  /**
+   * Content made from the team's own setup (its route tree, its words)
+   * instead of the fixed lessons and questions, which hold the version for a
+   * team that hasn't set anything.
+   */
+  build?: (team: TeamCtx) => { lessons: LibLesson[]; questions: LibQuestion[] };
+}
+
+/** What a team-built topic can draw on. */
+export interface TeamCtx {
+  routeTree: RouteTree | null;
+  terms: Terms;
 }

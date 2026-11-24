@@ -25,6 +25,7 @@ import type { Concept } from "@/domain/concepts";
 import type { PlayData } from "@/domain/play";
 import type { Naming } from "@/domain/naming";
 import type { Terms } from "@/domain/terms";
+import type { RouteTree } from "@/domain/route-tree";
 
 const id = () => uuid().primaryKey().defaultRandom();
 const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow();
@@ -127,6 +128,8 @@ export const teams = pgTable("teams", {
   shareAnswers: boolean().notNull().default(true),
   /** Football basics: the coach's pick where coaches teach it differently, { styleKey: optionKey } */
   libraryStyles: jsonb().$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+  /** the team's route tree (numbers to routes), set on Settings; null = not set yet */
+  routeTree: jsonb().$type<RouteTree>(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

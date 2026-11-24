@@ -5,8 +5,8 @@ import { COVERAGES, type PlayData } from "@/domain/play";
 import { assignmentText, formationLabel, playerMatches } from "@/domain/quiz";
 import { reactionLabel, term, type Terms } from "@/domain/terms";
 
-export function PlayCards({ plays, position, terms }: { plays: Array<{ id: string; data: PlayData }>; position: string; terms: Terms }) {
-  const [i, setI] = useState(0);
+export function PlayCards({ plays, position, terms, start = 0 }: { plays: Array<{ id: string; data: PlayData }>; position: string; terms: Terms; start?: number }) {
+  const [i, setI] = useState(start);
   const [flip, setFlip] = useState(false);
   const [hideMine, setHideMine] = useState(true);
   const [k, setK] = useState(0);

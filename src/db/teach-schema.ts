@@ -126,6 +126,8 @@ export const lessons = pgTable(
     sourcePages: integer().array().notNull().default(sql`'{}'::int[]`),
     /** a field drawing (Football basics lessons) */
     diagram: jsonb().$type<Diagram | null>(),
+    /** the pass/run concept this lesson teaches (Football basics), so players see the team's plays that use it */
+    conceptKey: text(),
     status: text().$type<"draft" | "approved" | "rejected">().notNull().default("draft"),
     approvedBy: uuid().references(() => users.id, { onDelete: "set null" }),
     approvedAt: timestamp({ withTimezone: true }),

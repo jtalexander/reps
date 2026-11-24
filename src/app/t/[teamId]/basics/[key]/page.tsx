@@ -8,6 +8,7 @@ import { AUDIENCE_LABEL } from "@/teach/types";
 import { LessonBody } from "../../teach/review/review-queue";
 import { SubmitButton } from "@/components/submit-button";
 import { addBasicsAction } from "../actions";
+import { playsByConcept } from "@/library/concept-plays";
 
 export const metadata = { title: "Football basics" };
 
@@ -17,7 +18,11 @@ export default async function BasicsTopic({ params }: PageProps<"/t/[teamId]/bas
   const { team } = await requireCoach(teamId);
   const t = LIBRARY_BY_KEY.get(key);
   if (!t || !topicsFor(team.level).includes(t)) notFound();
-  const c = contentFor(t, team.level, team.libraryStyles);
+  const c = contentFor(t, team.level, team.libraryStyles, { routeTree: team.routeTree ?? null, terms: team.terms });
+  const ours = await playsByConcept(
+    teamId,
+    c.lessons.map((l) => l.concept ?? ""),
+  );
   const s = (await libraryState(teamId)).get(t.key);
   const added = s && !s.archived;
 
@@ -56,6 +61,22 @@ export default async function BasicsTopic({ params }: PageProps<"/t/[teamId]/bas
           <h3 className="text-lg font-semibold">{l.title}</h3>
           <LessonBody text={l.body} />
           {l.diagram && <FieldDiagram diagram={l.diagram} />}
+          {l.concept && (
+            <div className="flex flex-col gap-1">
+              <p className="eyebrow">Our plays that use this</p>
+              {(ours[l.concept] ?? []).length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {ours[l.concept]!.map((p) => (
+                    <Link key={p.id} href={`/t/${teamId}/plays/${p.id}`} className="border border-line bg-card px-2 py-1 font-label text-xs font-bold tracking-wide uppercase hover:border-brand">
+                      {p.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted">None of your approved plays use it yet. When one does, players see it here.</p>
+              )}
+            </div>
+          )}
         </article>
       ))}
 

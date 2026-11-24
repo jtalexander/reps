@@ -82,7 +82,7 @@ export default async function Basics({ params }: PageProps<"/t/[teamId]/basics">
             <ul className="flex flex-col gap-2">
               {list.map((t) => {
                 const s = live(t.key);
-                const c = contentFor(t, team.level, picks);
+                const c = contentFor(t, team.level, picks, { routeTree: team.routeTree ?? null, terms: team.terms });
                 const old = s && (s.version ?? 0) < t.version;
                 return (
                   <li key={t.key} className={`card flex flex-col gap-2 p-4 ${s ? "border-ok" : ""}`}>

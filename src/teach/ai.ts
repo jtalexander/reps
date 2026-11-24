@@ -13,7 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { NamingSchema } from "@/domain/naming";
+import { NamingDraftSchema } from "@/domain/naming";
 import { checkAi, recordUsage } from "./usage";
 import { AUDIENCES } from "./types";
 
@@ -409,11 +409,12 @@ From what Reps read on every page of the playbook, write down the team's naming 
 - Formation tags are words added to a formation that move players (e.g. ZIP, ZOOT, STACK); list each once, not once per formation.
 - Plays: every run, pass, screen and gadget name, with what it is in a few words.
 - Leave out wristband codes (ALPHA, BRAVO..., pod colors and numbers) and team code names for plays; those are a separate system. "other" is for protections, tempos, cadence words, audible and check words.
-- List the pages where each word is shown or explained.`;
+- List the pages where each word is shown or explained.
+- route_tree: if the playbook numbers its routes (a route tree), list each number and the route it calls, as written. Empty if it doesn't.`;
 
 export async function draftNaming(material: string) {
   return structured(
-    NamingSchema,
+    NamingDraftSchema,
     NAMING_SYSTEM,
     [{ type: "text", text: `${material}
 
