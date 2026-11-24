@@ -602,5 +602,24 @@ describe("teach loop", () => {
     expect((await db.select().from(jobs).where(and(eq(jobs.teamId, teamF.id), eq(jobs.kind, "convert_drawing"), eq(jobs.ref, "1.d1")))).length).toBeLessThanOrEqual(1);
     // nothing drawn: say so
     expect(await lineupFor(teamF.id, { formation: "BUNCH", dir: "RIGHT", tag: "" }, null, db)).toMatchObject({ kind: "none" });
+
+    // pick the play and Reps draws it: the team's own VEER first (jobs laid on by letter, flipped for LEFT)
+    const { drawPlay, fitPlay } = await import("@/teach/play-draw");
+    const call = (play: string, more: Partial<import("@/teach/play-draw").PlayCall> = {}) => ({ formation: "VEER", dir: "RIGHT" as const, tag: "", play, playDir: "" as const, motion: "", motionPlayer: "", ...more });
+    expect(fitPlay("SPREAD RIGHT ZOOT, SMASH", call("SMASH", { formation: "SPREAD" }))?.mirror).toBe(false);
+    expect(fitPlay("SPREAD RIGHT, 24 POWER LEFT", call("24 POWER", { formation: "SPREAD", playDir: "RIGHT" }))?.mirror).toBe(true);
+    expect(fitPlay("SPREAD RIGHT, 24 POWER", call("SMASH"))).toBeNull();
+    const board = (lu.kind === "lineup" ? lu.players : []).map((p) => ({ ...p }));
+    let drawn = await drawPlay(teamF.id, call("VEER"), board, null, db);
+    expect(drawn.kind === "done" && drawn.jobs?.find((j) => j.id === "QB")?.path).toEqual([[0, 0], [2, 8]]);
+    drawn = await drawPlay(teamF.id, call("VEER", { playDir: "LEFT" }), board, null, db);
+    expect(drawn.kind === "done" && drawn.jobs?.find((j) => j.id === "QB")?.path).toEqual([[-0, 0], [-2, 8]]);
+    // not drawn in this playbook, but a known concept: Reps' own version
+    drawn = await drawPlay(teamF.id, call("SMASH"), board, null, db);
+    expect(drawn.kind === "done" && drawn.notes[0]).toMatch(/standard Smash/);
+    // unknown play: say so; a motion with no drawing gets a guessed path
+    drawn = await drawPlay(teamF.id, call("BANANA", { motion: "JET", motionPlayer: "QB" }), board, null, db);
+    expect(drawn.kind === "done" && drawn.notes.join(" ")).toMatch(/doesn't have BANANA drawn.*guessed the JET motion/);
+    expect(drawn.kind === "done" && drawn.motion?.end).not.toBeNull();
   });
 });

@@ -16,6 +16,9 @@ import { ConceptSchema } from "@/domain/concepts";
 import { LEVELS, readiness, type Level } from "@/domain/readiness";
 import { TermsSchema } from "@/domain/terms";
 import { lineupFor, type LineupResult } from "@/teach/lineup";
+import { drawPlay, type DrawResult } from "@/teach/play-draw";
+import { PlayerSchema } from "@/domain/play";
+import { z } from "zod";
 import { requestOrigin } from "@/lib/origin";
 import { TREE_NUMBERS } from "@/domain/route-tree";
 import { refreshLibraryTopics, saveRouteTree, TEAM_BUILT } from "@/library/sync";
@@ -379,6 +382,25 @@ export async function lineupForAction(teamId: string, call: { formation: string;
       await requestOrigin(),
     );
     return { ok: true, lineup };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Every player's job and the motion for the picked play, laid onto the coach's lineup (may start reading a drawing; ask again). */
+export async function drawPlayAction(teamId: string, call: Record<string, unknown>, lineup: unknown): Promise<Result<{ result: DrawResult }>> {
+  try {
+    await requireCoach(teamId);
+    const s = (v: unknown) => String(v ?? "").slice(0, 40);
+    const side = (v: unknown) => (v === "LEFT" ? "LEFT" : v === "RIGHT" ? "RIGHT" : "");
+    const players = z.array(PlayerSchema).max(20).parse(lineup);
+    const result = await drawPlay(
+      teamId,
+      { formation: s(call.formation), dir: side(call.dir) || "RIGHT", tag: s(call.tag), play: s(call.play), playDir: side(call.playDir), motion: s(call.motion), motionPlayer: s(call.motionPlayer) },
+      players,
+      await requestOrigin(),
+    );
+    return { ok: true, result };
   } catch (err) {
     return fail(err);
   }

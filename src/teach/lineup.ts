@@ -26,13 +26,13 @@ export type LineupResult =
   | { kind: "converting"; from: string; page: number }
   | { kind: "none"; why: string };
 
-const words = (s: string) =>
+export const words = (s: string) =>
   s
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, " ")
     .split(" ")
     .filter(Boolean);
-const SIDES: Record<string, "RIGHT" | "LEFT"> = { RIGHT: "RIGHT", RT: "RIGHT", R: "RIGHT", LEFT: "LEFT", LT: "LEFT", L: "LEFT" };
+export const SIDES: Record<string, "RIGHT" | "LEFT"> = { RIGHT: "RIGHT", RT: "RIGHT", R: "RIGHT", LEFT: "LEFT", LT: "LEFT", L: "LEFT" };
 
 /**
  * How well a drawing or play name fits the call (null = it doesn't): the
@@ -90,21 +90,35 @@ export async function lineupFor(teamId: string, call: Call, origin: string | nul
   if (!bestDrawing) return { kind: "none", why: `Your playbook has no drawing of ${label}. Drag the players into place.` };
 
   // turn that one drawing into a play now (the builder asks again until it's done)
-  const key = bestDrawing.d.key;
+  const read = await readDrawingOnce(teamId, bestDrawing.d.key, origin, database);
+  if (read.state === "reading") return { kind: "converting", from: bestDrawing.d.label, page: bestDrawing.d.pageNo };
+  if (read.state === "blocked") return { kind: "none", why: read.reason };
+  // read before and nothing usable came of it: don't spend AI on it again
+  if (bestPlay) return { kind: "lineup", players: lineupOf(bestPlay.p.data!.players, bestPlay.f!.mirror), from: bestPlay.p.name, page: bestPlay.p.page ?? null, mirrored: bestPlay.f!.mirror };
+  return { kind: "none", why: `Reps couldn't read your drawing of ${bestDrawing.d.label} (p${bestDrawing.d.pageNo}). Drag the players into place.` };
+}
+
+/**
+ * Make sure Reps has read one playbook drawing into a play: starts it the
+ * first time (one AI call), says "reading" while it runs, "done" once any
+ * read finished (worked or not; a drawing is never read twice).
+ */
+export async function readDrawingOnce(
+  teamId: string,
+  key: string,
+  origin: string | null,
+  database: Db = db,
+): Promise<{ state: "reading" } | { state: "done" } | { state: "blocked"; reason: string }> {
   const runs = await database
     .select({ status: jobs.status })
     .from(jobs)
     .where(and(eq(jobs.teamId, teamId), eq(jobs.kind, "convert_drawing"), eq(jobs.ref, key)));
-  if (runs.some((j) => j.status === "queued" || j.status === "running")) return { kind: "converting", from: bestDrawing.d.label, page: bestDrawing.d.pageNo };
-  if (runs.length) {
-    // read before and nothing usable came of it: don't spend AI on it again
-    if (bestPlay) return { kind: "lineup", players: lineupOf(bestPlay.p.data!.players, bestPlay.f!.mirror), from: bestPlay.p.name, page: bestPlay.p.page ?? null, mirrored: bestPlay.f!.mirror };
-    return { kind: "none", why: `Reps couldn't read your drawing of ${bestDrawing.d.label} (p${bestDrawing.d.pageNo}). Drag the players into place.` };
-  }
+  if (runs.some((j) => j.status === "queued" || j.status === "running")) return { state: "reading" };
+  if (runs.length) return { state: "done" };
   const blocked = await aiBlockedReason(teamId, database);
-  if (blocked) return { kind: "none", why: blocked };
+  if (blocked) return { state: "blocked", reason: blocked };
   await prepareCrop(teamId, key, database);
   await database.insert(jobs).values({ teamId, kind: "convert_drawing", ref: key });
   await dispatchWorkers(teamId, origin, 1, database);
-  return { kind: "converting", from: bestDrawing.d.label, page: bestDrawing.d.pageNo };
+  return { state: "reading" };
 }

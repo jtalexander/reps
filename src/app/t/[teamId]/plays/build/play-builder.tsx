@@ -6,7 +6,7 @@ import type { Naming } from "@/domain/naming";
 import { emptyPlay, flipPlay, isLineman, PLAY_TYPES, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTES } from "@/domain/routes";
 import { safeCall } from "@/lib/safe-call";
-import { lineupForAction, saveBuiltPlayAction } from "../../actions";
+import { drawPlayAction, lineupForAction, saveBuiltPlayAction } from "../../actions";
 
 const mk = (id: string, x: number, y: number): Player => ({
   id,
@@ -87,6 +87,7 @@ export function PlayBuilder(props: {
 
   // Picking a formation lines the players up the way the playbook draws it.
   const [lineupNote, setLineupNote] = useState<{ text: string; tone: "ok" | "muted" | "warn" } | null>(null);
+  const [lineupVersion, setLineupVersion] = useState(0);
   const asked = useRef("");
   useEffect(() => {
     const call = { formation: parts.formation.trim(), dir: parts.dir, tag: parts.tag.trim() };
@@ -115,6 +116,7 @@ export function PlayBuilder(props: {
           return old ? { ...np, assignment_type: old.assignment_type, route: old.route, block: old.block, path: old.path } : np;
         }),
       }));
+      setLineupVersion((v) => v + 1);
       setLineupNote({ text: `Lined up from ${l.from}${l.page ? ` (p${l.page})` : ""}${l.mirrored ? ", flipped" : ""}. Drag anyone who should be somewhere else.`, tone: "ok" });
     };
     const start = setTimeout(run, 400); // wait for typing to settle
@@ -123,6 +125,52 @@ export function PlayBuilder(props: {
       if (timer) clearTimeout(timer);
     };
   }, [parts.formation, parts.dir, parts.tag, props.teamId]);
+
+  // Picking the play (and motion) draws everyone's job onto this lineup.
+  const [playNote, setPlayNote] = useState<{ lines: string[]; tone: "ok" | "muted" | "warn" } | null>(null);
+  const drawAsked = useRef("");
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+  useEffect(() => {
+    const call = { ...parts };
+    if (!call.play.trim() && !(call.motion.trim() && call.motionPlayer)) return;
+    const ask = JSON.stringify([call, lineupVersion]);
+    drawAsked.current = ask;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const run = async () => {
+      const lineup = dataRef.current.players.map((p) => ({ ...p, assignment_type: "unknown" as const, route: null, block: null, path: null }));
+      const r = await safeCall(() => drawPlayAction(props.teamId, call, lineup), "Drawing the play");
+      if (drawAsked.current !== ask) return;
+      if (!r.ok) return setPlayNote({ lines: [r.error], tone: "warn" });
+      const res = r.result;
+      if (res.kind === "reading") {
+        setPlayNote({ lines: [`Reading your drawing of ${res.from} (p${res.page})… a few seconds.`], tone: "muted" });
+        if (++tries < 40) timer = setTimeout(run, 3000);
+        else setPlayNote({ lines: ["That's taking too long. Draw the jobs yourself, or try again in a minute."], tone: "warn" });
+        return;
+      }
+      setData((d) => ({
+        ...d,
+        play_type: res.playType ?? d.play_type,
+        motion: res.motion ?? (call.motion.trim() && call.motionPlayer ? d.motion : res.jobs ? null : d.motion),
+        players: res.jobs
+          ? d.players.map((p) => {
+              const j = res.jobs!.find((x) => x.id === p.id);
+              return j ? { ...p, assignment_type: j.assignment_type, route: j.route, block: j.block, path: j.path } : { ...p, assignment_type: "unknown", route: null, block: null, path: null };
+            })
+          : d.players,
+      }));
+      setPlayNote({ lines: res.notes, tone: res.missing.length || res.notes.some((n) => n.startsWith("Reps doesn't")) ? "warn" : "ok" });
+    };
+    const start = setTimeout(run, 400);
+    return () => {
+      clearTimeout(start);
+      if (timer) clearTimeout(timer);
+    };
+  }, [parts.play, parts.playDir, parts.motion, parts.motionPlayer, lineupVersion, props.teamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const me = data.players.find((p) => p.id === sel) ?? null;
   const set = (fn: (d: PlayData) => PlayData) => setData((d) => fn(d));
@@ -146,7 +194,10 @@ export function PlayBuilder(props: {
       ...data,
       name: name || "unknown",
       formation: { ...data.formation, name: [parts.formation, parts.formation ? parts.dir : "", parts.tag].filter(Boolean).join(" ") || data.formation.name, strength: parts.dir === "LEFT" ? "left" : parts.formation ? "right" : data.formation.strength },
-      motion: parts.motionPlayer && parts.motion ? { player: parts.motionPlayer, type: "unknown", direction: (data.players.find((p) => p.id === parts.motionPlayer)?.x ?? 0) > 0 ? "left" : "right", timing: "unknown", end: null } : data.motion,
+      motion:
+        parts.motionPlayer && parts.motion && data.motion?.player !== parts.motionPlayer
+          ? { player: parts.motionPlayer, type: "unknown", direction: (data.players.find((p) => p.id === parts.motionPlayer)?.x ?? 0) > 0 ? "left" : "right", timing: "unknown", end: null }
+          : data.motion,
     };
     const r = await safeCall(() => saveBuiltPlayAction(props.teamId, props.playId, play), "Saving");
     setBusy(false);
@@ -199,6 +250,13 @@ export function PlayBuilder(props: {
             </select>
           </label>
         </div>
+        {playNote && (
+          <div className={`flex flex-col text-sm ${playNote.tone === "ok" ? "text-ok" : playNote.tone === "warn" ? "text-warn" : "text-muted"}`} aria-live="polite">
+            {playNote.lines.map((l) => (
+              <span key={l}>{l}</span>
+            ))}
+          </div>
+        )}
         {lineupNote && (
           <p className={`text-sm ${lineupNote.tone === "ok" ? "text-ok" : lineupNote.tone === "warn" ? "text-warn" : "text-muted"}`} aria-live="polite">
             {lineupNote.text}
