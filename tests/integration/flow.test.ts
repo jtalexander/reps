@@ -176,15 +176,46 @@ describe("quiz flow", () => {
     const pub = publicQuestion(questions[0]!, 0, SMASH);
     expect(pub).not.toHaveProperty("answer");
     expect(pub).not.toHaveProperty("explanation");
-    // answer wrong on purpose
-    const q = questions[0]!;
+    // answer wrong on purpose (a pick or order question)
+    const at = questions.findIndex((x) => x.kind !== "draw");
+    const q = questions[at]!;
     const wrong = Array.isArray(q.answer) ? [...q.answer].reverse() : q.choices.find((c) => c.id !== q.answer)!.id;
-    const r = await answerQuestion({ teamId: teamA.id, playerId: qb!.id, sessionId: session.id, index: 0, given: wrong, responseMs: 2300 }, db);
+    const r = await answerQuestion({ teamId: teamA.id, playerId: qb!.id, sessionId: session.id, index: at, given: wrong, responseMs: 2300 }, db);
     expect(r.correct).toBe(false);
     expect(r.explanation.length).toBeGreaterThan(0);
     // another team's player cannot answer this session
     const [other] = await db.insert(players).values({ teamId: teamB.id, name: "Other" }).returning();
     await expect(answerQuestion({ teamId: teamB.id, playerId: other!.id, sessionId: session.id, index: 1, given: "c0", responseMs: 1 }, db)).rejects.toThrow(/not found/i);
+  });
+
+  it("draw your job: the drawn line is graded on the server against the play", async () => {
+    const { startSession, answerQuestion } = await import("@/server/quiz");
+    const { routePath } = await import("@/domain/routes");
+    const { teams } = await import("@/db/schema");
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamA.id));
+    const runner = SMASH.players.find((p) => p.route && p.id !== "QB")!;
+    const [wr] = await db.insert(players).values({ teamId: teamA.id, name: "Wide out", positions: [runner.id] }).returning();
+    const { questions, session } = await startSession({ team: { ...team!, allowFlip: false }, playerId: wr!.id, position: runner.id, mode: "draw_job", count: 3 }, db);
+    expect(questions.length).toBeGreaterThan(0);
+    expect(questions.every((x) => x.kind === "draw" && x.answer === runner.id)).toBe(true);
+    // his own route, drawn from his spot: right
+    const [play] = await db.select().from(plays).where(eq(plays.id, questions[0]!.playId));
+    const me = play!.data!.players.find((p) => p.id === runner.id)!;
+    const rel = routePath(me.route!, me, play!.data!.formation.strength === "left" ? "left" : "right")!;
+    const drawn = (pts: Array<[number, number]>) => JSON.stringify({ pts: pts.map(([x, y]) => [me.x + x, me.y + y]), pen: { style: "solid", end: "arrow" } });
+    let r = await answerQuestion({ teamId: teamA.id, playerId: wr!.id, sessionId: session.id, index: 0, given: drawn(rel), responseMs: 4000 }, db);
+    expect(r.correct).toBe(true);
+    expect(r.note).toMatch(/^Right/);
+    // straight back toward the quarterback: wrong, with a note saying what it is
+    if (questions.length > 1) {
+      r = await answerQuestion({ teamId: teamA.id, playerId: wr!.id, sessionId: session.id, index: 1, given: drawn([[0, 0], [0, -4]]), responseMs: 4000 }, db);
+      expect(r.correct).toBe(false);
+      expect(r.note).toMatch(/you run/);
+    }
+    // junk instead of a drawing is a miss, not a crash
+    const again = await startSession({ team: { ...team!, allowFlip: false }, playerId: wr!.id, position: runner.id, mode: "draw_job", count: 1 }, db);
+    r = await answerQuestion({ teamId: teamA.id, playerId: wr!.id, sessionId: again.session.id, index: 0, given: "c0", responseMs: 1 }, db);
+    expect(r.correct).toBe(false);
   });
 
   it("player diagrams never include the hidden route or the play's reads", async () => {

@@ -42,6 +42,25 @@ export interface PlaySvgProps {
   pen?: Line | null;
   /** the hand-drawn line in field yards, starting at the player (or where his motion ends) */
   onDraw?: (id: string, pts: Point[]) => void;
+  /** a line drawn by hand on top of the play (a quiz answer): in field yards as shown */
+  overlay?: { pts: Point[]; pen: Line; tone: "draft" | "ok" | "bad" } | null;
+}
+
+/** A hand line with its own arrowhead or T, in one color (markers can't take the line's color). */
+function HandLine({ pts, pen, color }: { pts: Point[]; pen: Line; color: string }) {
+  if (pts.length < 2) return null;
+  const [a, b] = [pts[pts.length - 2]!, pts[pts.length - 1]!];
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  const [ux, uy] = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+  const [nx, ny] = [-uy, ux];
+  const tip = (dx: number, dy: number) => `${(b[0] + dx).toFixed(2)} ${sy(b[1] + dy).toFixed(2)}`;
+  return (
+    <g pointerEvents="none">
+      <path d={pen.style === "squiggly" ? zigzag(...pts) : toPath(pts, 0, 0)} stroke={color} strokeWidth={0.32} strokeDasharray={pen.style === "dotted" ? "0.6 0.5" : undefined} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {pen.end === "arrow" && <path d={`M${tip(0, 0)} L${tip(-ux * 1 + nx * 0.5, -uy * 1 + ny * 0.5)} L${tip(-ux * 1 - nx * 0.5, -uy * 1 - ny * 0.5)} Z`} fill={color} />}
+      {pen.end === "t" && <path d={`M${tip(nx * 0.7, ny * 0.7)} L${tip(-nx * 0.7, -ny * 0.7)}`} stroke={color} strokeWidth={0.32} strokeLinecap="round" />}
+    </g>
+  );
 }
 
 /** Field area a play uses: every player, the end of every line, motion ends and defenders. */
@@ -403,6 +422,7 @@ export function PlaySvg(props: PlaySvgProps) {
           );
         })}
       {lone}
+      {props.overlay && <HandLine pts={props.overlay.pts} pen={props.overlay.pen} color={props.overlay.tone === "ok" ? "var(--ok)" : props.overlay.tone === "bad" ? "var(--bad)" : "var(--brand)"} />}
       {live && live.length > 1 && (
         <path
           d={props.pen?.style === "squiggly" ? zigzag(...live) : toPath(live, 0, 0)}

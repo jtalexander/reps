@@ -7,10 +7,12 @@ import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { answers, plays, quizSessions, srsItems, studySets, teams } from "@/db/schema";
-import type { PlayData } from "@/domain/play";
+import { z } from "zod";
+import { gradeDrawing } from "@/domain/draw-grade";
+import { LineSchema, type PlayData } from "@/domain/play";
 import { isCorrect, type QuizContext, type QuizPlay, type QuizType, type Question } from "@/domain/quiz";
 import { buildQuiz, nextState, type QuizMode, type SrsState } from "@/domain/srs";
-import { TermsSchema } from "@/domain/terms";
+import { term, TermsSchema } from "@/domain/terms";
 import { approvedPlays } from "./plays";
 
 export type Team = typeof teams.$inferSelect;
@@ -130,6 +132,16 @@ export async function getSession(teamId: string, playerId: string, sessionId: st
   return s ?? null;
 }
 
+const point = z.tuple([z.number().min(-60).max(60), z.number().min(-40).max(60)]);
+const DrawnSchema = z.object({ pts: z.array(point).min(2).max(600), pen: LineSchema });
+const safeJson = (v: unknown) => {
+  try {
+    return typeof v === "string" ? JSON.parse(v) : null;
+  } catch {
+    return null;
+  }
+};
+
 export async function answerQuestion(
   args: { teamId: string; playerId: string; sessionId: string; index: number; given: string | string[]; responseMs: number; now?: Date },
   database: Db = db,
@@ -139,8 +151,21 @@ export async function answerQuestion(
   const questions = s.questions as Question[];
   const q = questions[args.index];
   if (!q) throw new Error("Question not found.");
+  const [play] = await database.select({ data: plays.data }).from(plays).where(and(eq(plays.teamId, args.teamId), eq(plays.id, q.playId)));
   // A timed-out speed question arrives with given = "" and counts as a miss.
-  const correct = isCorrect(q, args.given);
+  let correct = isCorrect(q, args.given);
+  let note: string | null = null;
+  if (q.kind === "draw") {
+    // a drawn answer: checked against the play like a coach would
+    const drawn = DrawnSchema.safeParse(safeJson(args.given));
+    if (drawn.success && play?.data) {
+      const [t] = await database.select({ terms: teams.terms }).from(teams).where(eq(teams.id, args.teamId));
+      const terms = TermsSchema.parse(t?.terms ?? {});
+      const g = gradeDrawing(play.data, String(q.answer), drawn.data, { flip: q.diagram?.flip, routeLabel: (k) => term(terms, "routes", k) });
+      correct = g.correct;
+      note = g.note;
+    } else note = "Draw your line from your spot, then check it.";
+  }
   const now = args.now ?? new Date();
   const inserted = await database
     .insert(answers)
@@ -178,9 +203,8 @@ export async function answerQuestion(
   if (args.index === questions.length - 1) {
     await database.update(quizSessions).set({ finishedAt: now }).where(eq(quizSessions.id, s.id));
   }
-  const [play] = await database.select({ data: plays.data }).from(plays).where(and(eq(plays.teamId, args.teamId), eq(plays.id, q.playId)));
   const reveal = play?.data && q.diagram ? diagramData(play.data, q, true) : null;
-  return { correct, answer: q.answer, explanation: q.explanation, reveal };
+  return { correct, answer: q.answer, explanation: q.explanation, reveal, note };
 }
 
 export async function sessionScore(sessionId: string, database: Db = db) {

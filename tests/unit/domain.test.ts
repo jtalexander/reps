@@ -105,6 +105,7 @@ describe("quiz generation", () => {
           for (const q of questionsFor(type, play, plays, ctx([pos]), 7)) {
             const ids = q.choices.map((c) => c.id);
             if (Array.isArray(q.answer)) expect([...q.answer].sort()).toEqual([...ids].sort());
+            else if (q.kind === "draw") expect(q.answer).toBe(q.diagram?.highlight); // drawn: the answer is whose line it is
             else expect(ids).toContain(q.answer);
             expect(q.explanation.length).toBeGreaterThan(0);
             expect(new Set(q.choices.map((c) => c.label)).size).toBe(q.choices.length);

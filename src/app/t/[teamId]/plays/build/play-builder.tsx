@@ -227,6 +227,8 @@ export function PlayBuilder(props: {
       const g = r.guess;
       const fill: Partial<Parts> = {};
       for (const [k, v] of Object.entries(g.parts) as Array<[keyof Parts, string]>) if (!mine.current.has(k)) fill[k] = v;
+      // a part Reps filled in before but can't tell any more is cleared, not left stale
+      for (const k of Object.keys(auto.current) as Array<keyof Parts>) if (!(k in g.parts) && !mine.current.has(k)) fill[k] = k === "dir" ? "RIGHT" : "";
       auto.current = { ...auto.current, ...fill };
       setPartsRaw((cur) => ({ ...cur, ...fill }));
       setNameNote({ lines: g.notes, same: g.same });

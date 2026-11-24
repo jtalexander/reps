@@ -8,7 +8,7 @@
 import { and, eq } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { plays } from "@/db/schema";
-import { conceptByName, recognizeConcept, type Concept } from "@/domain/concepts";
+import { conceptByName, type Concept } from "@/domain/concepts";
 import type { Naming } from "@/domain/naming";
 import { flipPlay, isLineman, type PlayData, type Player } from "@/domain/play";
 import { normalizeRouteName } from "@/domain/routes";
@@ -137,6 +137,36 @@ export function runConcept(play: PlayData): string | null {
   return null;
 }
 
+/**
+ * The pass concept a drawing shows: every signature route on one side, the
+ * concept with the most of them winning (so a lone slant isn't "Zone/Glance").
+ * RPOs and options only when someone carries the ball.
+ */
+export function passConcept(play: PlayData, concepts: Concept[]): Concept | undefined {
+  const carry = play.players.some((p) => p.assignment_type === "carry");
+  const bySide: Record<"left" | "right", string[]> = { left: [], right: [] };
+  for (const p of play.players) if (p.route) bySide[p.x < 0 ? "left" : "right"].push(normalizeRouteName(p.route.name));
+  const all = [...bySide.left, ...bySide.right];
+  let best: { c: Concept; n: number } | null = null;
+  for (const c of concepts) {
+    if (!c.routes.length || c.kind === "run") continue;
+    if ((c.kind === "rpo" || c.kind === "option") !== carry) continue;
+    const fits = (have: string[]) => {
+      const left = [...have];
+      return c.routes.every((r) => {
+        const i = left.indexOf(normalizeRouteName(r));
+        if (i < 0) return false;
+        left.splice(i, 1);
+        return true;
+      });
+    };
+    if (!(fits(bySide.left) || fits(bySide.right) || (c.routes.length > 2 && fits(all)))) continue;
+    if (!best || c.routes.length > best.n) best = { c, n: c.routes.length };
+  }
+  // a single route isn't a concept
+  return best && best.n >= 2 ? best.c : undefined;
+}
+
 /** The team's word for a concept, if its naming rules have one. */
 function teamWord(concept: Concept, n: Naming | null, concepts: Concept[]): string | null {
   const name = concept.name.toLowerCase();
@@ -230,7 +260,7 @@ export async function nameDrawnPlay(teamId: string, drawn: PlayData, database: D
   } else if (jobs) {
     const concepts = await conceptsForTeam(teamId, database);
     const runKey = runConcept(drawn);
-    const concept = runKey ? concepts.find((c) => c.key === runKey) : recognizeConcept({ ...drawn, name: "unknown", pass_details: null }, concepts);
+    const concept = runKey ? concepts.find((c) => c.key === runKey) : passConcept(drawn, concepts);
     if (concept) {
       const word = teamWord(concept, n, concepts);
       parts.play = word ?? concept.name.toUpperCase();

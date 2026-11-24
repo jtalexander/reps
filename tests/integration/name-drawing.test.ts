@@ -108,6 +108,10 @@ describe("naming a hand-drawn play", () => {
     expect(g.parts.play).toBe("SLANT-FLAT");
     expect(g.same).toBeNull();
     expect(g.notes.join(" ")).toMatch(/naming rules don't have a word/);
+    // one slant on its own isn't a concept (and never an RPO without a ball carrier)
+    g = await nameDrawnPlay(team.id, draw(play("unknown", spread()), [["Z", solid, [0, 3], [-4, 7]], ["X", solid, [0, 10], [-5, 10]]]), db);
+    expect(g.parts.play).toBeUndefined();
+    expect(g.notes.join(" ")).toMatch(/couldn't tell which concept/);
 
     // power the other way: the right guard pulls, F carries left
     drawn = draw(play("unknown", spread().map((x) => (x.id === "F" ? { ...x, x: 1.5 } : x))), [

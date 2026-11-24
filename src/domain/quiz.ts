@@ -17,6 +17,7 @@ import {
   type PlayData,
   type Player,
 } from "./play";
+import { drawable } from "./draw-grade";
 import { ROUTES, ROUTE_BY_KEY, normalizeRouteName } from "./routes";
 import { assignmentLabel, blockLabel, reactionLabel, term, title, type Terms } from "./terms";
 import type { Level } from "./readiness";
@@ -24,6 +25,7 @@ import type { Level } from "./readiness";
 export const QUIZ_TYPES = [
   "formation_id",
   "assignment",
+  "draw_job",
   "motion",
   "route_recognition",
   "presnap_read",
@@ -36,6 +38,7 @@ export type QuizType = (typeof QUIZ_TYPES)[number];
 export const QUIZ_TYPE_LABEL: Record<QuizType, string> = {
   formation_id: "Formation ID",
   assignment: "My assignment",
+  draw_job: "Draw my job",
   motion: "Motion",
   route_recognition: "Route recognition",
   presnap_read: "Presnap read",
@@ -74,8 +77,8 @@ export interface Question {
   type: QuizType;
   playId: string;
   prompt: string;
-  /** "choice": pick one; "order": put choices in order */
-  kind: "choice" | "order";
+  /** "choice": pick one; "order": put choices in order; "draw": draw your line on the play (graded on the server) */
+  kind: "choice" | "order" | "draw";
   choices: Choice[];
   /** choice id, or ordered choice ids */
   answer: string | string[];
@@ -245,6 +248,27 @@ const assignment: Gen = (play, all, ctx, rand) => {
       kind: "choice",
       choices,
       answer,
+      explanation: explainAssignment(p, play.data),
+      diagram: { playId: play.id, flip, hide: "player", highlight: p.id },
+    });
+  }
+  return out;
+};
+
+/** Draw your job: the play with everyone's lines but yours; draw yours. The answer is the player's letter. */
+const drawJob: Gen = (play, _all, ctx, rand) => {
+  const out: Question[] = [];
+  const mine = play.data.players.filter((p) => playerMatches(p, ctx.positions) && drawable(p, play.data) && !(p.id === "QB" && p.assignment_type !== "carry" && p.assignment_type !== "route"));
+  for (const p of mine) {
+    const flip = ctx.allowFlip && rand() < 0.3;
+    out.push({
+      id: qid("draw_job", play.id, p.id),
+      type: "draw_job",
+      playId: play.id,
+      prompt: `${play.data.name}${flip ? " (flipped)" : ""}: draw your job, ${term(ctx.terms, "positions", p.id)}.`,
+      kind: "draw",
+      choices: [],
+      answer: p.id,
       explanation: explainAssignment(p, play.data),
       diagram: { playId: play.id, flip, hide: "player", highlight: p.id },
     });
@@ -474,6 +498,7 @@ const breakdown: Gen = (play, all, ctx, rand) => {
 const GENERATORS: Record<QuizType, Gen> = {
   formation_id: formationId,
   assignment,
+  draw_job: drawJob,
   motion,
   route_recognition: routeRecognition,
   presnap_read: presnapRead,
@@ -486,7 +511,7 @@ const GENERATORS: Record<QuizType, Gen> = {
 export function typesForPositions(positions: string[]): QuizType[] {
   const qb = positions.some((p) => p.toUpperCase() === "QB");
   const back = positions.some((p) => /^(RB|TB|HB|FB|F|B|R)$/i.test(p));
-  const types: QuizType[] = ["formation_id", "assignment", "motion", "route_recognition", "breakdown"];
+  const types: QuizType[] = ["formation_id", "assignment", "draw_job", "motion", "route_recognition", "breakdown"];
   if (qb) types.push("presnap_read", "progression", "option_decision");
   else if (back) types.push("option_decision");
   return types;
@@ -508,6 +533,7 @@ export function candidates(plays: QuizPlay[], ctx: QuizContext, types = typesFor
 }
 
 export function isCorrect(q: Question, given: string | string[]): boolean {
+  if (q.kind === "draw") return false; // graded against the play on the server (gradeDrawing)
   if (Array.isArray(q.answer)) return Array.isArray(given) && given.join(",") === q.answer.join(",");
   return given === q.answer;
 }
