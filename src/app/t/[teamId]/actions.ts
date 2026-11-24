@@ -15,6 +15,8 @@ import { deleteAllPlayers, deletePlayer } from "@/server/player-data";
 import { ConceptSchema } from "@/domain/concepts";
 import { LEVELS, readiness, type Level } from "@/domain/readiness";
 import { TermsSchema } from "@/domain/terms";
+import { lineupFor, type LineupResult } from "@/teach/lineup";
+import { requestOrigin } from "@/lib/origin";
 import { TREE_NUMBERS } from "@/domain/route-tree";
 import { refreshLibraryTopics, saveRouteTree, TEAM_BUILT } from "@/library/sync";
 import type { Box } from "@/ingest/boxes";
@@ -367,6 +369,21 @@ export async function deleteAllPlayersAction(teamId: string, fd: FormData): Prom
 }
 
 // ---------- play builder ----------
+/** Where the players line up for a formation call, from the team's own drawings (may start reading one; ask again). */
+export async function lineupForAction(teamId: string, call: { formation: string; dir: string; tag: string }): Promise<Result<{ lineup: LineupResult }>> {
+  try {
+    await requireCoach(teamId);
+    const lineup = await lineupFor(
+      teamId,
+      { formation: String(call.formation ?? "").slice(0, 40), dir: call.dir === "LEFT" ? "LEFT" : "RIGHT", tag: String(call.tag ?? "").slice(0, 40) },
+      await requestOrigin(),
+    );
+    return { ok: true, lineup };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 /** Save a play drawn in the builder: a new one, or changes to a drawn or converted play (back to "to check"). */
 export async function saveBuiltPlayAction(teamId: string, playId: string | null, data: unknown): Promise<Result<{ playId: string }>> {
   try {

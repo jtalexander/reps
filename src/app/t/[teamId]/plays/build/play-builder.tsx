@@ -1,12 +1,12 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PlaySvg } from "@/components/play-svg";
 import type { Naming } from "@/domain/naming";
 import { emptyPlay, flipPlay, isLineman, PLAY_TYPES, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTES } from "@/domain/routes";
 import { safeCall } from "@/lib/safe-call";
-import { saveBuiltPlayAction } from "../../actions";
+import { lineupForAction, saveBuiltPlayAction } from "../../actions";
 
 const mk = (id: string, x: number, y: number): Player => ({
   id,
@@ -85,6 +85,45 @@ export function PlayBuilder(props: {
   }, [parts]);
   const name = ownName || built;
 
+  // Picking a formation lines the players up the way the playbook draws it.
+  const [lineupNote, setLineupNote] = useState<{ text: string; tone: "ok" | "muted" | "warn" } | null>(null);
+  const asked = useRef("");
+  useEffect(() => {
+    const call = { formation: parts.formation.trim(), dir: parts.dir, tag: parts.tag.trim() };
+    if (!call.formation) return;
+    const ask = JSON.stringify(call);
+    asked.current = ask;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const run = async () => {
+      const r = await safeCall(() => lineupForAction(props.teamId, call), "Lining up");
+      if (asked.current !== ask) return; // the coach picked something else meanwhile
+      if (!r.ok) return setLineupNote({ text: r.error, tone: "warn" });
+      const l = r.lineup;
+      if (l.kind === "converting") {
+        setLineupNote({ text: `Reading your drawing of ${l.from} (p${l.page}) to line up the players… a few seconds.`, tone: "muted" });
+        if (++tries < 40) timer = setTimeout(run, 3000);
+        else setLineupNote({ text: "That's taking too long. Drag the players into place, or try again in a minute.", tone: "warn" });
+        return;
+      }
+      if (l.kind === "none") return setLineupNote({ text: l.why, tone: "warn" });
+      // move the players; anyone with a job keeps it
+      setData((d) => ({
+        ...d,
+        players: l.players.map((np) => {
+          const old = d.players.find((o) => o.id === np.id);
+          return old ? { ...np, assignment_type: old.assignment_type, route: old.route, block: old.block, path: old.path } : np;
+        }),
+      }));
+      setLineupNote({ text: `Lined up from ${l.from}${l.page ? ` (p${l.page})` : ""}${l.mirrored ? ", flipped" : ""}. Drag anyone who should be somewhere else.`, tone: "ok" });
+    };
+    const start = setTimeout(run, 400); // wait for typing to settle
+    return () => {
+      clearTimeout(start);
+      if (timer) clearTimeout(timer);
+    };
+  }, [parts.formation, parts.dir, parts.tag, props.teamId]);
+
   const me = data.players.find((p) => p.id === sel) ?? null;
   const set = (fn: (d: PlayData) => PlayData) => setData((d) => fn(d));
   const setPlayer = (id: string, patch: Partial<Player>) =>
@@ -160,6 +199,11 @@ export function PlayBuilder(props: {
             </select>
           </label>
         </div>
+        {lineupNote && (
+          <p className={`text-sm ${lineupNote.tone === "ok" ? "text-ok" : lineupNote.tone === "warn" ? "text-warn" : "text-muted"}`} aria-live="polite">
+            {lineupNote.text}
+          </p>
+        )}
         <label className="flex flex-col gap-1 text-xs">
           The play&apos;s name {built && !ownName ? "(built from the parts above; type to change it)" : ""}
           <input className="input text-base font-semibold" value={ownName || built} onChange={(e) => setOwnName(e.target.value)} placeholder="e.g. SPREAD RIGHT ZIP, VEER RIGHT" />

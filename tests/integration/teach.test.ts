@@ -582,5 +582,25 @@ describe("teach loop", () => {
     expect(groupByFront(named, false).length).toBe(3);
     // the same play drawn on two pages (two versions) stays two plays
     expect(groupByFront([{ name: "VEER RIGHT vs 4-3", page: 53 }, { name: "VEER RIGHT vs 5-2", page: 53 }, { name: "VEER RIGHT vs 4-3", page: 54 }], true).map((g) => g.items.length)).toEqual([2, 1]);
+
+    // the play builder: picking a formation lines the players up the way the playbook draws it
+    const { lineupFor, fit } = await import("@/teach/lineup");
+    expect(fit("TRIPS RIGHT STACK", { formation: "TRIPS", dir: "RIGHT", tag: "STACK" })).toEqual({ score: 12, mirror: false });
+    expect(fit("TRIPS RT", { formation: "TRIPS", dir: "LEFT", tag: "" })?.mirror).toBe(true);
+    expect(fit("DOUBLES RIGHT", { formation: "TRIPS", dir: "RIGHT", tag: "" })).toBeNull();
+    expect(fit("TRIPS RIGHT", { formation: "TRIPS", dir: "RIGHT", tag: "STACK" })).toBeNull(); // asked for the tag
+    // from a play the team already has, flipped for the other direction, jobs left off
+    let lu = await lineupFor(teamF.id, { formation: "VEER", dir: "LEFT", tag: "" }, null, db);
+    expect(lu.kind === "lineup" && lu.mirrored && lu.from).toBe("VEER RIGHT vs 4-3");
+    expect(lu.kind === "lineup" && lu.players.every((p) => p.route === null && p.path === null)).toBe(true);
+    // only drawn so far: Reps reads that one drawing, then lines up from it
+    const trips = { formation: "TRIPS", dir: "RIGHT" as const, tag: "STACK" };
+    lu = await lineupFor(teamF.id, trips, null, db);
+    expect(lu.kind).toBe("converting");
+    for (let i = 0; i < 100 && (lu = await lineupFor(teamF.id, trips, null, db)).kind === "converting"; i++) await new Promise((r) => setTimeout(r, 50));
+    expect(lu.kind === "lineup" && lu.from).toBe("TRIPS RIGHT STACK");
+    expect((await db.select().from(jobs).where(and(eq(jobs.teamId, teamF.id), eq(jobs.kind, "convert_drawing"), eq(jobs.ref, "1.d1")))).length).toBeLessThanOrEqual(1);
+    // nothing drawn: say so
+    expect(await lineupFor(teamF.id, { formation: "BUNCH", dir: "RIGHT", tag: "" }, null, db)).toMatchObject({ kind: "none" });
   });
 });
