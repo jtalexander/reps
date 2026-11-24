@@ -17,6 +17,7 @@ export async function startQuizAction(fd: FormData) {
     position: me.position,
     mode: (MODES.has(mode) ? mode : "mixed") as QuizMode,
     studySetId: setId,
+    install: fd.get("install") === "1",
   });
   if (questions.length === 0) redirect("/study?empty=1");
   redirect(`/study/quiz/${session.id}`);

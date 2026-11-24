@@ -6,10 +6,11 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
-import { players, teams, uploadPages } from "@/db/schema";
+import { players, plays, teams, uploadPages } from "@/db/schema";
 import { askLog, attempts, gaps, jobs, lessonProgress, lessons, questionFlags, questionSrs, questions, teachPages, topics } from "@/db/teach-schema";
 import { media } from "@/media/store";
 import { convertDrawing } from "./convert";
+import { installTopicIds } from "./install";
 import { runNaming } from "./naming";
 import { sharedAnswers } from "./shared";
 import { AI_LIMIT, AI_NOT_ON, AI_OFF, AiBlocked, withAi } from "./usage";
@@ -556,7 +557,6 @@ export async function setInstall(teamId: string, topicId: string, on: boolean, d
   await database.update(topics).set({ inInstall: on }).where(and(eq(topics.teamId, teamId), eq(topics.id, topicId)));
 }
 
-/** Start a new install: take every topic out. */
 /**
  * With "only the install" on (and an install picked), the topics Teach asks
  * about, writes and reviews; null = every topic.
@@ -577,6 +577,9 @@ export async function setInstallOnly(teamId: string, on: boolean, database: Db =
 
 export async function clearInstall(teamId: string, database: Db = db) {
   await database.update(topics).set({ inInstall: false }).where(and(eq(topics.teamId, teamId), eq(topics.inInstall, true)));
+  // and the plays picked one by one, and last week's name
+  await database.update(plays).set({ inInstall: false }).where(and(eq(plays.teamId, teamId), eq(plays.inInstall, true)));
+  await database.update(teams).set({ installName: null }).where(eq(teams.id, teamId));
 }
 
 // ---------------- coach review ----------------
@@ -800,9 +803,7 @@ export async function practiceSet(teamId: string, playerId: string, group: Audie
   const srs = await database.select().from(questionSrs).where(eq(questionSrs.playerId, playerId));
   const by = new Map(srs.map((s) => [s.questionId, s]));
   // new questions from the current install come before other new ones
-  const install = new Set(
-    (await database.select({ id: topics.id }).from(topics).where(and(eq(topics.teamId, teamId), eq(topics.inInstall, true)))).map((t) => t.id),
-  );
+  const install = await installTopicIds(teamId, database);
   const now = Date.now();
   // three piles: missed or due for review, never seen (install first), seen and not due yet
   const due: Array<{ q: (typeof pool)[number]; score: number }> = [];

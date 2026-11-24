@@ -52,6 +52,8 @@ export interface BuildOptions {
   mode: QuizMode;
   /** restrict to these plays (a study set) */
   playIds?: string[];
+  /** this week's install: its new plays come before other new plays */
+  focus?: string[];
   seed: number;
 }
 
@@ -64,11 +66,12 @@ export function buildQuiz(o: BuildOptions): Question[] {
   const pairs = candidates(plays, o.ctx, types);
   const byKey = new Map(o.state.map((s) => [`${s.playId}:${s.type}`, s]));
   const rand = rng(o.seed);
+  const focus = new Set(o.focus ?? []);
   const scored = pairs.map((p) => {
     const s = byKey.get(`${p.playId}:${p.type}`);
     // lower = sooner: due items by how overdue, then unseen, then the rest
     let score: number;
-    if (!s) score = 1 + rand();
+    if (!s) score = (focus.has(p.playId) ? 0 : 1) + rand();
     else if (s.dueAt <= o.now) score = -((o.now.getTime() - s.dueAt.getTime()) / DAY) - (5 - s.box) + rand() * 0.5;
     else score = 2 + (s.dueAt.getTime() - o.now.getTime()) / DAY + rand();
     return { ...p, score };

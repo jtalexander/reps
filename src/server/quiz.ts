@@ -13,6 +13,7 @@ import { LineSchema, type PlayData } from "@/domain/play";
 import { isCorrect, type QuizContext, type QuizPlay, type QuizType, type Question } from "@/domain/quiz";
 import { buildQuiz, nextState, type QuizMode, type SrsState } from "@/domain/srs";
 import { term, TermsSchema } from "@/domain/terms";
+import { installPlayIds } from "@/teach/install";
 import { approvedPlays } from "./plays";
 
 export type Team = typeof teams.$inferSelect;
@@ -82,7 +83,7 @@ export function publicQuestion(q: Question, index: number, data: PlayData | unde
 }
 
 export async function startSession(
-  args: { team: Team; playerId: string; position: string; mode: QuizMode; studySetId?: string | null; count?: number; now?: Date },
+  args: { team: Team; playerId: string; position: string; mode: QuizMode; studySetId?: string | null; install?: boolean; count?: number; now?: Date },
   database: Db = db,
 ) {
   const { team, playerId, position, mode } = args;
@@ -95,6 +96,9 @@ export async function startSession(
     if (!set) throw new Error("Study set not found.");
     playIds = set.playIds;
   }
+  // this week's install: only its plays when asked for, otherwise its new plays first
+  const week = [...(await installPlayIds(team.id, database))];
+  if (args.install && !args.studySetId) playIds = week;
   const all = await quizPlays(team.id, undefined, database);
   const ctx = contextFor(team, position);
   const seed = Math.floor(Math.random() * 2 ** 31);
@@ -106,6 +110,7 @@ export async function startSession(
     count: args.count ?? (mode === "speed" ? 15 : 10),
     mode,
     playIds,
+    focus: week,
     seed,
   });
   const [session] = await database

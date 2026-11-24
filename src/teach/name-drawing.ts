@@ -38,7 +38,7 @@ type TeamPlay = { id: string; label: string; data: PlayData; page: number | null
 
 const skill = (ps: Player[]) => ps.filter((p) => !isLineman(p.id));
 const hasJob = (p: Player) => p.route !== null || p.block !== null || (p.path !== null && p.path.length > 1) || p.assignment_type === "pass_pro";
-const has = (name: string, word: string) => {
+export const has = (name: string, word: string) => {
   const w = words(name);
   const need = words(word);
   return need.length > 0 && need.every((x) => w.includes(x));
@@ -87,7 +87,7 @@ export function jobLikeness(drawn: Player[], other: Player[]): number {
 }
 
 /** The formation part of a play name: before the comma, or the whole name without the play words. */
-function formationText(label: string, data: PlayData, n: Naming | null): string {
+export function formationText(label: string, data: PlayData, n: Naming | null): string {
   if (data.formation.name && data.formation.name !== "unknown") return data.formation.name;
   if (label.includes(",")) return label.split(",")[0]!;
   const playWords = new Set((n?.plays ?? []).flatMap((w) => words(w.word)));
@@ -97,7 +97,7 @@ function formationText(label: string, data: PlayData, n: Naming | null): string 
 }
 
 /** Split a formation name into the team's formation word, tag and side. */
-function readFormation(text: string, n: Naming | null): { formation: string; tag: string; side: "RIGHT" | "LEFT" | null } {
+export function readFormation(text: string, n: Naming | null): { formation: string; tag: string; side: "RIGHT" | "LEFT" | null } {
   const w = words(text);
   const side = w.map((x) => SIDES[x]).find(Boolean) ?? null;
   const at = (word: string) => w.indexOf(words(word)[0]!);
@@ -110,7 +110,7 @@ function readFormation(text: string, n: Naming | null): { formation: string; tag
 }
 
 /** The play words of a playbook play's name, and the side said after them. */
-function readPlay(label: string, n: Naming | null): { play: string; side: "RIGHT" | "LEFT" | null } | null {
+export function readPlay(label: string, n: Naming | null): { play: string; side: "RIGHT" | "LEFT" | null } | null {
   const w = words(label);
   const found = (n?.plays ?? []).filter((p) => has(label, p.word)).sort((a, b) => w.indexOf(words(a.word)[0]!) - w.indexOf(words(b.word)[0]!));
   let playWords: string[];
@@ -168,7 +168,7 @@ export function passConcept(play: PlayData, concepts: Concept[]): Concept | unde
 }
 
 /** The team's word for a concept, if its naming rules have one. */
-function teamWord(concept: Concept, n: Naming | null, concepts: Concept[]): string | null {
+export function teamWord(concept: Concept, n: Naming | null, concepts: Concept[]): string | null {
   const name = concept.name.toLowerCase();
   const w = (n?.plays ?? []).find((p) => conceptByName(p.word, concepts)?.key === concept.key) ?? (n?.plays ?? []).find((p) => p.means.toLowerCase().includes(name));
   return w ? w.word.toUpperCase() : null;

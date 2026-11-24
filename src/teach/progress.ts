@@ -3,11 +3,12 @@
  * far each player is on each assigned study set. Built on topic mastery (each
  * player's latest score on every question they've answered in a topic).
  */
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
 import { players, studySets } from "@/db/schema";
 import { questions, topics } from "@/db/teach-schema";
 import { inGroups } from "@/domain/positions";
+import { installTopicIds } from "./install";
 import { mastery } from "./service";
 
 /** A topic counts as known at 85%+ once a player has answered enough of it (3, or all of a smaller topic). */
@@ -42,11 +43,14 @@ const avg = (s: TopicScore[]) => (s.length ? s.reduce((a, x) => a + (x.score ?? 
 
 /** Game-ready: every install topic known. */
 export async function gameReady(teamId: string, database: Db = db) {
-  const install = await database
-    .select({ id: topics.id, name: topics.name })
-    .from(topics)
-    .where(and(eq(topics.teamId, teamId), eq(topics.inInstall, true), eq(topics.archived, false)))
-    .orderBy(asc(topics.sort));
+  const ids = [...(await installTopicIds(teamId, database))];
+  const install = ids.length
+    ? await database
+        .select({ id: topics.id, name: topics.name })
+        .from(topics)
+        .where(and(eq(topics.teamId, teamId), inArray(topics.id, ids)))
+        .orderBy(asc(topics.sort))
+    : [];
   if (!install.length) return null;
   const roster = await database.select().from(players).where(and(eq(players.teamId, teamId), eq(players.active, true))).orderBy(asc(players.name));
   const score = await scores(teamId, database);

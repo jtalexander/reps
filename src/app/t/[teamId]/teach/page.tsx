@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { uploads } from "@/db/schema";
+import { plays, uploads } from "@/db/schema";
 import { teachPages } from "@/db/teach-schema";
 import { hasApiKey } from "@/ingest/extract";
 import { requireCoach, teamsForUser } from "@/server/teams";
@@ -58,6 +58,11 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       { gaps: 0, drafts: 0, reserve: 0, live: 0 },
     );
   const install = topics.filter((t) => t.inInstall);
+  const [pickedRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(plays)
+    .where(and(eq(plays.teamId, teamId), eq(plays.inInstall, true), eq(plays.archived, false)));
+  const picked = pickedRow?.n ?? 0;
   // "only the install": Teach's counts, next step and list are the install; the rest wait
   const focused = team.installOnly && install.length > 0;
   const working = focused ? install : topics;
@@ -146,14 +151,20 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="eyebrow">
               <span className="h-px w-6 bg-brand" />
-              This week&apos;s install
+              {team.installName || "This week’s install"}
             </p>
-            {install.length > 0 && <ClearInstall teamId={teamId} count={install.length} />}
+            <span className="flex items-center gap-3">
+              {(install.length > 0 || picked > 0) && <ClearInstall teamId={teamId} count={install.length + picked} />}
+              <Link href={`/t/${teamId}/install`} className="btn btn-outline min-h-9 px-3 text-sm">
+                {picked ? `${picked} play${picked === 1 ? "" : "s"} picked · Pick plays` : "Pick plays"}
+              </Link>
+            </span>
           </div>
           {install.length > 0 && <InstallOnlyToggle teamId={teamId} on={team.installOnly} />}
           {install.length === 0 ? (
             <p className="text-sm text-muted">
-              Pick what you&apos;re teaching now: tap <b>+ Add to install</b> on those topics below. They come first here, in your review, and on your players&apos; Study page.
+              Pick what you&apos;re teaching now: <b>Pick plays</b> one by one (find them by formation, motion or concept), or tap <b>+ Add to install</b> on whole topics below.
+              They come first here, in your review, and on your players&apos; Study page.
             </p>
           ) : (
             <>

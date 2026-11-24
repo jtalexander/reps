@@ -1,5 +1,6 @@
 "use server";
 /** Coach actions for Teach. Every action checks the coach first. */
+import { setInstallName, setPlaysInstall } from "@/teach/install";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -312,7 +313,35 @@ export async function clearInstallAction(teamId: string): Promise<R> {
     await requireCoach(teamId);
     await clearInstall(teamId);
     revalidatePath(`/t/${teamId}/teach`);
+    revalidatePath(`/t/${teamId}/install`);
     return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Put plays in or out of this week's install, one by one. */
+export async function setPlaysInstallAction(teamId: string, ids: string[], on: boolean): Promise<R<{ n: number }>> {
+  try {
+    await requireCoach(teamId);
+    const clean = (Array.isArray(ids) ? ids : []).filter((id) => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 300);
+    const n = await setPlaysInstall(teamId, clean, !!on);
+    revalidatePath(`/t/${teamId}/install`);
+    revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true, n };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Name this week's install ("Week 7: Eagles"); blank takes the name off. */
+export async function setInstallNameAction(teamId: string, name: string): Promise<R<{ name: string | null }>> {
+  try {
+    await requireCoach(teamId);
+    const saved = await setInstallName(teamId, String(name ?? ""));
+    revalidatePath(`/t/${teamId}/install`);
+    revalidatePath(`/t/${teamId}/teach`);
+    return { ok: true, name: saved };
   } catch (e) {
     return fail(e);
   }

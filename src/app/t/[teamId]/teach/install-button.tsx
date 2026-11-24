@@ -31,7 +31,7 @@ export function InstallToggle({ teamId, topicId, on, size = "sm" }: { teamId: st
   );
 }
 
-/** Start a new install: take every topic out. */
+/** Start a new install: take every topic and play out, and clear its name. */
 export function ClearInstall({ teamId, count }: { teamId: string; count: number }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -40,7 +40,7 @@ export function ClearInstall({ teamId, count }: { teamId: string; count: number 
       className="text-sm text-muted underline"
       disabled={busy}
       onClick={async () => {
-        if (!confirm(`Take all ${count} topics out of the install? Nothing is deleted; players just stop seeing them first.`)) return;
+        if (!confirm(`Start a new install? ${count ? `All ${count} topics and plays come out of this one and its name is cleared` : "Its name is cleared"}. Nothing is deleted; players just stop seeing them first.`)) return;
         setBusy(true);
         await safeCall(() => clearInstallAction(teamId), "Clearing");
         setBusy(false);

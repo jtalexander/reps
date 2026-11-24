@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 const ITEMS = [
   ["", "Home"],
   ["/teach", "Teach"],
+  ["/install", "Install"],
   ["/plays", "Playbook"],
   ["/basics", "Basics"],
   ["/uploads", "Upload"],

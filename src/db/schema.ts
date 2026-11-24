@@ -118,6 +118,8 @@ export const teams = pgTable("teams", {
   groupFronts: boolean().notNull().default(true),
   /** Teach only asks about and reviews this week's install topics (the rest wait) */
   installOnly: boolean().notNull().default(false),
+  /** what the coach calls this week's install, e.g. "Week 7: Eagles" (null = no name) */
+  installName: text(),
   /** secret in the link that adds an assistant coach to the team (null = no link yet) */
   coachInviteCode: text().unique(),
   /** monthly AI cap in dollars, set by the Reps admin; AI stops when reached (null = the default cap) */
@@ -246,6 +248,8 @@ export const plays = pgTable(
     extractionError: text(),
     status: text().$type<"draft" | "needs_coach_input" | "approved">().notNull().default("draft"),
     qbReady: boolean().notNull().default(false),
+    /** picked one by one for this week's install (topics can be in the install too) */
+    inInstall: boolean().notNull().default(false),
     approvedAt: timestamp({ withTimezone: true }),
     approvedBy: uuid().references(() => users.id, { onDelete: "set null" }),
     sort: integer().notNull().default(0),
