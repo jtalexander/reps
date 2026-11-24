@@ -10,7 +10,7 @@ import { players, plays, teams, uploadPages } from "@/db/schema";
 import { askLog, attempts, gaps, jobs, lessonProgress, lessons, questionFlags, questionSrs, questions, teachPages, topics } from "@/db/teach-schema";
 import { media } from "@/media/store";
 import { convertDrawing } from "./convert";
-import { installTopicIds } from "./install";
+import { installTopicIds } from "./install-set";
 import { runNaming } from "./naming";
 import { sharedAnswers } from "./shared";
 import { AI_LIMIT, AI_NOT_ON, AI_OFF, AiBlocked, withAi } from "./usage";

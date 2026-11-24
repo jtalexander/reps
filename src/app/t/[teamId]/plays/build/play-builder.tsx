@@ -168,7 +168,7 @@ export function PlayBuilder(props: {
       setData((d) => ({
         ...d,
         play_type: res.playType ?? d.play_type,
-        motion: res.motion ?? (call.motion.trim() && call.motionPlayer ? d.motion : res.jobs ? null : d.motion),
+        motion: call.motion.trim() && call.motionPlayer ? res.motion : (res.motion ?? (res.jobs ? null : d.motion)),
         players: res.jobs
           ? d.players.map((p) => {
               const j = res.jobs!.find((x) => x.id === p.id);
@@ -327,6 +327,7 @@ export function PlayBuilder(props: {
             </select>
           </label>
         </div>
+        {parts.motion.trim() && !parts.motionPlayer && <p className="text-sm text-warn">Pick who motions, and Reps draws the {parts.motion.trim()} motion.</p>}
         {playNote && (
           <div className={`flex flex-col text-sm ${playNote.tone === "ok" ? "text-ok" : playNote.tone === "warn" ? "text-warn" : "text-muted"}`} aria-live="polite">
             {playNote.lines.map((l) => (

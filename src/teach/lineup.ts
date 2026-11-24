@@ -26,6 +26,10 @@ export type LineupResult =
   | { kind: "converting"; from: string; page: number }
   | { kind: "none"; why: string };
 
+/** A queued read no worker has picked up after this long gets another worker. */
+const REDISPATCH_MS = 15_000;
+const STUCK_MS = 16 * 60 * 1000;
+
 export const words = (s: string) =>
   s
     .toUpperCase()
@@ -111,10 +115,22 @@ export async function readDrawingOnce(
   database: Db = db,
 ): Promise<{ state: "reading" } | { state: "done" } | { state: "blocked"; reason: string }> {
   const runs = await database
-    .select({ status: jobs.status })
+    .select({ id: jobs.id, status: jobs.status, createdAt: jobs.createdAt, updatedAt: jobs.updatedAt })
     .from(jobs)
     .where(and(eq(jobs.teamId, teamId), eq(jobs.kind, "convert_drawing"), eq(jobs.ref, key)));
-  if (runs.some((j) => j.status === "queued" || j.status === "running")) return { state: "reading" };
+  const now = Date.now();
+  // a worker that died mid-read leaves it "running": after 16 minutes it's over
+  for (const j of runs)
+    if (j.status === "running" && now - j.updatedAt.getTime() > STUCK_MS) {
+      await database.update(jobs).set({ status: "failed", error: "This took too long and stopped." }).where(eq(jobs.id, j.id));
+      j.status = "failed";
+    }
+  if (runs.some((j) => j.status === "running")) return { state: "reading" };
+  if (runs.some((j) => j.status === "queued")) {
+    // still waiting for a worker after a few seconds: call one in again (one that finds nothing to do just stops)
+    if (runs.some((j) => j.status === "queued" && now - j.createdAt.getTime() > REDISPATCH_MS)) await dispatchWorkers(teamId, origin, 1, database);
+    return { state: "reading" };
+  }
   if (runs.length) return { state: "done" };
   const blocked = await aiBlockedReason(teamId, database);
   if (blocked) return { state: "blocked", reason: blocked };

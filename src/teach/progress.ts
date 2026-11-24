@@ -8,7 +8,7 @@ import { db, type Db } from "@/db";
 import { players, studySets } from "@/db/schema";
 import { questions, topics } from "@/db/teach-schema";
 import { inGroups } from "@/domain/positions";
-import { installTopicIds } from "./install";
+import { installTopicIds } from "./install-set";
 import { mastery } from "./service";
 
 /** A topic counts as known at 85%+ once a player has answered enough of it (3, or all of a smaller topic). */

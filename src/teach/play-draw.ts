@@ -9,10 +9,12 @@ import { db, type Db } from "@/db";
 import { plays } from "@/db/schema";
 import { conceptByName } from "@/domain/concepts";
 import { drawConcept, type Job } from "@/domain/concept-draw";
+import { drawMotion, SPOT } from "@/domain/motion-draw";
 import { isLineman, type Motion, type PlayData, type Player, type Point } from "@/domain/play";
 import { conceptsForTeam } from "@/server/plays";
 import { playbookDrawings } from "./drawings";
 import { readDrawingOnce, SIDES, words } from "./lineup";
+import { getNaming } from "./naming";
 
 export interface PlayCall {
   formation: string;
@@ -154,17 +156,27 @@ export async function drawPlay(teamId: string, call: PlayCall, lineup: Player[],
 
   if (call.motion.trim() && call.motionPlayer) {
     const mover = lineup.find((p) => p.id === call.motionPlayer);
-    const src = made.find((p) => p.data!.motion && words(label(p)).some((w) => words(call.motion).includes(w)));
-    if (mover && src) {
+    const src = SPOT.test(call.motion.trim()) ? undefined : made.find((p) => p.data!.motion && words(call.motion).every((w) => words(label(p)).includes(w)));
+    // what the motion means in the team's naming rules
+    const { naming } = await getNaming(teamId, database);
+    const def = (naming?.motions ?? []).find((m) => words(m.word).join(" ") === words(call.motion).join(" "));
+    const toward = (call.playDir || call.dir) === "LEFT" ? "left" : "right";
+    const drawn = mover ? drawMotion(call.motion, def?.means ?? "", mover.id, lineup, toward) : null;
+    // a playbook copy drawn as one straight line (or none) when the definition goes there and back: the definition wins
+    const m0 = src?.data!.motion;
+    const flat = !m0?.end || (m0.path?.length ?? 0) < 3;
+    const legs = drawn?.motion?.path && drawn.motion.path.length >= 3;
+    if (mover && src && !(flat && legs)) {
       const m = src.data!.motion!;
       const srcMover = src.data!.players.find((p) => p.id === m.player);
       const mirror = Boolean(srcMover && Math.sign(srcMover.x || 1) !== Math.sign(mover.x || 1));
       motion = moveMotion(src.data!, m, lineup, mover.id, mirror);
       notes.push(`Motion drawn like ${label(src)}.`);
-    } else if (mover) {
-      const toward = mover.x > 0 ? -1 : 1;
-      motion = { player: mover.id, type: "across", direction: toward > 0 ? "right" : "left", timing: "unknown", end: [Math.round((mover.x + toward * Math.min(8, Math.abs(mover.x) + 3)) * 10) / 10, mover.y] };
-      notes.push(`Reps guessed the ${call.motion} motion path; your playbook doesn't draw it.`);
+    } else if (mover && drawn) {
+      motion = drawn.motion;
+      if (drawn.kind === "shift") notes.push(`${call.motion} is a shift, not a motion: line the players up where they end up.`);
+      else if (def && drawn.kind !== "across") notes.push(`${call.motion} drawn from your naming rules: ${def.means}`);
+      else notes.push(`Reps guessed the ${call.motion} motion path. Drag or redraw it if it's not right.`);
     }
   }
 
