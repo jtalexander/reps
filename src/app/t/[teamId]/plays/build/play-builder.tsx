@@ -1,11 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PlaySvg } from "@/components/play-svg";
+import { PlaySvg, type LineRef } from "@/components/play-svg";
 import type { Naming } from "@/domain/naming";
 import { emptyPlay, flipPlay, isLineman, PLAY_TYPES, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTES } from "@/domain/routes";
-import { applyStroke, matchRoute } from "@/domain/sketch";
+import { applyStroke, matchRoute, simplify } from "@/domain/sketch";
 import { safeCall } from "@/lib/safe-call";
 import { drawPlayAction, lineupForAction, nameDrawingAction, saveBuiltPlayAction } from "../../actions";
 
@@ -80,8 +80,12 @@ export function PlayBuilder(props: {
   // parts the coach picked himself (Reps' naming leaves them alone) and parts Reps filled in from a drawing
   const mine = useRef(new Set<keyof Parts>());
   const auto = useRef<Partial<Parts>>({});
+  // Undo: every change is a step (a drag is one step); what Reps fills in after a pick undoes with the pick
+  const restored = useRef<string | null>(null);
+  const merge = useRef(false);
   const setParts = (next: Parts) => {
     for (const k of Object.keys(next) as Array<keyof Parts>) if (next[k] !== parts[k]) mine.current.add(k);
+    restored.current = null;
     setPartsRaw(next);
   };
   const [ownName, setOwnName] = useState(props.start && props.start.name !== "unknown" ? props.start.name : "");
@@ -101,6 +105,7 @@ export function PlayBuilder(props: {
   useEffect(() => {
     const call = { formation: parts.formation.trim(), dir: parts.dir, tag: parts.tag.trim() };
     if (!call.formation) return;
+    if (restored.current === JSON.stringify(parts)) return; // put back by Undo: the players are already where they were
     // Reps named this formation from where the coach put the players: leave them there
     if (auto.current.formation === parts.formation && auto.current.dir === parts.dir && auto.current.tag === parts.tag) return;
     const ask = JSON.stringify(call);
@@ -120,6 +125,7 @@ export function PlayBuilder(props: {
       }
       if (l.kind === "none") return setLineupNote({ text: l.why, tone: "warn" });
       // move the players; anyone with a job keeps it
+      merge.current = true;
       setData((d) => ({
         ...d,
         players: l.players.map((np) => {
@@ -135,7 +141,7 @@ export function PlayBuilder(props: {
       clearTimeout(start);
       if (timer) clearTimeout(timer);
     };
-  }, [parts.formation, parts.dir, parts.tag, props.teamId]);
+  }, [parts.formation, parts.dir, parts.tag, props.teamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Picking the play (and motion) draws everyone's job onto this lineup.
   const [playNote, setPlayNote] = useState<{ lines: string[]; tone: "ok" | "muted" | "warn" } | null>(null);
@@ -145,6 +151,7 @@ export function PlayBuilder(props: {
     dataRef.current = data;
   }, [data]);
   useEffect(() => {
+    if (restored.current === JSON.stringify(parts)) return;
     const call = { ...parts };
     if (auto.current.play === call.play && auto.current.playDir === call.playDir) call.play = "";
     if (auto.current.motion === call.motion && auto.current.motionPlayer === call.motionPlayer) call.motion = "";
@@ -165,6 +172,7 @@ export function PlayBuilder(props: {
         else setPlayNote({ lines: ["That's taking too long. Draw the jobs yourself, or try again in a minute."], tone: "warn" });
         return;
       }
+      merge.current = true;
       setData((d) => ({
         ...d,
         play_type: res.playType ?? d.play_type,
@@ -188,14 +196,12 @@ export function PlayBuilder(props: {
   // Drawing by hand: a pen, the coach's strokes (with undo), and a name from the team's words
   const [mode, setMode] = useState<"move" | "draw">("move");
   const [pen, setPen] = useState<Line>({ style: "solid", end: "arrow" });
-  const [history, setHistory] = useState<PlayData[]>([]);
   const typeGuess = useRef<PlayData["play_type"] | null>(null);
   const [drawNote, setDrawNote] = useState<string | null>(null);
   const [sketched, setSketched] = useState(0);
   const [nameNote, setNameNote] = useState<{ lines: string[]; same: { id: string; name: string } | null } | null>(null);
   const routeName = (k: string) => ROUTES.find((r) => r.key === k)?.label ?? k;
   const onDraw = (id: string, pts: Point[]) => {
-    setHistory((h) => [...h.slice(-49), data]);
     const r = applyStroke(data, id, pts, pen, routeName);
     // a run once someone carries the ball, a pass once there are routes (unless the coach picked the type)
     const carry = r.data.players.some((p) => p.assignment_type === "carry");
@@ -210,14 +216,92 @@ export function PlayBuilder(props: {
     setDrawNote(r.said);
     setSketched((v) => v + 1);
   };
+  type Snap = { data: PlayData; parts: Parts; ownName: string };
+  const [history, setHistory] = useState<Snap[]>([]);
+  const last = useRef<Snap>({ data, parts, ownName });
+  const lastAt = useRef(0);
+  const restoring = useRef(false);
+  useEffect(() => {
+    const prev = last.current;
+    if (prev.data === data && prev.parts === parts && prev.ownName === ownName) return;
+    last.current = { data, parts, ownName };
+    if (restoring.current || merge.current) {
+      restoring.current = false;
+      merge.current = false;
+      return;
+    }
+    const now = Date.now();
+    if (now - lastAt.current > 600) setHistory((h) => [...h.slice(-79), prev]);
+    lastAt.current = now;
+  }, [data, parts, ownName]);
   const undo = () => {
     const prev = history[history.length - 1];
     if (!prev) return;
     setHistory((h) => h.slice(0, -1));
-    setData(prev);
+    restoring.current = true;
+    restored.current = JSON.stringify(prev.parts);
+    lastAt.current = 0;
+    setData(prev.data);
+    setPartsRaw(prev.parts);
+    setOwnName(prev.ownName);
     setDrawNote(null);
-    setSketched((v) => v + 1);
+    setLine(null);
   };
+
+  // Tap a line to pick it; Delete (or the button) takes it off
+  const [line, setLine] = useState<LineRef | null>(null);
+  const lineLabel = (l: LineRef) => {
+    const p = data.players.find((x) => x.id === l.id);
+    if (l.kind === "motion") return `${l.id}'s motion`;
+    if (l.kind === "option") return `${l.id}'s option route`;
+    return `${l.id}'s ${p?.route ? "route" : p?.block ? "block" : p?.assignment_type === "carry" ? "run path" : p?.assignment_type === "fake" ? "fake" : "line"}`;
+  };
+  const deleteLine = (l: LineRef) => {
+    setData((d) => {
+      if (l.kind === "motion") return { ...d, motion: null };
+      return {
+        ...d,
+        players: d.players.map((p) => {
+          if (p.id !== l.id) return p;
+          if (l.kind === "option") return p.route ? { ...p, route: { ...p.route, options: (p.route.options ?? []).filter((_, k) => k !== l.index) } } : p;
+          return { ...p, assignment_type: "unknown", route: null, block: null, path: null, line: null };
+        }),
+      };
+    });
+    setLine(null);
+    setDrawNote(null);
+  };
+  // a dotted line off a route: an option branch, kept relative to where his route starts
+  const onDrawOption = (id: string, pts: Point[]) => {
+    const p = data.players.find((x) => x.id === id);
+    if (!p?.route) return;
+    const from: Point = data.motion?.player === id && data.motion.end ? data.motion.end : [p.x, p.y];
+    const rel = simplify(pts, 0.35).map(([x, y]) => [Math.round((x - from[0]) * 10) / 10, Math.round((y - from[1]) * 10) / 10] as Point);
+    setPlayer(id, { route: { ...p.route, options: [...(p.route.options ?? []), rel] } });
+    setSel(id);
+    setLine(null);
+    setDrawNote(`${id}: option route`);
+  };
+  const keys = useRef({ undo, deleteLine, line });
+  useEffect(() => {
+    keys.current = { undo, deleteLine, line };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      if (typing) return; // the box being typed in has its own undo
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        keys.current.undo();
+      } else if ((e.key === "Delete" || e.key === "Backspace") && keys.current.line) {
+        e.preventDefault();
+        keys.current.deleteLine(keys.current.line);
+      } else if (e.key === "Escape") setLine(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   useEffect(() => {
     if (!sketched) return;
     let stale = false;
@@ -230,6 +314,7 @@ export function PlayBuilder(props: {
       // a part Reps filled in before but can't tell any more is cleared, not left stale
       for (const k of Object.keys(auto.current) as Array<keyof Parts>) if (!(k in g.parts) && !mine.current.has(k)) fill[k] = k === "dir" ? "RIGHT" : "";
       auto.current = { ...auto.current, ...fill };
+      if (Object.keys(fill).length) merge.current = true;
       setPartsRaw((cur) => ({ ...cur, ...fill }));
       setNameNote({ lines: g.notes, same: g.same });
     }, 700);
@@ -399,15 +484,15 @@ export function PlayBuilder(props: {
                   ["none", "None", <path key="n" d="M2 6 H24" />],
                 ]}
               />
-              <button className="border border-line px-2 py-1 text-sm disabled:opacity-40" onClick={undo} disabled={!history.length}>
-                Undo
-              </button>
             </>
           )}
+          <button className="ml-auto border border-line px-2 py-1 text-sm disabled:opacity-40" onClick={undo} disabled={!history.length} title="Undo (Ctrl+Z)">
+            Undo
+          </button>
         </div>
         {mode === "draw" && (
           <p className="text-xs text-muted">
-            Touch a player and draw his line with your finger or mouse. Squiggly is motion before the snap. End in a T for a block. Draw from where his motion ends for what he does after it.
+            Touch a player and draw his line with your finger or mouse. Squiggly is motion before the snap. End in a T for a block. Draw from where his motion ends for what he does after it. For an option route, pick Dotted and draw from the spot on his route where he reads it. Tap any line to delete it.
             {drawNote ? <span className="text-ok"> Got it: {drawNote}.</span> : null}
           </p>
         )}
@@ -415,13 +500,30 @@ export function PlayBuilder(props: {
           <PlaySvg
             data={data}
             selected={sel}
-            onPlayerTap={(id) => setSel(id === sel ? null : id)}
+            onPlayerTap={(id) => {
+              setSel(id === sel ? null : id);
+              setLine(null);
+            }}
+            onLineTap={(l) => setLine(line && line.kind === l.kind && line.id === l.id && line.index === l.index ? null : l)}
+            selectedLine={line}
+            onDrawOption={onDrawOption}
             onPlayerDrag={mode === "move" ? (id, x, y) => setPlayer(id, { x, y: Math.min(y, 0), on_ball: y > -0.75 }) : undefined}
             pen={mode === "draw" ? pen : null}
             onDraw={onDraw}
             className="block w-full select-none"
           />
         </div>
+        {line && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-line pt-2 text-sm" aria-live="polite">
+            <span className="font-semibold">{lineLabel(line)}</span>
+            <button className="btn btn-outline min-h-9 px-3 text-sm" onClick={() => deleteLine(line)}>
+              Delete line
+            </button>
+            <button className="text-muted underline" onClick={() => setLine(null)}>
+              Keep it
+            </button>
+          </div>
+        )}
       </section>
       <div className="flex flex-wrap gap-3 text-sm">
         <button className="underline" onClick={() => set((d) => flipPlay(d))}>
@@ -551,7 +653,7 @@ export function PlayBuilder(props: {
           )}
         </section>
       ) : (
-        <p className="text-sm text-muted">{mode === "draw" ? "Touch a player and draw his line, or tap him to pick his job." : "Tap a player to give him a job. Drag to move him."}</p>
+        <p className="text-sm text-muted">{mode === "draw" ? "Touch a player and draw his line, or tap him to pick his job." : "Tap a player to give him a job. Drag to move him. Tap a line to delete it."}</p>
       )}
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur">

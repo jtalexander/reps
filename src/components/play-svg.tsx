@@ -44,6 +44,32 @@ export interface PlaySvgProps {
   onDraw?: (id: string, pts: Point[]) => void;
   /** a line drawn by hand on top of the play (a quiz answer): in field yards as shown */
   overlay?: { pts: Point[]; pen: Line; tone: "draft" | "ok" | "bad" } | null;
+  /** play builder: tapping a line picks it (to delete it) */
+  onLineTap?: (line: LineRef) => void;
+  selectedLine?: LineRef | null;
+  /** play builder: a dotted line drawn off a route, in field yards, starting on the route */
+  onDrawOption?: (id: string, pts: Point[]) => void;
+}
+
+/** One line on the field: a player's job (route, block, run path), the motion, or an option branch off a route. */
+export type LineRef = { kind: "job" | "motion" | "option"; id: string; index?: number };
+const sameLine = (a: LineRef | null | undefined, b: LineRef) => !!a && a.kind === b.kind && a.id === b.id && (a.index ?? 0) === (b.index ?? 0);
+
+/** The closest spot on a line to a point, and how far it is. */
+function nearestOn(pts: Point[], at: Point): { pt: Point; dist: number; along: number } {
+  let best = { pt: pts[0]!, dist: Infinity, along: 0 };
+  let walked = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [a, b] = [pts[i - 1]!, pts[i]!];
+    const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+    const len2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((at[0] - a[0]) * dx + (at[1] - a[1]) * dy) / len2));
+    const pt: Point = [a[0] + dx * t, a[1] + dy * t];
+    const dist = Math.hypot(pt[0] - at[0], pt[1] - at[1]);
+    if (dist < best.dist) best = { pt, dist, along: walked + Math.sqrt(len2) * t };
+    walked += Math.sqrt(len2);
+  }
+  return best;
 }
 
 /** A hand line with its own arrowhead or T, in one color (markers can't take the line's color). */
@@ -135,7 +161,7 @@ export function PlaySvg(props: PlaySvgProps) {
   const uid = useId().replace(/:/g, "");
   const svgRef = useRef<SVGSVGElement>(null);
   const dragging = useRef<string | null>(null);
-  const stroke = useRef<{ id: string; pts: Point[] } | null>(null);
+  const stroke = useRef<{ id: string; pts: Point[]; line?: LineRef; option?: boolean } | null>(null);
   const [live, setLive] = useState<Point[] | null>(null);
   const rawYards = (e: React.PointerEvent): Point | null => {
     const m = svgRef.current?.getScreenCTM();
@@ -165,11 +191,28 @@ export function PlaySvg(props: PlaySvgProps) {
   };
 
   const lines: React.ReactNode[] = [];
+  // every line in field yards, for tapping one (play builder)
+  const hits: Array<{ ref: LineRef; pts: Point[] }> = [];
+  const abs = (pts: Point[], from: Point) => pts.map(([x, y]) => [from[0] + x, from[1] + y] as Point);
+  const picked = (ref: LineRef) => sameLine(props.selectedLine, ref);
   data.players.forEach((p, i) => {
     if (!showAssignment(p)) return;
     const start: Point = data.motion && data.motion.player === p.id && data.motion.end ? data.motion.end : [p.x, p.y];
     const dim = props.highlight && p.id !== props.highlight && hide !== "player";
     const op = dim ? 0.35 : 1;
+    const jobRef: LineRef = { kind: "job", id: p.id };
+    const color = picked(jobRef) ? "var(--brand)" : undefined;
+    const jobPts = p.route ? routePath(p.route, p, strength) : p.block ? (p.block.path && p.block.path.length >= 2 ? p.block.path : ([[0, 0], [0, 1.2]] as Point[])) : p.path && p.path.length >= 2 ? p.path : null;
+    if (jobPts) hits.push({ ref: jobRef, pts: abs(jobPts, start) });
+    // option branches off the route: dotted, he reads it and picks one
+    (p.route?.options ?? []).forEach((o, k) => {
+      if (o.length < 2) return;
+      const ref: LineRef = { kind: "option", id: p.id, index: k };
+      hits.push({ ref, pts: abs(o, start) });
+      lines.push(
+        <path key={`o${i}-${k}`} d={toPath(o, start[0], start[1])} stroke={picked(ref) ? "var(--brand)" : "currentColor"} strokeWidth={picked(ref) ? 0.4 : 0.26} strokeDasharray="0.6 0.5" fill="none" markerEnd={`url(#arrow-${uid})`} opacity={op} />,
+      );
+    });
     // a line the coach drew by hand keeps its look (dotted, arrow or T); otherwise Reps' usual look for the job
     const hand = p.line;
     const dash = (usual?: string) => (hand ? (hand.style === "dotted" ? "0.6 0.5" : undefined) : usual);
@@ -180,16 +223,16 @@ export function PlaySvg(props: PlaySvgProps) {
       const pts = routePath(p.route, p, strength);
       if (pts) {
         lines.push(
-          <path key={`r${i}`} d={d(pts)} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.28} strokeDasharray={dash()} fill="none" markerEnd={end("arrow")} opacity={op} style={{ animationDelay: data.motion ? "0.9s" : "0s" }} />,
+          <path key={`r${i}`} d={d(pts)} className={props.animate ? "draw" : undefined} stroke={color ?? "currentColor"} strokeWidth={color ? 0.4 : 0.28} strokeDasharray={dash()} fill="none" markerEnd={end("arrow")} opacity={op} style={{ animationDelay: data.motion ? "0.9s" : "0s" }} />,
         );
       }
     } else if (p.block) {
       const pts = p.block.path && p.block.path.length >= 2 ? p.block.path : ([[0, 0], [0, 1.2]] as Point[]);
-      lines.push(<path key={`b${i}`} d={d(pts)} stroke="currentColor" strokeWidth={0.24} strokeDasharray={dash()} fill="none" markerEnd={end("block")} opacity={op} />);
+      lines.push(<path key={`b${i}`} d={d(pts)} stroke={color ?? "currentColor"} strokeWidth={color ? 0.4 : 0.24} strokeDasharray={dash()} fill="none" markerEnd={end("block")} opacity={op} />);
     } else if (p.path && p.path.length >= 2) {
       const carry = p.assignment_type === "carry";
       lines.push(
-        <path key={`c${i}`} d={d(p.path)} className={props.animate ? "draw" : undefined} stroke={carry ? "var(--carry)" : "currentColor"} strokeWidth={0.3} strokeDasharray={dash(p.assignment_type === "fake" ? "0.6 0.5" : undefined)} fill="none" markerEnd={end(carry ? "arrowc" : "arrow")} opacity={op} />,
+        <path key={`c${i}`} d={d(p.path)} className={props.animate ? "draw" : undefined} stroke={color ?? (carry ? "var(--carry)" : "currentColor")} strokeWidth={color ? 0.42 : 0.3} strokeDasharray={dash(p.assignment_type === "fake" ? "0.6 0.5" : undefined)} fill="none" markerEnd={end(carry ? "arrowc" : "arrow")} opacity={op} />,
       );
     }
   });
@@ -199,12 +242,18 @@ export function PlaySvg(props: PlaySvgProps) {
     const p = data.players.find((x) => x.id === data.motion!.player);
     const m = data.motion;
     const pts: Point[] | null = p ? (m.path && m.path.length >= 2 ? m.path.map(([x, y]) => [p.x + x, p.y + y] as Point) : [[p.x, p.y], m.end!]) : null;
-    if (pts) lines.push(<path key="motion" d={zigzag(...pts)} className={props.animate ? "draw" : undefined} stroke="currentColor" strokeWidth={0.2} fill="none" />);
+    if (pts) {
+      const ref: LineRef = { kind: "motion", id: m.player };
+      hits.push({ ref, pts });
+      lines.push(<path key="motion" d={zigzag(...pts)} className={props.animate ? "draw" : undefined} stroke={picked(ref) ? "var(--brand)" : "currentColor"} strokeWidth={picked(ref) ? 0.32 : 0.2} fill="none" />);
+    }
   } else if (data.motion && !data.motion.end && !props.routeOnly && hide !== "all") {
     const p = data.players.find((x) => x.id === data.motion!.player);
     if (p) {
       const dir = data.motion.direction === "left" ? -1 : data.motion.direction === "right" ? 1 : -Math.sign(p.x || 1);
-      lines.push(<path key="motion" d={zigzag([p.x, p.y], [p.x + dir * 6, p.y])} stroke="currentColor" strokeWidth={0.2} fill="none" />);
+      const ref: LineRef = { kind: "motion", id: p.id };
+      hits.push({ ref, pts: [[p.x, p.y], [p.x + dir * 6, p.y]] });
+      lines.push(<path key="motion" d={zigzag([p.x, p.y], [p.x + dir * 6, p.y])} stroke={picked(ref) ? "var(--brand)" : "currentColor"} strokeWidth={picked(ref) ? 0.32 : 0.2} fill="none" />);
     }
   }
 
@@ -267,7 +316,17 @@ export function PlaySvg(props: PlaySvgProps) {
                   if (dist < 2.2 && (!best || dist < best.dist - 0.3)) best = { id: p.id, dist, from: s };
                 }
               }
-              if (!best) return;
+              if (!best) {
+                // not at a player: on a line? A tap picks it; a dotted line drawn off a route is an option branch
+                const near = hits.map((h) => ({ h, n: nearestOn(h.pts, at) })).filter((x) => x.n.dist < 1.2).sort((a, b) => a.n.dist - b.n.dist)[0];
+                if (!near) return;
+                const p = data.players.find((x) => x.id === near.h.ref.id);
+                const option = props.pen!.style === "dotted" && near.h.ref.kind === "job" && !!p?.route && near.n.along > 1;
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                stroke.current = { id: near.h.ref.id, pts: [near.n.pt], line: near.h.ref, option };
+                setLive([near.n.pt]);
+                return;
+              }
               e.currentTarget.setPointerCapture?.(e.pointerId);
               stroke.current = { id: best.id, pts: [best.from] };
               setLive([best.from]);
@@ -297,8 +356,12 @@ export function PlaySvg(props: PlaySvgProps) {
         if (!s) return;
         let len = 0;
         for (let i = 1; i < s.pts.length; i++) len += Math.hypot(s.pts[i]![0] - s.pts[i - 1]![0], s.pts[i]![1] - s.pts[i - 1]![1]);
-        if (len < 1) props.onPlayerTap?.(s.id); // a tap, not a line
-        else props.onDraw?.(s.id, s.pts);
+        if (len < 1) {
+          // a tap, not a line
+          if (s.line) props.onLineTap?.(s.line);
+          else props.onPlayerTap?.(s.id);
+        } else if (s.option) props.onDrawOption?.(s.id, s.pts);
+        else if (!s.line) props.onDraw?.(s.id, s.pts);
       }}
       onPointerCancel={() => {
         dragging.current = null;
@@ -378,6 +441,21 @@ export function PlaySvg(props: PlaySvgProps) {
       )}
 
       {!props.routeOnly && lines}
+      {props.onLineTap &&
+        !props.pen &&
+        !props.flip &&
+        hits.map((h) => (
+          <path
+            key={`hit-${h.ref.kind}-${h.ref.id}-${h.ref.index ?? 0}`}
+            d={toPath(h.pts, 0, 0)}
+            stroke="transparent"
+            strokeWidth={1.4}
+            fill="none"
+            pointerEvents="stroke"
+            style={{ cursor: "pointer" }}
+            onClick={() => props.onLineTap!(h.ref)}
+          />
+        ))}
       {!props.routeOnly &&
         data.players.map((p, idx) => {
           const isC = p.id === "C";

@@ -132,7 +132,7 @@ export async function drawPlay(teamId: string, call: PlayCall, lineup: Player[],
       jobs = assign.map(([sp, to]) => ({
         id: to.id,
         assignment_type: sp.assignment_type,
-        route: sp.route && mirror ? { ...sp.route, path: flipPts(sp.route.path) } : sp.route,
+        route: sp.route && mirror ? { ...sp.route, path: flipPts(sp.route.path), ...(sp.route.options ? { options: sp.route.options.map((o) => flipPts(o)!) } : {}) } : sp.route,
         block: sp.block && mirror ? { ...sp.block, path: flipPts(sp.block.path) } : sp.block,
         path: mirror ? flipPts(sp.path) : sp.path,
       }));

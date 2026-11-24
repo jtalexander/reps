@@ -96,6 +96,8 @@ export const RouteSchema = z.object({
   notes: str.nullable().default(null),
   /** drawn path relative to the player, yards; only when the route is not a standard shape */
   path: z.array(point).nullable().default(null),
+  /** option branches drawn dotted off the route (he reads it and picks one), each relative to the player like the route */
+  options: z.array(z.array(point)).optional(),
 });
 export type Route = z.infer<typeof RouteSchema>;
 
@@ -303,7 +305,7 @@ export function flipPlay(play: PlayData): PlayData {
       ...p,
       x: -p.x,
       side: side(p.side),
-      route: p.route ? { ...p.route, path: mirror(p.route.path) } : null,
+      route: p.route ? { ...p.route, path: mirror(p.route.path), ...(p.route.options ? { options: p.route.options.map((o) => mirror(o)!) } : {}) } : null,
       block: p.block ? { ...p.block, path: mirror(p.block.path) } : null,
       path: mirror(p.path),
     })),
