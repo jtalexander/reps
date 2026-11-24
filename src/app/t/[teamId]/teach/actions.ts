@@ -13,6 +13,8 @@ import type { Naming } from "@/domain/naming";
 import { saveNaming } from "@/teach/naming";
 import { copyFromTeam } from "@/teach/reuse";
 import { aiBlockedReason } from "@/teach/usage";
+import type { RouteTree } from "@/domain/route-tree";
+import { saveRouteTree } from "@/library/sync";
 import { approveConvertedTopic, queueConversions, retryConversion } from "@/teach/convert-run";
 import {
   acceptSuggestions,
@@ -323,6 +325,24 @@ export async function saveNamingAction(teamId: string, naming: Naming, approve: 
     await saveNaming(teamId, naming, approve);
     revalidatePath(`/t/${teamId}/plays/naming`);
     return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * The end of the guided check: confirm the naming rules, and save the route
+ * tree the playbook showed (if the coach checked one and hasn't saved a tree
+ * on Settings already).
+ */
+export async function confirmNamingAction(teamId: string, naming: Naming, tree: RouteTree | null): Promise<R<{ routeTree: boolean }>> {
+  try {
+    const { user, team } = await requireCoach(teamId);
+    await saveNaming(teamId, naming, true);
+    const saveTree = Boolean(tree && !team.routeTree && tree.routes.length);
+    if (saveTree) await saveRouteTree(teamId, tree!, user.id);
+    revalidatePath(`/t/${teamId}`, "layout");
+    return { ok: true, routeTree: saveTree };
   } catch (e) {
     return fail(e);
   }

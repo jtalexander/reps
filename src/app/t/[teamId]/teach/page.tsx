@@ -9,6 +9,9 @@ import { lastRun, runProgress } from "@/teach/playbook-run";
 import { openFlags, topicOverview } from "@/teach/service";
 import { aiBlockedReason } from "@/teach/usage";
 import { libraryState } from "@/library/sync";
+import { requestOrigin } from "@/lib/origin";
+import { ensureNamingDraft } from "@/teach/naming-auto";
+import { NamingCard } from "../plays/naming/naming-card";
 import { TriageButton } from "./triage-button";
 import { DecodePanel } from "./decode-panel";
 import { ClearInstall, InstallOnlyToggle, InstallToggle as InstallToggleInline } from "./install-button";
@@ -65,6 +68,8 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
   const optional = working.reduce((a, t) => a + t.gapsOptional, 0);
   const blocked = await aiBlockedReason(teamId);
   const basicsAdded = [...(await libraryState(teamId)).values()].filter((s) => !s.archived).length;
+  // naming rules draft themselves once pages are read; the coach only checks them
+  const naming = await ensureNamingDraft(teamId, await requestOrigin());
   const run = await runProgress(teamId);
   const last = run ? null : await lastRun(teamId);
   const lead = ups[0];
@@ -92,6 +97,8 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       {!hasApiKey() && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">The server has no Anthropic API key, so Reps can&apos;t read pages yet.</p>}
 
       {blocked && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm font-semibold text-warn">{blocked}</p>}
+
+      <NamingCard teamId={teamId} status={naming} />
 
       <Link href={`/t/${teamId}/basics`} className="card flex items-center justify-between gap-3 p-4 hover:border-ink">
         <span>

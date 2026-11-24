@@ -10,7 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 import { createDb, type Db } from "@/db";
-import { players, plays, uploadPages, uploads, users } from "@/db/schema";
+import { players, plays, teams, uploadPages, uploads, users } from "@/db/schema";
 import { gaps, jobs, lessons, questionFlags, questionSrs, questions, teachPages, topics } from "@/db/teach-schema";
 
 const askedWith: string[] = [];
@@ -512,13 +512,19 @@ describe("teach loop", () => {
     expect((await playbookPages(teamF.id, db)).map((p) => p.pageNo)).toEqual([1, 2]);
     expect((await playbookDrawings(teamA.id, db)).some((d) => d.label === "TRIPS RIGHT STACK")).toBe(false);
 
-    // naming rules: drafted as a background job from what Reps read, saved as a draft, then confirmed
-    const svc = await import("@/teach/service");
+    // naming rules draft themselves once pages are read (no button), then the coach checks and confirms
     const naming = await import("@/teach/naming");
-    const job = await svc.newJob(teamF.id, "naming", teamF.id, db);
-    const done = await svc.executeJob(job, db);
-    expect(done?.status).toBe("done");
-    expect(done?.result).toEqual({ positions: 1, formations: 1, plays: 1 });
+    const auto = await import("@/teach/naming-auto");
+    const namingJobs = async () => db.select().from(jobs).where(and(eq(jobs.teamId, teamF.id), eq(jobs.kind, "naming")));
+    expect((await auto.ensureNamingDraft(teamF.id, null, db)).state).toBe("blocked"); // a new coach's team waits for the admin
+    expect(await namingJobs()).toHaveLength(0);
+    await db.update(teams).set({ aiAccess: "on" }).where(eq(teams.id, teamF.id));
+    expect((await auto.ensureNamingDraft(teamF.id, null, db)).state).toBe("drafting");
+    expect(["drafting", "draft"]).toContain((await auto.ensureNamingDraft(teamF.id, null, db)).state); // asking again doesn't start a second draft
+    for (let i = 0; i < 100 && !(await naming.getNaming(teamF.id, db)).naming; i++) await new Promise((r) => setTimeout(r, 50));
+    const nj = await namingJobs();
+    expect(nj.map((j) => [j.status, j.result])).toEqual([["done", { positions: 1, formations: 1, plays: 1 }]]);
+    expect((await auto.ensureNamingDraft(teamF.id, null, db)).state).toBe("draft");
     let got = await naming.getNaming(teamF.id, db);
     expect(got.naming?.positions[0]).toMatchObject({ letter: "X", notes: "away from the call" }); // drew on the drawing labels
     expect(got.approvedAt).toBeNull();
@@ -526,6 +532,7 @@ describe("teach loop", () => {
     got = await naming.getNaming(teamF.id, db);
     expect(got.naming?.formations.map((f) => f.word)).toEqual(["TRIPS", "TRIO"]);
     expect(got.approvedAt).not.toBeNull();
+    expect((await auto.namingStatus(teamF.id, db)).state).toBe("confirmed");
     expect((await naming.getNaming(teamA.id, db)).naming).toBeNull();
     const { namingBrief } = await import("@/domain/naming");
     expect(namingBrief(got.naming)).toContain("X = Split end (WR)");

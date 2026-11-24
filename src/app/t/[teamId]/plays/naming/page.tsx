@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { requestOrigin } from "@/lib/origin";
 import { requireCoach } from "@/server/teams";
 import { getNaming } from "@/teach/naming";
+import { ensureNamingDraft } from "@/teach/naming-auto";
+import { NamingCard } from "./naming-card";
 import { NamingEditor } from "./naming-editor";
 
 export const metadata = { title: "Naming rules" };
@@ -9,6 +12,7 @@ export const metadata = { title: "Naming rules" };
 export default async function NamingPage({ params }: PageProps<"/t/[teamId]/plays/naming">) {
   const { teamId } = await params;
   await requireCoach(teamId);
+  const status = await ensureNamingDraft(teamId, await requestOrigin());
   const { naming, approvedAt } = await getNaming(teamId);
   return (
     <div className="flex flex-col gap-4">
@@ -22,7 +26,16 @@ export default async function NamingPage({ params }: PageProps<"/t/[teamId]/play
           it turns your drawings into plays.
         </p>
       </div>
-      <NamingEditor teamId={teamId} initial={naming} approvedAt={approvedAt ? approvedAt.toISOString() : null} />
+      {naming && !approvedAt && (
+        <Link href={`/t/${teamId}/plays/naming/check`} className="btn btn-primary self-start">
+          Check it step by step
+        </Link>
+      )}
+      {!naming && status.state === "drafting" ? (
+        <NamingCard teamId={teamId} status={status} />
+      ) : (
+        <NamingEditor teamId={teamId} initial={naming} approvedAt={approvedAt ? approvedAt.toISOString() : null} />
+      )}
     </div>
   );
 }
