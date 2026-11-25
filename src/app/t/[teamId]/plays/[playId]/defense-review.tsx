@@ -66,6 +66,14 @@ export function DefenseReview(props: { teamId: string; playId: string; initial: 
           </Link>
           <h1 className="text-3xl">{data.name !== "unknown" ? data.name : callName(parts) || "Defensive call"}</h1>
           <p className="text-sm text-muted">Defensive call · {status === "approved" ? "approved" : "to check"}</p>
+          <p className="flex flex-wrap gap-x-4 text-sm font-semibold">
+            <Link href={`/t/${props.teamId}/plays/build?play=${props.playId}`} className="underline">
+              Move defenders and lines in the builder
+            </Link>
+            <Link href={`/t/${props.teamId}/plays/build?copy=${props.playId}`} className="underline">
+              Copy it and change something
+            </Link>
+          </p>
         </div>
         {props.nextId && (
           <Link href={`/t/${props.teamId}/plays/${props.nextId}`} className="text-sm underline">

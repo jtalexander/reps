@@ -102,6 +102,8 @@ export interface InstallPlay {
   viaTopic: boolean;
   tags: PlayTags;
   data: PlayData;
+  /** what the coach tagged it good against */
+  goodVs: string[];
 }
 
 /** Every play with a drawing Reps can show (converted or drawn), with its tags and install state. */
@@ -131,6 +133,7 @@ export async function installPlays(teamId: string, database: Db = db): Promise<I
         viaTopic: d?.inInstall ?? false,
         tags: playTags(label, r.data!, naming, concepts),
         data: r.data!,
+        goodVs: r.goodVs?.yes ?? [],
       };
     });
 }

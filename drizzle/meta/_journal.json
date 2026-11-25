@@ -155,6 +155,27 @@
       "when": 1795578375602,
       "tag": "0021_blocking_schemes",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795581205294,
+      "tag": "0022_playbook_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795581601177,
+      "tag": "0023_team_formations",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795582269241,
+      "tag": "0024_game_plans",
+      "breakpoints": true
     }
   ]
 }

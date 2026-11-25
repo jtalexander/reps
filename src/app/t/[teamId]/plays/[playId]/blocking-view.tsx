@@ -5,15 +5,15 @@
  */
 import { useState } from "react";
 import { PlaySvg } from "@/components/play-svg";
-import { resolveBlocking, ROLE_LABEL, ruleWhy, type BlockFront } from "@/domain/blocking";
+import { frontOk, resolveBlocking, ROLE_LABEL, ruleWhy, type BlockFront } from "@/domain/blocking";
 import type { PlayData } from "@/domain/play";
 
 export function BlockingView({ teamId, playId, data, fronts }: { teamId: string; playId: string; data: PlayData; fronts: BlockFront[] }) {
   const b = data.blocking!;
-  const list = [...new Set([...(fronts.includes(b.front as BlockFront) ? [] : [b.front as BlockFront]), ...fronts])];
+  const list = [...new Set([...(fronts.includes(b.front as BlockFront) || !frontOk(b.front) ? [] : [b.front as BlockFront]), ...fronts])];
   // a play read from the playbook opens on its own drawing
   const [front, setFront] = useState<BlockFront | "drawn">(b.drawn ? "drawn" : ((list.includes(b.front as BlockFront) ? b.front : list[0]) as BlockFront));
-  const r = resolveBlocking(data, b, front === "drawn" ? (b.front as BlockFront) : front);
+  const r = resolveBlocking(data, b, front === "drawn" ? (frontOk(b.front) ? b.front : list[0]!) : front);
   const label = (id: string | null) => (id ? (r.defenders.find((d) => d.id === id)?.label ?? id) : "no one");
   return (
     <section className="card flex flex-col gap-3 p-4">

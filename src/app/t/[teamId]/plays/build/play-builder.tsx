@@ -5,10 +5,13 @@ import { PlaySvg, type LineRef } from "@/components/play-svg";
 import type { Naming } from "@/domain/naming";
 import { applyBlocking, frontOk, newBlocking, resolveBlocking, ROLE_LABEL, RULE_LABEL, RULES, schemeForWords, withScheme, type TeamScheme } from "@/domain/blocking";
 import { motionKind } from "@/domain/motion-draw";
+import type { RouteTree } from "@/domain/route-tree";
 import { emptyPlay, flipPlay, isLineman, isPassFamily, PLAY_TYPES, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTES } from "@/domain/routes";
 import { applyStroke, matchRoute, simplify } from "@/domain/sketch";
 import { safeCall } from "@/lib/safe-call";
+import { addToPlanAction } from "../../gameplan/actions";
+import { saveFormationAction } from "../../actions";
 import { drawPlayAction, lineupForAction, nameDrawingAction, readAheadAction, saveBuiltPlayAction } from "../../actions";
 
 export const mk = (id: string, x: number, y: number): Player => ({
@@ -70,6 +73,12 @@ export function PlayBuilder(props: {
   /** the team's blocking schemes and the fronts it sees */
   schemes: TeamScheme[];
   fronts: string[];
+  /** the team's route tree (numbers to routes), when it has one */
+  routeTree?: RouteTree | null;
+  /** drawing a formation (no jobs) to save once and reuse: an id when changing a saved one */
+  formationMode?: { id?: string; name: string } | null;
+  /** drawn for this game plan: saving adds it there */
+  planId?: string | null;
 }) {
   const router = useRouter();
   const [data, setData] = useState<PlayData>(() => props.start ?? { ...emptyPlay(), players: blankLineup(props.naming) });
@@ -78,11 +87,18 @@ export function PlayBuilder(props: {
   const [msg, setMsg] = useState<string | null>(null);
   const n = props.naming;
   // the call, built from the naming rules
-  const [parts, setPartsRaw] = useState({ shift: "", formation: "", dir: "RIGHT", tag: "", motionPlayer: "", motion: "", play: "", playDir: "" });
+  // an existing play or formation: its formation picks come from its formation's name (and don't re-line it up)
+  const startParts = useMemo(() => {
+    const nm = props.start?.formation.name && props.start.formation.name !== "unknown" ? props.start.formation.name.toUpperCase() : "";
+    const w = ` ${nm.replace(/[^A-Z0-9]+/g, " ")} `;
+    const pick = (list: Array<{ word: string }> | undefined) => [...(list ?? [])].sort((a, b) => b.word.length - a.word.length).find((x) => w.includes(` ${x.word.toUpperCase()} `))?.word ?? "";
+    return { formation: pick(props.naming?.formations), dir: / LEFT | LT /.test(w) ? "LEFT" : "RIGHT", tag: pick(props.naming?.formation_tags) };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [parts, setPartsRaw] = useState({ shift: "", formation: startParts.formation, dir: startParts.dir, tag: startParts.tag, motionPlayer: "", motion: "", play: "", playDir: "" });
   type Parts = typeof parts;
   // parts the coach picked himself (Reps' naming leaves them alone) and parts Reps filled in from a drawing
   const mine = useRef(new Set<keyof Parts>());
-  const auto = useRef<Partial<Parts>>({});
+  const auto = useRef<Partial<Parts>>(startParts.formation ? { ...startParts } : {});
   // Undo: every change is a step (a drag is one step); what Reps fills in after a pick undoes with the pick
   const restored = useRef<string | null>(null);
   const merge = useRef(false);
@@ -232,7 +248,14 @@ export function PlayBuilder(props: {
   const [drawNote, setDrawNote] = useState<string | null>(null);
   const [sketched, setSketched] = useState(0);
   const [nameNote, setNameNote] = useState<{ lines: string[]; same: { id: string; name: string } | null } | null>(null);
-  const routeName = (k: string) => ROUTES.find((r) => r.key === k)?.label ?? k;
+  // the team's route numbers: "4 (Curl)"
+  const tree = props.routeTree?.numbered ? props.routeTree.routes : [];
+  const numberOf = (k: string) => tree.find((t) => t.route === k)?.n;
+  const routeName = (k: string) => {
+    const label = ROUTES.find((r) => r.key === k)?.label ?? k;
+    const n = numberOf(k);
+    return n ? `${n} (${label})` : label;
+  };
   const onDraw = (id: string, pts: Point[]) => {
     const r = applyStroke(data, id, pts, pen, routeName);
     // a run once someone carries the ball, a pass once there are routes (unless the coach picked the type)
@@ -427,6 +450,22 @@ export function PlayBuilder(props: {
     if (j === "none" && data.motion?.player === me.id) set((d) => ({ ...d, motion: null }));
   };
 
+  // formations: save this lineup once and start plays from it
+  const fm = props.formationMode;
+  const formationName = [parts.formation, parts.formation ? parts.dir : "", parts.tag].filter(Boolean).join(" ").trim();
+  const [moveToo, setMoveToo] = useState(false);
+  const [fMsg, setFMsg] = useState<string | null>(null);
+  const saveFormation = async (asNew: boolean) => {
+    const nm = fm ? ownName || formationName || fm.name : formationName;
+    if (!nm) return setFMsg("Pick the formation (or type its name) first.");
+    setBusy(true);
+    const r = await safeCall(() => saveFormationAction(props.teamId, { id: asNew ? undefined : fm?.id, name: nm, players: data.players }, !asNew && moveToo), "Saving the formation");
+    setBusy(false);
+    if (!r.ok) return setFMsg(r.error);
+    if (fm) return router.push(`/t/${props.teamId}/plays/formations`);
+    setFMsg(`Saved ${r.formation.name}. Picking it lines everyone up just like this.`);
+  };
+
   const save = async () => {
     setBusy(true);
     setMsg(null);
@@ -448,12 +487,18 @@ export function PlayBuilder(props: {
     const r = await safeCall(() => saveBuiltPlayAction(props.teamId, props.playId, play), "Saving");
     setBusy(false);
     if (!r.ok) return setMsg(r.error);
+    // drawn for a game plan: it goes into the plan, and back to the plan
+    if (props.planId) {
+      await safeCall(() => addToPlanAction(props.teamId, props.planId!, r.playId), "Adding to the game plan");
+      return router.push(`/t/${props.teamId}/gameplan?plan=${props.planId}`);
+    }
     router.push(`/t/${props.teamId}/plays/${r.playId}`);
   };
 
   const words = (list: Array<{ word: string }> | undefined) => (list ?? []).map((w) => w.word);
   // shifts (everyone resets before the snap) get their own pick; motions are one player moving
-  const isShift = (w: { word: string; means: string }) => motionKind(w.word, w.means) === "shift";
+  // a trade (the tight end changes sides before the snap) is called in front of the formation too: "TRADE PRO RIGHT"
+  const isShift = (w: { word: string; means: string }) => ["shift", "trade"].includes(motionKind(w.word, w.means));
   const shifts = (n?.motions ?? []).filter(isShift);
   const motions = (n?.motions ?? []).filter((w) => !isShift(w));
   const shiftMeans = shifts.find((w) => w.word === parts.shift.trim())?.means;
@@ -470,11 +515,21 @@ export function PlayBuilder(props: {
           <Pick label="Direction" value={parts.dir} options={["RIGHT", "LEFT"]} onChange={(v) => setParts({ ...parts, dir: v })} free={false} />
           <Pick label="Tag" value={parts.tag} options={words(n?.formation_tags)} onChange={(v) => setParts({ ...parts, tag: v })} />
         </div>
+        {!fm && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <button className="underline disabled:opacity-40" disabled={busy || !formationName} onClick={() => saveFormation(true)} title={formationName ? "" : "Pick the formation first"}>
+              Save this lineup as {formationName || "a formation"}
+            </button>
+            {fMsg && <span className={fMsg.startsWith("Saved") ? "text-ok" : "text-warn"}>{fMsg}</span>}
+          </div>
+        )}
         {shiftMeans && (
           <p className="text-xs text-muted">
             {parts.shift.trim()}: {shiftMeans} The players are drawn where they end up{parts.formation.trim() ? ` (${parts.formation.trim()} ${parts.dir})` : ""}.
           </p>
         )}
+        {!fm && (
+          <>
         <div className="text-xs font-semibold uppercase tracking-wide text-muted">Motion</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Pick label="Motion" value={parts.motion} options={words(motions)} onChange={(v) => setParts({ ...parts, motion: v })} />
@@ -507,6 +562,8 @@ export function PlayBuilder(props: {
             </select>
           </label>
         </div>
+          </>
+        )}
         {parts.motion.trim() && !parts.motionPlayer && <p className="text-sm text-warn">Pick who motions, and Reps draws the {parts.motion.trim()} motion.</p>}
         {playNote && (
           <div className={`flex flex-col text-sm ${playNote.tone === "ok" ? "text-ok" : playNote.tone === "warn" ? "text-warn" : "text-muted"}`} aria-live="polite">
@@ -547,7 +604,7 @@ export function PlayBuilder(props: {
           </p>
         )}
         <label className="flex flex-col gap-1 text-xs">
-          The play&apos;s name {built && !ownName ? "(built from the parts above; type to change it)" : ""}
+          {fm ? "The formation's name" : <>The play&apos;s name {built && !ownName ? "(built from the parts above; type to change it)" : ""}</>}
           <input className="input text-base font-semibold" value={ownName || built} onChange={(e) => setOwnName(e.target.value)} placeholder="e.g. SPREAD RIGHT ZIP, VEER RIGHT" />
         </label>
       </section>
@@ -741,6 +798,21 @@ export function PlayBuilder(props: {
               </button>
             ))}
           </div>
+          {job === "route" && me.route && tree.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 text-sm" role="group" aria-label="Your route tree">
+              <span className="text-xs text-muted">Your tree:</span>
+              {tree.map((t) => (
+                <button
+                  key={t.n}
+                  className={`px-2 py-1 ${me.route!.name === t.route ? "bg-brand text-brand-ink" : "border border-line"}`}
+                  onClick={() => setPlayer(me.id, { route: { ...me.route!, name: t.route, depth_yards: "unknown", break_direction: "unknown", path: null }, line: null })}
+                  title={ROUTES.find((r) => r.key === t.route)?.label}
+                >
+                  {t.n} <span className="text-xs">{ROUTES.find((r) => r.key === t.route)?.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {job === "route" && me.route && (
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1 text-xs">
@@ -749,7 +821,7 @@ export function PlayBuilder(props: {
                   {me.route.name === "custom" && <option value="custom">His own route</option>}
                   {ROUTES.map((r) => (
                     <option key={r.key} value={r.key}>
-                      {r.label}
+                      {routeName(r.key)}
                     </option>
                   ))}
                 </select>
@@ -824,10 +896,27 @@ export function PlayBuilder(props: {
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          <button className="btn btn-primary" disabled={busy || !name} onClick={save}>
-            {busy ? "Saving…" : props.playId ? "Save changes" : "Save play"}
-          </button>
-          <span className="text-sm text-muted">{msg ?? (name ? name : "Give the play a name first.")}</span>
+          {fm ? (
+            <>
+              <button className="btn btn-primary" disabled={busy || !(ownName || formationName || fm.name)} onClick={() => saveFormation(false)}>
+                {busy ? "Saving…" : "Save formation"}
+              </button>
+              {fm.id && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="h-5 w-5" checked={moveToo} onChange={(e) => setMoveToo(e.target.checked)} />
+                  Also move players in plays drawn from it
+                </label>
+              )}
+              <span className="text-sm text-muted">{fMsg ?? (ownName || formationName || fm.name || "Pick the formation or type its name.")}</span>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-primary" disabled={busy || !name} onClick={save}>
+                {busy ? "Saving…" : props.playId ? "Save changes" : "Save play"}
+              </button>
+              <span className="text-sm text-muted">{msg ?? (name ? name : "Give the play a name first.")}</span>
+            </>
+          )}
         </div>
       </div>
     </div>

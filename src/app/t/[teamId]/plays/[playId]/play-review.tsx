@@ -179,9 +179,14 @@ export function PlayReview(props: {
 
       {/* checklist */}
       {props.converted && (
-        <Link href={`/t/${props.teamId}/plays/build?play=${props.playId}`} className="self-start text-sm font-semibold underline">
-          Move players and lines in the play builder
-        </Link>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold">
+          <Link href={`/t/${props.teamId}/plays/build?play=${props.playId}`} className="underline">
+            Move players and lines in the play builder
+          </Link>
+          <Link href={`/t/${props.teamId}/plays/build?copy=${props.playId}`} className="underline">
+            Copy it and change something
+          </Link>
+        </div>
       )}
       {props.converted ? (
         <div className={`p-3 text-sm ${status === "approved" && !dirty ? "bg-ok-bg text-ok" : "border border-line"}`}>

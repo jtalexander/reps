@@ -210,3 +210,48 @@ body {
     stroke-dashoffset: 0;
   }
 }
+
+/* Printing (play cards, wristbands, call sheets): black on white, no app chrome. */
+@media print {
+  :root {
+    color-scheme: light;
+    --bg: #fff;
+    --card: #fff;
+    --card-2: #fff;
+    --ink: #000;
+    --muted: #444;
+    --line: #bbb;
+    --brand: #000;
+    --brand-ink: #fff;
+    --field: #fff;
+    --yard: #e5e5e5;
+    --los: #000;
+    --carry: #000;
+    --def: #000;
+    --zone: rgba(0, 0, 0, 0.04);
+    --zone-line: #888;
+    --key: #000;
+    --key-ink: #000;
+    --hl: #ddd;
+    --hl-ink: #000;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  header,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .print-page {
+    break-after: page;
+  }
+  .print-avoid {
+    break-inside: avoid;
+  }
+}

@@ -13,7 +13,7 @@ import { isLineman, type PlayData, type Player, type Point } from "./play";
 
 // ---------- fronts ----------
 
-export const BLOCK_FRONTS = ["4-3", "4-3 Under", "3-4", "5-2", "5-3", "6-2", "4-4", "4-2-5", "3-3 Stack"] as const;
+export const BLOCK_FRONTS = ["4-3", "4-3 Under", "3-4", "5-2", "5-3", "6-2", "4-4", "4-2-5", "3-3 Stack", "3-5", "Bear"] as const;
 export type BlockFront = (typeof BLOCK_FRONTS)[number];
 export const DEFAULT_FRONTS: BlockFront[] = ["4-3", "3-4", "5-2", "5-3", "6-2", "4-4"];
 
@@ -43,6 +43,10 @@ const FRONT_SPOTS: Record<BlockFront, { spots: Spot[]; safeties: 1 | 2 }> = {
   "4-4": { spots: [L("E", "weak", "5"), L("T", "weak", "3"), L("N", "str", "3"), L("R", "str", "5"), B("W", "weak", "apex", "Will"), B("B", "weak", "20", "Buck"), B("M", "str", "20", "Mike"), B("S", "str", "apex", "Sam")], safeties: 1 },
   "4-2-5": { spots: [L("E", "weak", "5"), L("N", "weak", "1"), L("T", "str", "3"), L("R", "str", "9"), B("W", "weak", "30", "Will"), B("M", "str", "10", "Mike"), B("$", "str", "apex", "Nickel")], safeties: 2 },
   "3-3 Stack": { spots: [L("E", "weak", "5"), L("N", "mid", "0"), L("T", "str", "5"), B("W", "weak", "50", "Will"), B("M", "mid", "00", "Mike"), B("S", "str", "50", "Sam")], safeties: 2 },
+  // three down and five backers: two inside, the Mike over the ball, two outside on the edges
+  "3-5": { spots: [L("E", "weak", "5"), L("N", "mid", "0"), L("T", "str", "5"), B("J", "weak", "apex", "Jack"), B("W", "weak", "30", "Will"), B("M", "mid", "00", "Mike"), B("S", "str", "30", "Sam"), B("R", "str", "apex", "Rover")], safeties: 1 },
+  // 46 Bear: both guards and the center covered, the Sam and Rush on the line to the tight end
+  Bear: { spots: [L("E", "weak", "5"), L("T", "weak", "3"), L("N", "mid", "0"), L("G", "str", "3"), L("S", "str", "6", "Sam"), L("R", "str", "9", "Rush"), B("W", "weak", "50", "Will"), B("M", "str", "40", "Mike")], safeties: 1 },
 };
 
 export const frontOk = (f: string): f is BlockFront => (BLOCK_FRONTS as readonly string[]).includes(f);

@@ -22,6 +22,9 @@ import { customLook } from "@/domain/matchups";
 import { keepSuggestedLooks, playLooks, setPlayLook, type PlayLooks } from "@/server/matchups";
 import { copyBlocking, resetScheme, saveFronts, saveScheme } from "@/server/blocking";
 import { assignSchemes } from "@/teach/assign-schemes";
+import { deleteView, saveView, type PlaybookView } from "@/server/playbook";
+import { deleteFormation, saveFormation } from "@/server/formations";
+import type { TeamFormation } from "@/domain/formations";
 import { teamsForUser } from "@/server/teams";
 import type { TeamScheme } from "@/domain/blocking";
 import { checkBatches, ensureBatchRead } from "@/teach/read-batch";
@@ -565,6 +568,75 @@ export async function copyBlockingAction(teamId: string, toTeamId: string): Prom
     const r = await copyBlocking(teamId, toTeamId);
     revalidatePath(`/t/${toTeamId}/plays`);
     return { ok: true, ...r };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Save the Playbook's current filter as a named view. */
+export async function saveViewAction(teamId: string, name: string, query: string): Promise<Result<{ views: PlaybookView[] }>> {
+  try {
+    await requireCoach(teamId);
+    const views = await saveView(teamId, String(name), String(query));
+    revalidatePath(`/t/${teamId}/plays`);
+    return { ok: true, views };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function deleteViewAction(teamId: string, id: string): Promise<Result<{ views: PlaybookView[] }>> {
+  try {
+    await requireCoach(teamId);
+    const views = await deleteView(teamId, String(id));
+    revalidatePath(`/t/${teamId}/plays`);
+    return { ok: true, views };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Save a formation (new, or `id` to change one); with movePlays, plays drawn from it move too. */
+export async function saveFormationAction(
+  teamId: string,
+  input: { id?: string; name: string; players: unknown[] },
+  movePlays = false,
+): Promise<Result<{ formation: TeamFormation; moved: number }>> {
+  try {
+    await requireCoach(teamId);
+    const r = await saveFormation(teamId, input, { movePlays: Boolean(movePlays) });
+    revalidatePath(`/t/${teamId}/plays/formations`);
+    return { ok: true, ...r };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function deleteFormationAction(teamId: string, id: string): Promise<Result<object>> {
+  try {
+    await requireCoach(teamId);
+    await deleteFormation(teamId, String(id));
+    revalidatePath(`/t/${teamId}/plays/formations`);
+    return { ok: true };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Save formation drawings from the playbook as the team's formations, in one tap. */
+export async function saveFormationsFromPlaysAction(teamId: string, playIds: string[]): Promise<Result<{ saved: number }>> {
+  try {
+    await requireCoach(teamId);
+    const ids = (Array.isArray(playIds) ? playIds : []).filter((x) => PLAY_ID.test(String(x))).slice(0, 200);
+    const { playbookFormations } = await import("@/server/formations");
+    const list = (await playbookFormations(teamId)).filter((f) => ids.includes(f.id));
+    let saved = 0;
+    for (const f of list) {
+      await saveFormation(teamId, { name: f.name, players: f.data.players });
+      saved++;
+    }
+    revalidatePath(`/t/${teamId}/plays/formations`);
+    return { ok: true, saved };
   } catch (err) {
     return fail(err);
   }

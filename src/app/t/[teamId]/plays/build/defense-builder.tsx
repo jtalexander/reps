@@ -2,11 +2,13 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { PlaySvg, type LineRef } from "@/components/play-svg";
-import { applyCoverage, blankDefense, callName, coverageOf, DEF_FRONTS, DEF_JOB_LABEL, defJobText, frontLineup, frontOf, GAPS, gapX, ZONE_LABEL, zoneSpot } from "@/domain/defense-play";
+import { BLOCK_FRONTS } from "@/domain/blocking";
+import { applyCoverage, blankDefense, frontAgainst, callName, coverageOf, DEF_FRONTS, DEF_JOB_LABEL, defJobText, frontLineup, frontOf, GAPS, gapX, ZONE_LABEL, zoneSpot } from "@/domain/defense-play";
 import type { Naming } from "@/domain/naming";
 import { DEF_ASSIGNMENT_TYPES, isLineman, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { simplify } from "@/domain/sketch";
 import { safeCall } from "@/lib/safe-call";
+import { addToPlanAction } from "../../gameplan/actions";
 import { saveBuiltPlayAction } from "../../actions";
 import { blankLineup, mk, PenGroup, Pick } from "./play-builder";
 
@@ -35,7 +37,7 @@ function offense(kind: string, n: Naming | null): Player[] {
  * the usual ones) and Reps lines the defenders up and gives them their jobs;
  * drag anyone, draw lines, tap a defender to change his job.
  */
-export function DefenseBuilder(props: { teamId: string; naming: Naming | null; start: PlayData | null; playId: string | null }) {
+export function DefenseBuilder(props: { teamId: string; naming: Naming | null; start: PlayData | null; playId: string | null; formations?: Array<{ id: string; name: string; players: Player[] }>; planId?: string | null }) {
   const router = useRouter();
   const n = props.naming;
   const [against, setAgainst] = useState("2x2");
@@ -82,8 +84,11 @@ export function DefenseBuilder(props: { teamId: string; naming: Naming | null; s
     let players = data.players;
     const notes: string[] = [];
     if (next.front !== parts.front) {
+      // by technique against the offense drawn; else the usual spots for the front
+      const placed = frontAgainst(next.front, vs);
       const f = frontOf(next.front);
-      if (f) players = frontLineup(f);
+      if (placed) players = placed;
+      else if (f) players = frontLineup(f);
       else if (next.front.trim()) notes.push(`Reps doesn't know where ${next.front} lines up: drag the defenders into place.`);
     }
     if (next.coverage !== parts.coverage || next.front !== parts.front) {
@@ -177,6 +182,11 @@ export function DefenseBuilder(props: { teamId: string; naming: Naming | null; s
     const r = await safeCall(() => saveBuiltPlayAction(props.teamId, props.playId, play), "Saving");
     setBusy(false);
     if (!r.ok) return setMsg(r.error);
+    // drawn for a game plan: it goes into the plan, and back to the plan
+    if (props.planId) {
+      await safeCall(() => addToPlanAction(props.teamId, props.planId!, r.playId), "Adding to the game plan");
+      return router.push(`/t/${props.teamId}/gameplan?plan=${props.planId}`);
+    }
     router.push(`/t/${props.teamId}/plays/${r.playId}`);
   };
 
@@ -188,7 +198,7 @@ export function DefenseBuilder(props: { teamId: string; naming: Naming | null; s
       <section className="card flex flex-col gap-2 p-3">
         <div className="font-semibold">The call {n?.fronts?.length ? "from your naming rules" : ""}</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Pick label="Front" value={parts.front} options={[...new Set([...words(n?.fronts), ...DEF_FRONTS])]} onChange={(v) => setParts({ ...parts, front: v })} />
+          <Pick label="Front" value={parts.front} options={[...new Set([...words(n?.fronts), ...DEF_FRONTS, ...BLOCK_FRONTS])]} onChange={(v) => setParts({ ...parts, front: v })} />
           <Pick label="Coverage" value={parts.coverage} options={[...new Set([...words(n?.coverages), "Cover 0", "Cover 1", "Cover 2", "Cover 3", "Cover 4"])]} onChange={(v) => setParts({ ...parts, coverage: v })} />
           <Pick label="Stunt" value={parts.stunt} options={words(n?.stunts)} onChange={(v) => setParts({ ...parts, stunt: v })} />
           <Pick label="Pressure" value={parts.pressure} options={words(n?.blitzes)} onChange={(v) => setParts({ ...parts, pressure: v })} />
@@ -200,14 +210,26 @@ export function DefenseBuilder(props: { teamId: string; naming: Naming | null; s
             value={against}
             onChange={(e) => {
               setAgainst(e.target.value);
-              const nextVs = offense(e.target.value, n);
-              commit({ data: { ...data, vs: nextVs, players: applyCoverage(data.players, coverageOf(parts.coverage), nextVs) } });
+              const saved = props.formations?.find((f) => `f:${f.id}` === e.target.value);
+              const nextVs = saved ? saved.players.map((p) => ({ ...p, assignment_type: "unknown" as const, route: null, block: null, path: null, line: null })) : offense(e.target.value, n);
+              // the front lines up again against the new offense, by technique
+              const placed = frontAgainst(parts.front, nextVs);
+              commit({ data: { ...data, vs: nextVs, players: applyCoverage(placed ?? data.players, coverageOf(parts.coverage), nextVs) } });
             }}
           >
             <option value="2x2">2x2</option>
             <option value="trips">Trips</option>
             <option value="i">I-formation</option>
             <option value="empty">Empty</option>
+            {(props.formations ?? []).length > 0 && (
+              <optgroup label="Your formations">
+                {props.formations!.map((f) => (
+                  <option key={f.id} value={`f:${f.id}`}>
+                    {f.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
         {note && (

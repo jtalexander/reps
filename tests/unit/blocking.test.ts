@@ -98,6 +98,18 @@ describe("blocking schemes", () => {
   });
 });
 
+describe("a defensive call against a real formation", () => {
+  it("lines the front up by technique against that offense, or says it can't", async () => {
+    const { frontAgainst } = await import("@/domain/defense-play");
+    const d = frontAgainst("4-3 Over", proI)!;
+    expect(d.find((x) => x.id === "T")).toMatchObject({ x: 1.8, def: { technique: "3" } });
+    expect(d.find((x) => x.id === "RC")!.x).toBe(12); // a corner on the widest receiver
+    expect(frontAgainst("Bear", proI)!.filter((x) => x.y < 2)).toHaveLength(6);
+    expect(frontAgainst("Okie", proI)).toBeNull();
+    expect(frontAgainst("4-3", proI.filter((x) => !["LT", "RT"].includes(x.id)))).toBeNull(); // no line drawn
+  });
+});
+
 describe("plays read from a playbook", () => {
   const schemes = teamSchemes({});
   const run = (name: string, play_type: PlayData["play_type"] = "run"): PlayData => ({ ...emptyPlay(name), play_type, players: proI });

@@ -6,6 +6,7 @@
  * separation is tested in tests/integration/tenancy.test.ts.
  */
 import type { TeamBlocking } from "@/domain/blocking";
+import type { TeamFormation } from "@/domain/formations";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -136,6 +137,10 @@ export const teams = pgTable("teams", {
   routeTree: jsonb().$type<RouteTree>(),
   /** blocking schemes the coach changed or added, and the fronts the team sees (domain/blocking.ts) */
   blocking: jsonb().$type<TeamBlocking>().notNull().default(sql`'{}'::jsonb`),
+  /** the coach's saved Playbook views: a name and the filter's address */
+  playbookViews: jsonb().$type<Array<{ id: string; name: string; query: string }>>().notNull().default(sql`'[]'::jsonb`),
+  /** formations the coach saved once to start every play from: a name and where everyone lines up */
+  formations: jsonb().$type<TeamFormation[]>().notNull().default(sql`'[]'::jsonb`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -306,6 +311,30 @@ export const studySets = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("study_sets_team_idx").on(t.teamId)],
+);
+
+/** A week's game plan: the opponent, what they show, and the plays picked for it (sent to players as the install). */
+export const gamePlans = pgTable(
+  "game_plans",
+  {
+    id: id(),
+    teamId: uuid()
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    opponent: text().notNull(),
+    gameDate: date(),
+    /** looks their defense shows (matchups.ts keys), for our offense */
+    theyShow: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** what their offense runs, for our defense */
+    theyRun: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    notes: text().notNull().default(""),
+    /** our plays and calls in the plan, in order */
+    playIds: jsonb().$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    sentAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("game_plans_team_idx").on(t.teamId)],
 );
 
 export const quizSessions = pgTable(

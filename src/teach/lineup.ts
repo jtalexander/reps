@@ -7,7 +7,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import { db, type Db } from "@/db";
-import { plays } from "@/db/schema";
+import { plays, teams } from "@/db/schema";
 import { jobs } from "@/db/teach-schema";
 import type { Player } from "@/domain/play";
 import { prepareCrop } from "./convert";
@@ -90,6 +90,14 @@ export async function lineupFor(teamId: string, call: Call, origin: string | nul
     .filter((x) => x.f)
     .sort((x, y) => y.f!.score - x.f!.score)[0];
 
+  // a formation the coach saved comes first
+  const [t] = await database.select({ f: teams.formations }).from(teams).where(eq(teams.id, teamId));
+  const saved = (t?.f ?? [])
+    .map((f) => ({ f, fit: fit(f.name, call) }))
+    .filter((x) => x.fit)
+    .sort((a, b) => b.fit!.score - a.fit!.score)[0];
+  if (saved && (!bestPlay || saved.fit!.score >= bestPlay.f!.score) && (!bestDrawing || saved.fit!.score >= bestDrawing.f!.score))
+    return { kind: "lineup", players: lineupOf(saved.f.players, saved.fit!.mirror), from: `your ${saved.f.name} formation`, page: null, mirrored: saved.fit!.mirror };
   if (bestPlay && (!bestDrawing || bestPlay.f!.score >= bestDrawing.f!.score))
     return { kind: "lineup", players: lineupOf(bestPlay.p.data!.players, bestPlay.f!.mirror), from: bestPlay.p.name, page: bestPlay.p.page ?? null, mirrored: bestPlay.f!.mirror };
   if (!bestDrawing) {

@@ -3,6 +3,8 @@ import { isDefense, type PlayData } from "@/domain/play";
 import { getPlay, isConverted } from "@/server/plays";
 import { requireCoach } from "@/server/teams";
 import { getBlocking } from "@/server/blocking";
+import { listFormations } from "@/server/formations";
+import { emptyPlay } from "@/domain/play";
 import { getNaming } from "@/teach/naming";
 import { DefenseBuilder } from "./defense-builder";
 import { PlayBuilder } from "./play-builder";
@@ -18,7 +20,7 @@ export const metadata = { title: "Draw a play" };
 export default async function Build({ params, searchParams }: PageProps<"/t/[teamId]/plays/build">) {
   const { teamId } = await params;
   const sp = await searchParams;
-  await requireCoach(teamId);
+  const { team } = await requireCoach(teamId);
   const { naming } = await getNaming(teamId);
   const blocking = await getBlocking(teamId);
   const id = (v: unknown) => (typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v) ? v : null);
@@ -33,6 +35,25 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
       editing = row.id;
     }
   }
+  // a copy to change: the whole play (every job and line), saved as a new play
+  const copyId = id(sp.copy);
+  if (!start && copyId) {
+    const row = await getPlay(teamId, copyId);
+    if (row?.data) start = { ...row.data, name: row.data.name && row.data.name !== "unknown" ? `${row.data.name} (copy)` : "unknown", blocking: row.data.blocking ? { ...row.data.blocking, drawn: false } : row.data.blocking };
+  }
+  // a saved formation: change it (?formation=), start a play from it (?startFormation=), or draw a new one (?newFormation=1)
+  const formations = await listFormations(teamId);
+  const fEdit = typeof sp.formation === "string" ? formations.find((f) => f.id === sp.formation) : undefined;
+  const fStart = typeof sp.startFormation === "string" ? formations.find((f) => f.id === sp.startFormation) : undefined;
+  let formationMode: { id?: string; name: string } | null = null;
+  if (!start && fEdit) {
+    start = { ...emptyPlay("unknown"), formation: { ...emptyPlay().formation, name: fEdit.name }, players: fEdit.players };
+    formationMode = { id: fEdit.id, name: fEdit.name };
+  } else if (!start && sp.newFormation) {
+    // the builder starts from its blank lineup
+    formationMode = { name: "" };
+  } else if (!start && fStart) start = { ...emptyPlay("unknown"), formation: { ...emptyPlay().formation, name: fStart.name }, players: fStart.players };
+  const planId = id(sp.plan);
   const fromId = id(sp.from);
   if (!start && fromId) {
     const row = await getPlay(teamId, fromId);
@@ -60,7 +81,7 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
           <h1 className="text-4xl">{editing ? "Edit call" : "Draw a defensive call"}</h1>
           <p className="text-sm text-muted">Pick the front and coverage and Reps lines your defense up with their jobs. Drag anyone, draw lines, and tap a defender to change his job.</p>
         </div>
-        <DefenseBuilder teamId={teamId} naming={naming} start={start && isDefense(start) ? start : null} playId={start && isDefense(start) ? editing : null} />
+        <DefenseBuilder teamId={teamId} naming={naming} start={start && isDefense(start) ? start : null} playId={start && isDefense(start) ? editing : null} formations={formations.map((f) => ({ id: f.id, name: f.name, players: f.players }))} planId={planId} />
       </div>
     );
   }
@@ -71,12 +92,12 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
         <Link href={`/t/${teamId}/plays`} className="text-sm text-muted underline">
           Playbook
         </Link>
-        <h1 className="text-4xl">{editing ? "Edit play" : "Draw a play"}</h1>
+        <h1 className="text-4xl">{formationMode ? (formationMode.id ? `Formation: ${formationMode.name}` : "New formation") : editing ? "Edit play" : "Draw a play"}</h1>
         <p className="text-sm text-muted">
           Drag players into place, then draw each line by hand or tap a player to pick his job. Reps names the play from your naming rules. Save and approve it like any play.
         </p>
       </div>
-      <PlayBuilder teamId={teamId} naming={naming} start={start} playId={editing} schemes={blocking.schemes} fronts={blocking.fronts} />
+      <PlayBuilder teamId={teamId} naming={naming} start={start} playId={editing} schemes={blocking.schemes} fronts={blocking.fronts} routeTree={team.routeTree ?? null} formationMode={formationMode} planId={planId} />
     </div>
   );
 }

@@ -5,6 +5,7 @@
  * fills in the back seven's jobs; every job has a line even when none was
  * drawn, so a call always reads on the field.
  */
+import { BLOCK_FRONTS, frontVs } from "./blocking";
 import { isLineman, type PlayData, type Player, type Point } from "./play";
 
 export const DEF_FRONTS = ["4-3", "3-4", "4-4", "5-3", "4-2-5"] as const;
@@ -65,6 +66,18 @@ export function frontLineup(front: DefFront): Player[] {
     default:
       return [d("E", -3.5, 1), d("T", -1, 1), d("N", 1, 1), d("R", 3.5, 1), d("W", -3, 4.5), d("M", 0, 4.5), d("S", 3, 4.5), ...corners, d("FS", -5, 11), d("SS", 5, 11)];
   }
+}
+
+/**
+ * The front lined up by technique against this offense ("4-3 Over" against
+ * Trips puts the 3 technique on the strong guard's outside shoulder), when
+ * the words name a front Reps knows. Null otherwise.
+ */
+export function frontAgainst(words: string, vs: Player[]): Player[] | null {
+  const w = words.trim().toLowerCase();
+  const f = [...BLOCK_FRONTS].sort((a, b) => b.length - a.length).find((x) => w === x.toLowerCase() || w.startsWith(`${x.toLowerCase()} `));
+  if (!f || vs.filter((p) => isLineman(p.id)).length < 5) return null;
+  return frontVs(f, vs).map((x) => ({ ...d(x.id, x.x, x.y), def: { gap: null, zone: null, man: null, technique: x.level === "line" ? x.tech : null } }));
 }
 
 /** The standard front a call's front words point to ("4-3 Over" -> 4-3), if any. */
