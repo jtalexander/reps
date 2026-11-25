@@ -7,6 +7,7 @@ import { COVERAGES, type Coverage, type PlayData } from "@/domain/play";
 import { getPlan, installNameFor, planPlays } from "@/server/game-plans";
 import { playbookPlays } from "@/server/playbook";
 import { requireCoach } from "@/server/teams";
+import { getWristband } from "@/server/wristband";
 import { TYPE_LABEL } from "@/teach/install";
 import { PlaySvg } from "@/components/play-svg";
 import { PrintButton } from "./print-button";
@@ -49,7 +50,10 @@ export default async function Print({ params, searchParams }: PageProps<"/t/[tea
     title = team.installName && filter.install?.includes("in") ? team.installName : team.name;
   }
   const offense = list.filter((p) => p.side !== "defense");
-  const numbered = list.map((p, i) => ({ ...p, n: i + 1 }));
+  // the wristband's numbers when every play has one, so cards and the call sheet match the bands
+  const band = await getWristband(teamId);
+  const banded = list.length > 0 && list.every((p) => band.numbers[p.id]);
+  const numbered = list.map((p, i) => ({ ...p, n: banded ? band.numbers[p.id]! : String(i + 1) }));
 
   const per = [1, 2, 4, 6].includes(Number(sp.per)) ? Number(sp.per) : 4;
   const group = sp.group === "formation" || sp.group === "none" ? sp.group : "type";
@@ -68,7 +72,7 @@ export default async function Print({ params, searchParams }: PageProps<"/t/[tea
     return `/t/${teamId}/plays/print?${u.toString()}`;
   };
   const opt = (on: boolean) => `px-2 py-1 text-sm ${on ? "bg-brand text-brand-ink" : "border border-line"}`;
-  const cardName = (p: { name: string; n: number }) => `${p.n}. ${p.name}`;
+  const cardName = (p: { name: string; n: string }) => `${p.n}. ${p.name}`;
 
   const toolbar = (
     <div className="no-print flex flex-col gap-3">
@@ -79,7 +83,7 @@ export default async function Print({ params, searchParams }: PageProps<"/t/[tea
         <h1 className="text-4xl">Print</h1>
         <p className="text-sm text-muted">
           {list.length} play{list.length === 1 ? "" : "s"}
-          {plan ? ` in the plan vs ${plan.opponent}` : " from your Playbook (filter them there first to print just some)"}. Numbers match on the wristband and the call sheet.
+          {plan ? ` in the plan vs ${plan.opponent}` : " from your Playbook (filter them there first to print just some)"}. {banded ? "Numbers are your wristband numbers." : "Numbers match between the play cards and the call sheet."}
         </p>
       </div>
       <div className="flex flex-wrap gap-1" role="group" aria-label="What to print">
@@ -169,27 +173,13 @@ export default async function Print({ params, searchParams }: PageProps<"/t/[tea
       </div>
     ));
   } else if (format === "wristband") {
-    // a panel for a wristband window: numbered calls in columns; print a sheet of them and cut
-    const panel = (
-      <div className="print-avoid border border-black p-1" style={{ width: "4.5in", minHeight: "2.75in" }}>
-        <div className="flex justify-between text-[9px] font-bold uppercase">
-          <span>{title}</span>
-          <span>{list.length} calls</span>
-        </div>
-        <ol className="grid grid-cols-2 gap-x-2 text-[9px] leading-tight" style={{ gridAutoFlow: "column", gridTemplateRows: `repeat(${Math.ceil(numbered.length / 2)}, auto)` }}>
-          {numbered.map((p) => (
-            <li key={p.id} className="truncate">
-              <b>{p.n}</b> {p.name}
-            </li>
-          ))}
-        </ol>
-      </div>
-    );
+    // wristbands have their own builder: band size, numbers kept week to week, player cards
     body = (
-      <div className="flex flex-wrap gap-3">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i}>{panel}</div>
-        ))}
+      <div className="card flex flex-col items-start gap-2 p-6">
+        <p>Wristbands have their own page: your band&apos;s window size, numbers that stay the same week to week, and a card for each position.</p>
+        <Link href={`/t/${teamId}/plays/wristband?${base.toString()}`} className="btn btn-primary">
+          Open the wristband builder
+        </Link>
       </div>
     );
   } else if (format === "callsheet") {

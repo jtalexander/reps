@@ -141,6 +141,8 @@ export const teams = pgTable("teams", {
   playbookViews: jsonb().$type<Array<{ id: string; name: string; query: string }>>().notNull().default(sql`'[]'::jsonb`),
   /** formations the coach saved once to start every play from: a name and where everyone lines up */
   formations: jsonb().$type<TeamFormation[]>().notNull().default(sql`'[]'::jsonb`),
+  /** wristband inserts: each play's number and the band's size (domain/wristband.ts) */
+  wristband: jsonb().$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

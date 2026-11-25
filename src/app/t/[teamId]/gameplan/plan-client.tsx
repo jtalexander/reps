@@ -274,6 +274,9 @@ export function PlanEditor(props: {
           <Link href={`/t/${teamId}/plays/print?plan=${plan.id}`} className="text-sm font-semibold underline">
             Print it
           </Link>
+          <Link href={`/t/${teamId}/plays/wristband?plan=${plan.id}`} className="text-sm font-semibold underline">
+            Wristband
+          </Link>
           <button
             className={`text-sm underline ${sure === "delete" ? "text-bad" : "text-muted"}`}
             disabled={busy}

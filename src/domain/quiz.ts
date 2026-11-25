@@ -7,6 +7,8 @@
  * from a seeded generator so a quiz can be rebuilt for grading.
  */
 import { frontOk, resolveBlocking, ROLE_LABEL, ruleWhy } from "./blocking";
+import { callKey, CARD_LETTERS, explainCall, saidText, sayCall, signalKey, splitCall, type SaidPart } from "./calling";
+import type { Band } from "./wristband";
 import { COVERAGE_LABEL, COVERAGE_TELL, REACTIONS, READ_KEY_BY_KEY } from "./defense";
 import { defJobText, ZONE_LABEL } from "./defense-play";
 import { lookLabel } from "./matchups";
@@ -42,6 +44,8 @@ export const QUIZ_TYPES = [
   "call_vs",
   "def_call_id",
   "block_vs",
+  "call_decode",
+  "signal_id",
 ] as const;
 export type QuizType = (typeof QUIZ_TYPES)[number];
 
@@ -58,6 +62,8 @@ export const QUIZ_TYPE_LABEL: Record<QuizType, string> = {
   call_vs: "What to call",
   def_call_id: "Name the call",
   block_vs: "Who do I block",
+  call_decode: "Decode the call",
+  signal_id: "Signals",
 };
 
 export interface QuizPlay {
@@ -112,6 +118,16 @@ export interface QuizContext {
   positions: string[];
   /** flip some diagrams left/right */
   allowFlip: boolean;
+  /** how the team calls plays (the band players learn): for decoding calls and signals */
+  calling?: TeachCalling | null;
+}
+
+/** The band players learn: how calls are said, and the team's numbers. */
+export interface TeachCalling {
+  band: Pick<Band, "id" | "style" | "gridRows" | "gridCols" | "cards" | "cardSeed" | "calling" | "off">;
+  numbers: Record<string, string>;
+  labels: Record<string, string>;
+  numbersBy: "play" | "concept";
 }
 
 // ---------- seeded randomness ----------
@@ -611,6 +627,93 @@ const blockVs: Gen = (play, _all, ctx, rand) => {
   return out;
 };
 
+// ---------- calling: decode the call, and signals ----------
+
+/** The call as the team says it, part by part, or null when this play isn't on the band. */
+function saidFor(play: QuizPlay, ctx: QuizContext, rand: () => number): { parts: SaidPart[]; card: string | null } | null {
+  const t = ctx.calling;
+  if (!t || isDefense(play.data)) return null;
+  const sp = splitCall(play.data.name, isUnknown(play.data.formation.name) ? null : play.data.formation.name);
+  const key = callKey(play.id, sp.play, t.numbersBy);
+  if (t.band.off.includes(key)) return null;
+  const number = t.numbers[key] ?? null;
+  const card = t.band.style === "cards" ? CARD_LETTERS[Math.floor(rand() * t.band.cards)]! : null;
+  const parts = sayCall({ formation: sp.formation, play: sp.play, number, label: t.labels[key] }, t.band, rand, { allNumbers: Object.values(t.numbers), card: card ?? undefined });
+  return parts ? { parts, card } : null;
+}
+
+/** Hear the call ("ALABAMA 37 BLUE BINGO"): what's the play, and what's your job on it? */
+const callDecode: Gen = (play, all, ctx, rand) => {
+  const said = saidFor(play, ctx, rand);
+  if (!said) return [];
+  const out: Question[] = [];
+  const text = saidText(said.parts);
+  const heard = `The coach calls “${text}”${said.card ? ` (card ${said.card} is live)` : ""}`;
+  const offense = all.filter((q) => !isDefense(q.data));
+  const pick = choicesFrom(
+    play.data.name,
+    offense.map((q) => q.data.name),
+    rand,
+  );
+  if (pick.choices.length >= 2)
+    out.push({
+      id: qid("call_decode", play.id),
+      type: "call_decode",
+      playId: play.id,
+      prompt: `${heard}. What's the play?`,
+      kind: "choice",
+      choices: pick.choices,
+      answer: pick.answer,
+      explanation: explainCall(said.parts),
+      diagram: null,
+    });
+  // and your job on it
+  const p = play.data.players.find((x) => playerMatches(x, ctx.positions) && !isUnknown(x.assignment_type));
+  if (p) {
+    const correct = assignmentText(p, ctx.terms);
+    const pool = offense.flatMap((q) => q.data.players.filter((o) => playerMatches(o, ctx.positions) && !isUnknown(o.assignment_type)).map((o) => assignmentText(o, ctx.terms)));
+    const job = choicesFrom(correct, pool, rand);
+    if (job.choices.length >= 2)
+      out.push({
+        id: qid("call_decode", play.id, `job:${p.id}`),
+        type: "call_decode",
+        playId: play.id,
+        prompt: `${heard}. What's your job, ${term(ctx.terms, "positions", p.id)}?`,
+        kind: "choice",
+        choices: job.choices,
+        answer: job.answer,
+        explanation: `${explainCall(said.parts)} That's ${play.data.name}: ${explainAssignment(p, play.data)}`,
+        diagram: null,
+      });
+  }
+  return out;
+};
+
+/** See the signal: which formation (or play word) is it? */
+const signalId: Gen = (play, all, ctx, rand) => {
+  const t = ctx.calling;
+  if (!t || isDefense(play.data)) return [];
+  const signals = t.band.calling.signals;
+  const split = (q: QuizPlay) => splitCall(q.data.name, isUnknown(q.data.formation.name) ? null : q.data.formation.name);
+  const sp = split(play);
+  const out: Question[] = [];
+  const f = signals[signalKey.formation(sp.formation)];
+  if (f && sp.formation) {
+    const pool = [...new Set(all.filter((q) => !isDefense(q.data)).map((q) => split(q).formation))].filter(Boolean);
+    const pick = choicesFrom(sp.formation, pool, rand);
+    if (pick.choices.length >= 2)
+      out.push({ id: qid("signal_id", play.id, "f"), type: "signal_id", playId: play.id, prompt: `The signal: ${f}. What formation?`, kind: "choice", choices: pick.choices, answer: pick.answer, explanation: `${f} means ${sp.formation}.`, diagram: null });
+  }
+  const w = t.band.calling.play === "word" ? signals[signalKey.word(sp.play)] : undefined;
+  if (w) {
+    const pool = [...new Set(all.filter((q) => !isDefense(q.data)).map((q) => split(q).play))];
+    const pick = choicesFrom(sp.play, pool, rand);
+    if (pick.choices.length >= 2)
+      out.push({ id: qid("signal_id", play.id, "w"), type: "signal_id", playId: play.id, prompt: `The signal: ${w}. What's the play?`, kind: "choice", choices: pick.choices, answer: pick.answer, explanation: `${w} means ${sp.play}.`, diagram: null });
+  }
+  return out;
+};
+
 const GENERATORS: Record<QuizType, Gen> = {
   formation_id: formationId,
   assignment,
@@ -624,6 +727,8 @@ const GENERATORS: Record<QuizType, Gen> = {
   call_vs: callVs,
   def_call_id: defCallId,
   block_vs: blockVs,
+  call_decode: callDecode,
+  signal_id: signalId,
 };
 
 /** Quiz types that make sense for a set of positions. */
@@ -631,7 +736,7 @@ export function typesForPositions(positions: string[]): QuizType[] {
   const qb = positions.some((p) => p.toUpperCase() === "QB");
   const back = positions.some((p) => /^(RB|TB|HB|FB|F|B|R)$/i.test(p));
   // what to call and naming the call ask only about plays the player is in (offense or defense)
-  const types: QuizType[] = ["formation_id", "assignment", "draw_job", "motion", "route_recognition", "breakdown", "call_vs", "def_call_id", "block_vs"];
+  const types: QuizType[] = ["formation_id", "assignment", "draw_job", "motion", "route_recognition", "breakdown", "call_vs", "def_call_id", "block_vs", "call_decode", "signal_id"];
   if (qb) types.push("presnap_read", "progression", "option_decision");
   else if (back) types.push("option_decision");
   return types;

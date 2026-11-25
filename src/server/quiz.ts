@@ -13,10 +13,18 @@ import { isDefense, LineSchema, type PlayData } from "@/domain/play";
 import { isCorrect, type QuizContext, type QuizPlay, type QuizType, type Question } from "@/domain/quiz";
 import { buildQuiz, nextState, type QuizMode, type SrsState } from "@/domain/srs";
 import { term, TermsSchema } from "@/domain/terms";
+import { bandOf, wristbandFrom } from "@/domain/wristband";
 import { installPlayIds } from "@/teach/install";
 import { approvedPlays } from "./plays";
 
 export type Team = typeof teams.$inferSelect;
+
+/** The band players learn calls from (the coach picks it on the wristband page). */
+function teachCalling(raw: unknown): QuizContext["calling"] {
+  const w = wristbandFrom(raw);
+  if (!Object.keys(w.numbers).length && bandOf(w, w.teachBand).calling.play !== "word") return null;
+  return { band: bandOf(w, w.teachBand), numbers: w.numbers, labels: w.labels, numbersBy: w.numbersBy };
+}
 
 export function contextFor(team: Team, position: string): QuizContext {
   return {
@@ -24,6 +32,7 @@ export function contextFor(team: Team, position: string): QuizContext {
     level: team.level,
     positions: [position],
     allowFlip: team.allowFlip,
+    calling: teachCalling(team.wristband),
   };
 }
 

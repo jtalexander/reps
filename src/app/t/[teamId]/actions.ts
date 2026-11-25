@@ -641,3 +641,48 @@ export async function saveFormationsFromPlaysAction(teamId: string, playIds: str
     return fail(err);
   }
 }
+
+// ---------- wristband ----------
+
+type WB = import("@/domain/wristband").Wristband;
+type WBR = Promise<Result<{ value: WB }>>;
+
+async function wb<T>(teamId: string, run: (w: typeof import("@/server/wristband")) => Promise<T>): Promise<Result<{ value: T }>> {
+  try {
+    await requireCoach(teamId);
+    const value = await run(await import("@/server/wristband"));
+    revalidatePath(`/t/${teamId}/plays/wristband`);
+    return { ok: true, value };
+  } catch (err) {
+    return fail(err);
+  }
+}
+const s40 = (v: unknown) => String(v ?? "").slice(0, 80);
+
+export async function wristbandTeamAction(teamId: string, patch: Partial<Pick<WB, "numbering" | "numbersBy" | "teachBand">>): WBR {
+  return wb(teamId, (w) => w.saveTeamCalling(teamId, patch));
+}
+export async function wristbandBandAction(teamId: string, bandId: string, patch: Record<string, unknown>): WBR {
+  return wb(teamId, (w) => w.saveBand(teamId, s40(bandId), patch));
+}
+export async function wristbandNewBandAction(teamId: string, fromId: string | null, name: string): Promise<Result<{ value: { wristband: WB; band: import("@/domain/wristband").Band } }>> {
+  return wb(teamId, (w) => w.createBand(teamId, fromId ? s40(fromId) : null, s40(name)));
+}
+export async function wristbandDeleteBandAction(teamId: string, bandId: string): WBR {
+  return wb(teamId, (w) => w.deleteBand(teamId, s40(bandId)));
+}
+export async function wristbandNumberAction(teamId: string, key: string, value: string): Promise<Result<{ value: { wristband: WB; bumped: string | null } }>> {
+  return wb(teamId, (w) => w.setCallNumber(teamId, s40(key), s40(value)));
+}
+export async function wristbandSwapAction(teamId: string, a: string, b: string): WBR {
+  return wb(teamId, (w) => w.swapCalls(teamId, s40(a), s40(b)));
+}
+export async function wristbandRenumberAction(teamId: string, keys: string[], numbering?: "order" | "code"): WBR {
+  return wb(teamId, (w) => w.renumberCalls(teamId, Array.isArray(keys) ? keys.map(s40).slice(0, 400) : [], numbering === "code" ? "code" : numbering === "order" ? "order" : undefined));
+}
+export async function wristbandLabelAction(teamId: string, key: string, label: string): WBR {
+  return wb(teamId, (w) => w.setCallLabel(teamId, s40(key), s40(label)));
+}
+export async function wristbandOnBandAction(teamId: string, bandId: string, key: string, on: boolean): WBR {
+  return wb(teamId, (w) => w.setOnBand(teamId, s40(bandId), s40(key), Boolean(on)));
+}

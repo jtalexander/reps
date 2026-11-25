@@ -255,3 +255,17 @@ body {
     break-inside: avoid;
   }
 }
+
+/* wristband sheets: real sizes, colors kept, nothing clipped */
+.print-color {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+@media print {
+  .print-visible {
+    overflow: visible !important;
+  }
+  @page {
+    margin: 0.4in;
+  }
+}

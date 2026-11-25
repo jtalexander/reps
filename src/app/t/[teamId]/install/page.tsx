@@ -75,7 +75,14 @@ export default async function Install({ params, searchParams }: PageProps<"/t/[t
             In the install · {total} play{total === 1 ? "" : "s"}
             {wholeTopics.length ? ` · ${wholeTopics.length} whole topic${wholeTopics.length === 1 ? "" : "s"}` : ""}
           </span>
-          {(total > 0 || wholeTopics.length > 0 || team.installName) && <ClearInstall teamId={teamId} count={picked.length + wholeTopics.length} />}
+          <span className="flex flex-wrap items-center gap-3">
+            {total > 0 && (
+              <Link href={`/t/${teamId}/plays/wristband?install=in`} className="text-sm font-semibold underline">
+                Wristband
+              </Link>
+            )}
+            {(total > 0 || wholeTopics.length > 0 || team.installName) && <ClearInstall teamId={teamId} count={picked.length + wholeTopics.length} />}
+          </span>
         </div>
         {total === 0 && wholeTopics.length === 0 ? (
           <p className="text-sm text-muted">Nothing yet. Find plays below, tick them, and tap Add.</p>

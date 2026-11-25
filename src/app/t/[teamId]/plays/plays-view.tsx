@@ -111,6 +111,11 @@ export async function PlaysView({ teamId, sp, header }: { teamId: string; sp: Re
             Print {any ? "these" : "the playbook"}
           </Link>
         )}
+        {found.length > 0 && (
+          <Link href={`/t/${teamId}/plays/wristband${query ? `?${query}` : ""}`} className="font-semibold underline">
+            Wristband
+          </Link>
+        )}
       </div>
 
       {found.length === 0 ? (
