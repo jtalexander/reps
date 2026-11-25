@@ -11,8 +11,9 @@ import type { PlayData } from "@/domain/play";
 export function BlockingView({ teamId, playId, data, fronts }: { teamId: string; playId: string; data: PlayData; fronts: BlockFront[] }) {
   const b = data.blocking!;
   const list = [...new Set([...(fronts.includes(b.front as BlockFront) ? [] : [b.front as BlockFront]), ...fronts])];
-  const [front, setFront] = useState<BlockFront>((list.includes(b.front as BlockFront) ? b.front : list[0]) as BlockFront);
-  const r = resolveBlocking(data, b, front);
+  // a play read from the playbook opens on its own drawing
+  const [front, setFront] = useState<BlockFront | "drawn">(b.drawn ? "drawn" : ((list.includes(b.front as BlockFront) ? b.front : list[0]) as BlockFront));
+  const r = resolveBlocking(data, b, front === "drawn" ? (b.front as BlockFront) : front);
   const label = (id: string | null) => (id ? (r.defenders.find((d) => d.id === id)?.label ?? id) : "no one");
   return (
     <section className="card flex flex-col gap-3 p-4">
@@ -23,6 +24,11 @@ export function BlockingView({ teamId, playId, data, fronts }: { teamId: string;
         </a>
       </div>
       <div className="flex flex-wrap gap-1 text-sm" role="group" aria-label="Against">
+        {b.drawn && (
+          <button onClick={() => setFront("drawn")} className={`px-2 py-1 ${front === "drawn" ? "bg-brand text-brand-ink" : "border border-line"}`} aria-pressed={front === "drawn"}>
+            As drawn
+          </button>
+        )}
         {list.map((f) => (
           <button key={f} onClick={() => setFront(f)} className={`px-2 py-1 ${front === f ? "bg-brand text-brand-ink" : "border border-line"}`} aria-pressed={front === f}>
             {f}
@@ -30,7 +36,12 @@ export function BlockingView({ teamId, playId, data, fronts }: { teamId: string;
           </button>
         ))}
       </div>
-      <PlaySvg data={data} blockFront={front} fit className="block w-full" />
+      <PlaySvg data={data} blockFront={front === "drawn" ? null : front} fit className="block w-full" />
+      {front === "drawn" ? (
+        <p className="text-sm text-muted">
+          The blocks as your playbook draws them. Reps matched this play to {b.name} from its name: tap a front to see {b.name}&apos;s rules against it, and check the fronts that are right in the builder so linemen are quizzed on them.
+        </p>
+      ) : (
       <ul className="grid gap-1 text-sm sm:grid-cols-2">
         {r.blocks.map((x) => (
           <li key={x.id}>
@@ -39,7 +50,8 @@ export function BlockingView({ teamId, playId, data, fronts }: { teamId: string;
           </li>
         ))}
       </ul>
-      {!b.checked.includes(front) && <p className="text-xs text-muted">Not checked against the {front} yet. Players are only quizzed on fronts you check in the builder.</p>}
+      )}
+      {front !== "drawn" && !b.checked.includes(front) && <p className="text-xs text-muted">Not checked against the {front} yet. Players are only quizzed on fronts you check in the builder.</p>}
     </section>
   );
 }

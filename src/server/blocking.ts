@@ -23,6 +23,7 @@ import {
   type TeamScheme,
 } from "@/domain/blocking";
 import { PlayDataSchema } from "@/domain/play";
+import { assignSchemes } from "@/teach/assign-schemes";
 
 export async function getBlocking(teamId: string, database: Db = db) {
   const [t] = await database.select({ blocking: teams.blocking }).from(teams).where(eq(teams.id, teamId));
@@ -39,13 +40,15 @@ const SchemeInput = z.object({
 });
 
 /** Save one scheme's rules, then redraw every play that uses it. Returns how many plays changed. */
-export async function saveScheme(teamId: string, input: unknown, database: Db = db): Promise<{ scheme: TeamScheme; plays: number }> {
+export async function saveScheme(teamId: string, input: unknown, database: Db = db): Promise<{ scheme: TeamScheme; plays: number; matched: number }> {
   const s = SchemeInput.parse(input) as TeamScheme;
   s.words = [...new Set(s.words.map((w) => w.toUpperCase()))];
   const { raw } = await getBlocking(teamId, database);
   const schemes = [...(raw.schemes ?? []).filter((x) => x.key !== s.key), s];
   await database.update(teams).set({ blocking: { ...raw, schemes } }).where(eq(teams.id, teamId));
-  return { scheme: s, plays: await redrawPlays(teamId, s, database) };
+  const redrawn = await redrawPlays(teamId, s, database);
+  // new play words may fit plays that had no scheme yet
+  return { scheme: s, plays: redrawn, matched: await assignSchemes(teamId, database) };
 }
 
 /** Put one of Reps' schemes back to Reps' rules, or remove a scheme the coach added (plays keep their last rules). */
@@ -80,9 +83,25 @@ async function redrawPlays(teamId: string, s: TeamScheme, database: Db): Promise
     const data = parsed.data;
     const b = withScheme(data.blocking!, s);
     const front = frontOk(b.front) ? b.front : BLOCK_FRONTS[0];
-    const next = { ...data, blocking: b, players: applyBlocking(data, b, front) };
+    // a playbook drawing keeps its own blocks; only Reps-built blocking is redrawn
+    const next = { ...data, blocking: b, players: b.drawn ? data.players : applyBlocking(data, b, front) };
     await database.update(plays).set({ data: next }).where(and(eq(plays.teamId, teamId), eq(plays.id, r.id)));
     n++;
   }
   return n;
+}
+
+/**
+ * Copy one team's blocking (scheme rules, play words, fronts) to another team
+ * the same coach has: it replaces that team's blocking, redraws its plays that
+ * use a copied scheme, and gives its other runs their schemes.
+ */
+export async function copyBlocking(fromTeamId: string, toTeamId: string, database: Db = db): Promise<{ redrawn: number; matched: number }> {
+  if (fromTeamId === toTeamId) throw new Error("Pick another team.");
+  const { raw } = await getBlocking(fromTeamId, database);
+  const copy: TeamBlocking = JSON.parse(JSON.stringify(raw));
+  await database.update(teams).set({ blocking: copy }).where(eq(teams.id, toTeamId));
+  let redrawn = 0;
+  for (const s of teamSchemes(copy)) redrawn += await redrawPlays(toTeamId, s, database);
+  return { redrawn, matched: await assignSchemes(toTeamId, database) };
 }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   applyBlocking,
+  autoBlocking,
   BLOCK_FRONTS,
+  callSide,
   frontVs,
   newBlocking,
   resolveBlocking,
@@ -93,6 +95,23 @@ describe("blocking schemes", () => {
     const mine = teamSchemes({ schemes: [{ ...scheme("power"), words: ["BELLY"] }] });
     expect(schemeForWords("BELLY RIGHT", mine)).toBe("power");
     expect(mine).toHaveLength(SCHEME_LIBRARY.length);
+  });
+});
+
+describe("plays read from a playbook", () => {
+  const schemes = teamSchemes({});
+  const run = (name: string, play_type: PlayData["play_type"] = "run"): PlayData => ({ ...emptyPlay(name), play_type, players: proI });
+  it("get their scheme, direction and drawn-against front from the call", () => {
+    expect(autoBlocking(run("COUNTER LEFT vs 4-3 Under"), schemes, ["4-3"], "right")).toMatchObject({ scheme: "counter", side: "left", front: "4-3 Under", drawn: true, checked: [] });
+    expect(autoBlocking(run("LEAD RIGHT vs 4-4 Stack"), schemes, ["5-3"], "left")).toMatchObject({ scheme: "iso", side: "right", front: "4-4" });
+    expect(autoBlocking(run("PRO RIGHT, 27 POWER"), schemes, ["5-3"], "right")).toMatchObject({ scheme: "power", side: "left", front: "5-3" });
+    // a pass, a defense, or a play the coach already blocked: left alone
+    expect(autoBlocking(run("TRIPS RIGHT JET, SMASH", "pass"), schemes, ["4-3"], "right")).toBeNull();
+    expect(autoBlocking({ ...run("POWER RIGHT"), side: "defense" }, schemes, ["4-3"], "right")).toBeNull();
+    expect(autoBlocking(powerRight(), schemes, ["4-3"], "right")).toBeNull();
+    expect(callSide("SPREAD RIGHT, JET REVERSE LEFT")).toBe("left");
+    expect(callSide("PRO RIGHT, 26 POWER")).toBe("right");
+    expect(callSide("TRAP")).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@
  */
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
+import { assignSchemes } from "./assign-schemes";
 import { plays, uploadPages, uploads } from "@/db/schema";
 import { teachPages } from "@/db/teach-schema";
 import { toPlayData, type Extracted } from "@/domain/extraction";
@@ -224,6 +225,8 @@ export async function saveDrawing(teamId: string, key: string, input: DrawingInp
       sort: page.pageNo * 100 + page.drawings.indexOf(drawing),
     })
     .returning({ id: plays.id });
+  // a run read from the playbook gets its blocking scheme from its name (24 POWER -> Power)
+  if (data && !isDefense(data)) await assignSchemes(teamId, database, [row!.id]);
   return { playId: row!.id, existed: false };
 }
 

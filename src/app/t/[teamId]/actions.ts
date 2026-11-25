@@ -20,7 +20,9 @@ import { drawPlay, type DrawResult } from "@/teach/play-draw";
 import { readAhead, type ReadAhead } from "@/teach/read-ahead";
 import { customLook } from "@/domain/matchups";
 import { keepSuggestedLooks, playLooks, setPlayLook, type PlayLooks } from "@/server/matchups";
-import { resetScheme, saveFronts, saveScheme } from "@/server/blocking";
+import { copyBlocking, resetScheme, saveFronts, saveScheme } from "@/server/blocking";
+import { assignSchemes } from "@/teach/assign-schemes";
+import { teamsForUser } from "@/server/teams";
 import type { TeamScheme } from "@/domain/blocking";
 import { checkBatches, ensureBatchRead } from "@/teach/read-batch";
 import { nameDrawnPlay, type NameGuess } from "@/teach/name-drawing";
@@ -510,12 +512,12 @@ export async function saveBuiltPlayAction(teamId: string, playId: string | null,
 }
 
 /** Save a blocking scheme's rules; every play blocked with it is redrawn. */
-export async function saveSchemeAction(teamId: string, scheme: TeamScheme): Promise<Result<{ plays: number }>> {
+export async function saveSchemeAction(teamId: string, scheme: TeamScheme): Promise<Result<{ plays: number; matched: number }>> {
   try {
     await requireCoach(teamId);
     const r = await saveScheme(teamId, scheme);
     revalidatePath(`/t/${teamId}/plays`);
-    return { ok: true, plays: r.plays };
+    return { ok: true, plays: r.plays, matched: r.matched };
   } catch (err) {
     return fail(err);
   }
@@ -538,6 +540,31 @@ export async function saveFrontsAction(teamId: string, fronts: string[]): Promis
   try {
     await requireCoach(teamId);
     return { ok: true, fronts: await saveFronts(teamId, Array.isArray(fronts) ? fronts.map(String) : []) };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Give every run play its blocking scheme from its name (plays read before schemes existed). */
+export async function assignSchemesAction(teamId: string): Promise<Result<{ matched: number }>> {
+  try {
+    await requireCoach(teamId);
+    const matched = await assignSchemes(teamId);
+    revalidatePath(`/t/${teamId}/plays`);
+    return { ok: true, matched };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Copy this team's blocking schemes to another team the coach has. */
+export async function copyBlockingAction(teamId: string, toTeamId: string): Promise<Result<{ redrawn: number; matched: number }>> {
+  try {
+    const { user } = await requireCoach(teamId);
+    if (!(await teamsForUser(user.id)).some((t) => t.id === toTeamId)) throw new Error("You don't coach that team.");
+    const r = await copyBlocking(teamId, toTeamId);
+    revalidatePath(`/t/${toTeamId}/plays`);
+    return { ok: true, ...r };
   } catch (err) {
     return fail(err);
   }

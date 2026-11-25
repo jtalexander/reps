@@ -251,6 +251,8 @@ export const PlayDataSchema = z.object({
       front: str,
       fixes: z.record(str, z.record(str, str.nullable())).default({}),
       checked: z.array(str).default([]),
+      /** the play's own blocks are the playbook's drawing: rule changes leave them alone */
+      drawn: z.boolean().optional(),
     })
     .nullable()
     .optional(),

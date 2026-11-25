@@ -25,7 +25,7 @@ import {
 } from "@/domain/blocking";
 import { emptyPlay, type PlayData, type Player } from "@/domain/play";
 import { safeCall } from "@/lib/safe-call";
-import { resetSchemeAction, saveFrontsAction, saveSchemeAction } from "../../actions";
+import { assignSchemesAction, copyBlockingAction, resetSchemeAction, saveFrontsAction, saveSchemeAction } from "../../actions";
 
 const p = (id: string, x: number, y: number): Player => ({ id, position: id, x, y, on_ball: Math.abs(y) < 0.8, side: x < -1 ? "left" : x > 1 ? "right" : "middle", split: null, assignment_type: "unknown", route: null, block: null, path: null, notes: null });
 const OL = [p("LT", -2.6, 0), p("LG", -1.3, 0), p("C", 0, 0), p("RG", 1.3, 0), p("RT", 2.6, 0)];
@@ -38,7 +38,22 @@ const FORMATIONS: Array<{ key: string; name: string; players: Player[] }> = [
 
 const SIDE_NOTE: Partial<Record<Role, string>> = { PSW: "only when there's a wing", PSTE: "only with a tight end", BSTE: "only with a tight end", BSW: "only when there's a wing", FB: "the back who isn't carrying it" };
 
-export function SchemeEditor({ teamId, schemes, fronts, initial }: { teamId: string; schemes: TeamScheme[]; fronts: BlockFront[]; initial: string }) {
+export function SchemeEditor({
+  teamId,
+  schemes,
+  fronts,
+  initial,
+  matches,
+  otherTeams,
+}: {
+  teamId: string;
+  schemes: TeamScheme[];
+  fronts: BlockFront[];
+  initial: string;
+  /** run plays whose name fits a scheme but have none yet */
+  matches: number;
+  otherTeams: Array<{ id: string; name: string }>;
+}) {
   const router = useRouter();
   const [all, setAll] = useState(schemes);
   const [key, setKey] = useState(initial);
@@ -52,6 +67,30 @@ export function SchemeEditor({ teamId, schemes, fronts, initial }: { teamId: str
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [seen, setSeen] = useState<BlockFront[]>(fronts);
   const [newName, setNewName] = useState("");
+  const [toTeam, setToTeam] = useState("");
+  const [sure, setSure] = useState(false);
+  const [teamMsg, setTeamMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [left, setLeft] = useState(matches);
+  const [playMsg, setPlayMsg] = useState<string | null>(null);
+  const giveSchemes = async () => {
+    setBusy(true);
+    const res = await safeCall(() => assignSchemesAction(teamId), "Matching plays");
+    setBusy(false);
+    if (!res.ok) return setPlayMsg(res.error);
+    setLeft(0);
+    setPlayMsg(`${res.matched} play${res.matched === 1 ? "" : "s"} now have their scheme. Open one to see it against each front, and check the fronts that are right.`);
+    router.refresh();
+  };
+  const copyTo = async () => {
+    if (!sure) return setSure(true);
+    setBusy(true);
+    const res = await safeCall(() => copyBlockingAction(teamId, toTeam), "Copying");
+    setBusy(false);
+    setSure(false);
+    if (!res.ok) return setTeamMsg({ text: res.error, ok: false });
+    const name = otherTeams.find((t) => t.id === toTeam)?.name ?? "That team";
+    setTeamMsg({ text: `Copied to ${name}: ${res.matched} of its plays got a scheme${res.redrawn ? `, ${res.redrawn} redrawn` : ""}.`, ok: true });
+  };
   const isLib = SCHEME_LIBRARY.some((s) => s.key === draft.key);
   const changed = JSON.stringify({ ...draft, words: undefined }) !== JSON.stringify({ ...saved, words: undefined }) || words !== saved.words.join(", ");
 
@@ -80,7 +119,7 @@ export function SchemeEditor({ teamId, schemes, fronts, initial }: { teamId: str
     if (!res.ok) return setMsg({ text: res.error, ok: false });
     setAll((a) => (a.some((x) => x.key === scheme.key) ? a.map((x) => (x.key === scheme.key ? scheme : x)) : [...a, scheme]));
     setDraft(scheme);
-    setMsg({ text: `Saved. ${res.plays ? `${res.plays} play${res.plays === 1 ? "" : "s"} redrawn with the new rules.` : "No plays use it yet."}`, ok: true });
+    setMsg({ text: `Saved. ${res.plays ? `${res.plays} play${res.plays === 1 ? "" : "s"} use the new rules.` : "No plays use it yet."}${res.matched ? ` ${res.matched} more matched by name.` : ""}`, ok: true });
     router.refresh();
   };
   const reset = async () => {
@@ -124,6 +163,22 @@ export function SchemeEditor({ teamId, schemes, fronts, initial }: { teamId: str
 
   return (
     <div className="flex flex-col gap-4">
+      {(left > 0 || playMsg) && (
+        <section className="card flex flex-col gap-2 p-4" aria-live="polite">
+          {playMsg ? (
+            <p className="text-sm text-ok">{playMsg}</p>
+          ) : (
+            <>
+              <p className="text-sm">
+                {left} run play{left === 1 ? "" : "s"} in your playbook {left === 1 ? "fits" : "fit"} a scheme by name but {left === 1 ? "doesn't have one" : "don't have one"} yet. Reps keeps the blocks your playbook draws and adds the scheme, so you can see each play against every front.
+              </p>
+              <button className="btn btn-primary self-start" disabled={busy} onClick={giveSchemes}>
+                Give {left === 1 ? "it its scheme" : "them their schemes"}
+              </button>
+            </>
+          )}
+        </section>
+      )}
       <section className="card flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1 text-xs">
@@ -267,6 +322,43 @@ export function SchemeEditor({ teamId, schemes, fronts, initial }: { teamId: str
           ))}
         </div>
       </section>
+
+      {otherTeams.length > 0 && (
+        <section className="card flex flex-col gap-2 p-4">
+          <h2 className="text-2xl">Use these on another team</h2>
+          <p className="text-sm text-muted">Copies every scheme&apos;s rules, the play words and the fronts you see. It replaces that team&apos;s blocking rules; fixes on its plays stay.</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs">
+              Team
+              <select
+                className="input w-auto"
+                value={toTeam}
+                onChange={(e) => {
+                  setToTeam(e.target.value);
+                  setSure(false);
+                  setTeamMsg(null);
+                }}
+              >
+                <option value="">Pick a team</option>
+                {otherTeams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className={sure ? "btn btn-primary" : "btn btn-outline"} disabled={busy || !toTeam || changed} onClick={copyTo}>
+              {sure ? `Yes, replace ${otherTeams.find((t) => t.id === toTeam)?.name ?? "it"}'s blocking` : "Copy"}
+            </button>
+          </div>
+          {changed && <p className="text-xs text-warn">Save your changes to {draft.name} first.</p>}
+          {teamMsg && (
+            <p className={`text-sm ${teamMsg.ok ? "text-ok" : "text-warn"}`} aria-live="polite">
+              {teamMsg.text}
+            </p>
+          )}
+        </section>
+      )}
     </div>
   );
 }

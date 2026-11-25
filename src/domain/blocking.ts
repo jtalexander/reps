@@ -628,3 +628,38 @@ export const teamFronts = (tb: TeamBlocking | null | undefined): BlockFront[] =>
 export function withScheme(b: Blocking, s: Scheme): Blocking {
   return { ...b, scheme: s.key, name: s.name, rules: { ...s.rules } as Record<string, string>, hole: s.hole };
 }
+
+/**
+ * A scheme for a play read from the playbook, from its name ("PRO RIGHT, 26
+ * POWER vs 5-2" -> Power, against the 5-2 it's drawn against). Runs and
+ * options only, and never over blocking the coach already set. The play's
+ * drawn blocks stay as drawn; the scheme adds every other front.
+ */
+export function autoBlocking(data: PlayData, schemes: TeamScheme[], fronts: string[], side: "left" | "right"): Blocking | null {
+  if (data.blocking || data.side === "defense" || !(data.play_type === "run" || data.play_type === "option")) return null;
+  const m = data.name.match(/^(.*?)\s+vs\.?\s+(.+)$/i);
+  const call = m ? m[1]! : data.name;
+  const key = schemeForWords(call, schemes);
+  const scheme = key ? schemes.find((s) => s.key === key) : undefined;
+  if (!scheme) return null;
+  // the front it's drawn against: the exact front, else the longest one its words start with ("4-4 Stack" -> 4-4)
+  const vs = m ? m[2]!.trim().toLowerCase() : "";
+  const drawnVs = vs ? (BLOCK_FRONTS.find((f) => f.toLowerCase() === vs) ?? [...BLOCK_FRONTS].sort((a, b) => b.length - a.length).find((f) => vs.startsWith(`${f.toLowerCase()} `))) : undefined;
+  return { ...newBlocking(scheme, callSide(data.name) ?? side, drawnVs ?? fronts[0] ?? "4-3"), drawn: true };
+}
+
+/**
+ * Which way a run goes by its call: a direction word in the play part ("COUNTER
+ * LEFT", "SPREAD RIGHT, JET REVERSE LEFT"), else an even hole goes right and an
+ * odd one left ("26 POWER"). Null when the call doesn't say.
+ */
+export function callSide(name: string): "left" | "right" | null {
+  const call = name.replace(/\s+vs\.?\s+.*$/i, "");
+  const play = call.includes(",") ? call.slice(call.lastIndexOf(",") + 1) : call;
+  const w = play.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().split(" ");
+  const dir = w.find((x) => /^(RIGHT|RT|LEFT|LT)$/.test(x));
+  if (dir) return dir.startsWith("R") ? "right" : "left";
+  const hole = w.find((x) => /^\d{2}$/.test(x));
+  if (hole) return Number(hole) % 2 === 0 ? "right" : "left";
+  return null;
+}

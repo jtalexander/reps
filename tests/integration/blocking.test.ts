@@ -61,6 +61,35 @@ describe("blocking schemes for a team", () => {
     expect(await b.saveFronts(team.id, ["5-3", "6-2", "nonsense"], db)).toEqual(["5-3", "6-2"]);
     await expect(b.saveFronts(team.id, [], db)).rejects.toThrow();
 
+    // a run read from the playbook, drawn with its own blocks, gets its scheme by name and keeps its drawing
+    const drawnRT = { ...proI.find((x) => x.id === "RT")!, assignment_type: "block" as const, block: { type: "down", target: null, path: [[0, 0], [-1, 1]] as Array<[number, number]> } };
+    const read: PlayData = { ...emptyPlay("COUNTER LEFT vs 5-2"), play_type: "run", players: proI.map((x) => (x.id === "RT" ? drawnRT : x)) };
+    const [r2] = await db.insert(plays).values({ teamId: team.id, name: read.name, data: read, playType: "run", status: "draft", extraction: "done" }).returning();
+    const { schemeMatches, assignSchemes } = await import("@/teach/assign-schemes");
+    expect(await schemeMatches(team.id, db)).toBe(1);
+    expect(await assignSchemes(team.id, db)).toBe(1);
+    expect(await schemeMatches(team.id, db)).toBe(0);
+    const [got] = await db.select().from(plays).where(eq(plays.id, r2!.id));
+    expect(got!.data!.blocking).toMatchObject({ scheme: "counter", side: "left", front: "5-2", drawn: true });
+    expect(got!.data!.players.find((x) => x.id === "RT")!.block!.path).toEqual([[0, 0], [-1, 1]]);
+    // changing Counter's rules leaves the playbook drawing alone
+    const counter = SCHEME_LIBRARY.find((s) => s.key === "counter")!;
+    await b.saveScheme(team.id, { ...counter, rules: { ...counter.rules, PST: "base" } }, db);
+    const [still] = await db.select().from(plays).where(eq(plays.id, r2!.id));
+    expect(still!.data!.blocking!.rules.PST).toBe("base");
+    expect(still!.data!.players.find((x) => x.id === "RT")!.block!.path).toEqual([[0, 0], [-1, 1]]);
+
+    // copy this team's blocking to another team the coach has: rules, words and fronts go, and its runs get schemes
+    const other = await createTeam(db, ownerId, "JV", "youth");
+    await db.insert(plays).values({ teamId: other.id, name: "BELLY RIGHT", data: { ...emptyPlay("BELLY RIGHT"), play_type: "run", players: proI }, playType: "run", status: "draft", extraction: "done" });
+    await b.saveScheme(team.id, { ...power, words: ["BELLY"] }, db);
+    const copied = await b.copyBlocking(team.id, other.id, db);
+    expect(copied.matched).toBe(1);
+    const theirs = await b.getBlocking(other.id, db);
+    expect(theirs.fronts).toEqual(["5-3", "6-2"]);
+    expect(theirs.schemes.find((s) => s.key === "counter")!.rules.PST).toBe("base");
+    await expect(b.copyBlocking(team.id, team.id, db)).rejects.toThrow();
+
     // the right tackle is quizzed on who he blocks against the 4-3 (the one front checked)
     const { startSession } = await import("@/server/quiz");
     const [rt] = await db.insert(players).values({ teamId: team.id, name: "Big Mike", positions: ["RT"] }).returning();
@@ -74,6 +103,6 @@ describe("blocking schemes for a team", () => {
     const shown = diagramData(reset!.data!, q!);
     expect(shown?.blocking?.scheme).toBe("power");
     expect(shown?.players.find((x) => x.id === "RT")!.block).toBeNull();
-    expect((await db.select({ id: plays.id }).from(plays).where(and(eq(plays.teamId, team.id)))).length).toBe(1);
+    expect((await db.select({ id: plays.id }).from(plays).where(and(eq(plays.teamId, team.id)))).length).toBe(2);
   });
 });

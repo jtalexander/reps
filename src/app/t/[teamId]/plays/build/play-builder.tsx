@@ -441,7 +441,8 @@ export function PlayBuilder(props: {
     };
     if (play.blocking) {
       const main = frontOk(play.blocking.front) ? play.blocking.front : frontOk(front) ? front : "4-3";
-      play.blocking = { ...play.blocking, front: main };
+      // the blocks are now the scheme's (with the coach's fixes), not the playbook drawing
+      play.blocking = { ...play.blocking, front: main, drawn: false };
       play.players = applyBlocking(play, play.blocking, main);
     }
     const r = await safeCall(() => saveBuiltPlayAction(props.teamId, props.playId, play), "Saving");
@@ -615,6 +616,7 @@ export function PlayBuilder(props: {
               <input type="checkbox" className="h-5 w-5" checked={data.blocking.checked.includes(front)} onChange={(e) => checkFront(e.target.checked)} />
               The blocking against the {front} is right (players are quizzed on the fronts you check)
             </label>
+            {data.blocking.drawn && <p className="text-xs text-warn">Saving puts {data.blocking.name}&apos;s blocks (and your fixes) in place of the blocks drawn in your playbook.</p>}
             <p className="text-xs text-muted">
               {blockNote ?? "Tap a lineman to see his rule, then tap a defender to change who he blocks against this front."}{" "}
               <a className="underline" href={`/t/${props.teamId}/plays/blocking?scheme=${data.blocking.scheme}`}>
