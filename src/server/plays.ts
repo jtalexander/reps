@@ -13,7 +13,7 @@ import {
   teamConcepts as mergeConcepts,
   type Concept,
 } from "@/domain/concepts";
-import { PlayDataSchema, type PlayData } from "@/domain/play";
+import { isDefense, PlayDataSchema, type PlayData } from "@/domain/play";
 import { readiness, type Level } from "@/domain/readiness";
 
 export type PlayRow = typeof plays.$inferSelect;
@@ -49,6 +49,7 @@ function columnsFor(data: PlayData) {
     name: data.name,
     playType: String(data.play_type),
     conceptKey: data.concept_key,
+    side: isDefense(data) ? ("defense" as const) : ("offense" as const),
     data,
   };
 }
@@ -92,7 +93,8 @@ export async function savePlayData(
   if (!current) throw new Error("Play not found.");
   const data = PlayDataSchema.parse(input);
   // a play converted from a drawing goes back to "to check" when edited; reads come from Teach, not this play
-  const { status, qbReady } = isConverted(current) ? { status: "draft" as const, qbReady: false } : statusFor(data, opts.level, current.status === "approved");
+  // a defensive call has no offensive read checklist either
+  const { status, qbReady } = isConverted(current) || isDefense(data) ? { status: "draft" as const, qbReady: false } : statusFor(data, opts.level, current.status === "approved");
   const [row] = await database
     .update(plays)
     .set({ ...columnsFor(data), status, qbReady, ...(status !== "approved" ? { approvedAt: null, approvedBy: null } : {}) })
@@ -106,7 +108,7 @@ export async function approvePlay(teamId: string, playId: string, userId: string
   if (!current?.data) throw new Error("Play not found.");
   const r = readiness(current.data, level);
   // a converted play is approved once its drawing is confirmed; the old read checklist doesn't apply
-  if (!r.complete && !isConverted(current)) {
+  if (!r.complete && !isConverted(current) && !isDefense(current.data)) {
     throw new Error(`Still needed: ${r.missing.map((m) => m.label).join(", ")}`);
   }
   // Approval confirms every suggested value.
@@ -122,7 +124,7 @@ export async function approvePlay(teamId: string, playId: string, userId: string
 export async function unapprovePlay(teamId: string, playId: string, level: Level, database: Db = db) {
   const current = await getPlay(teamId, playId, database);
   if (!current?.data) throw new Error("Play not found.");
-  const { status } = isConverted(current) ? { status: "draft" as const } : statusFor(current.data, level, false);
+  const { status } = isConverted(current) || isDefense(current.data) ? { status: "draft" as const } : statusFor(current.data, level, false);
   await database
     .update(plays)
     .set({ status, qbReady: false, approvedAt: null, approvedBy: null })

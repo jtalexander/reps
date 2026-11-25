@@ -2,9 +2,9 @@ import Link from "next/link";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { answers, srsItems } from "@/db/schema";
-import { QUIZ_TYPE_LABEL, typesForPositions } from "@/domain/quiz";
+import { candidates, QUIZ_TYPE_LABEL, typesForPositions } from "@/domain/quiz";
 import { requirePlayer } from "@/server/player-session";
-import { quizPlays } from "@/server/quiz";
+import { contextFor, quizPlays } from "@/server/quiz";
 import { installPlayIds } from "@/teach/install";
 import { leaveAction, startQuizAction, switchPositionAction } from "./actions";
 import { TeachSection } from "./teach-section";
@@ -25,7 +25,9 @@ export default async function StudyHome({ searchParams }: PageProps<"/study">) {
     .select({ t: sql<number>`count(*)::int`, c: sql<number>`count(*) filter (where ${answers.correct})::int` })
     .from(answers)
     .where(and(eq(answers.playerId, me.player.id), sql`${answers.createdAt} > now() - interval '7 days'`));
-  const types = typesForPositions([me.position]);
+  // only the kinds of question this player's plays can ask (a defender gets defense questions, a receiver offense)
+  const asked = new Set(candidates(plays, contextFor(me.team, me.position)).map((c) => c.type));
+  const types = typesForPositions([me.position]).filter((t) => asked.has(t));
   const otherPositions = me.player.positions.filter((p) => p !== me.position);
 
   return (

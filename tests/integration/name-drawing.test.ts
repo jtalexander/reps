@@ -60,6 +60,10 @@ const naming: Naming = {
     { word: "24 POWER", means: "power run, guard pulls", pages: [] },
   ],
   other: [],
+  fronts: [],
+  coverages: [],
+  stunts: [],
+  blitzes: [],
 };
 
 /** Strokes from the player's spot: [id, pen, corners...] */

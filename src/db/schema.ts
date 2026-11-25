@@ -23,6 +23,7 @@ import {
 import type { Box } from "@/ingest/boxes";
 import type { Concept } from "@/domain/concepts";
 import type { PlayData } from "@/domain/play";
+import type { GoodVs } from "@/domain/matchups";
 import type { Naming } from "@/domain/naming";
 import type { Terms } from "@/domain/terms";
 import type { RouteTree } from "@/domain/route-tree";
@@ -191,6 +192,8 @@ export const uploads = pgTable(
     pageCount: integer().notNull().default(0),
     status: text().$type<"uploading" | "rendering" | "ready" | "failed">().notNull().default("rendering"),
     error: text(),
+    /** an offensive or a defensive playbook (decides how its drawings are read) */
+    side: text().$type<"offense" | "defense">().notNull().default("offense"),
     createdBy: uuid().references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },
@@ -250,6 +253,10 @@ export const plays = pgTable(
     qbReady: boolean().notNull().default(false),
     /** picked one by one for this week's install (topics can be in the install too) */
     inInstall: boolean().notNull().default(false),
+    /** an offensive play or a defensive call */
+    side: text().$type<"offense" | "defense">().notNull().default("offense"),
+    /** what it's good against: tags the coach kept or added, and Reps' suggestions he dropped */
+    goodVs: jsonb().$type<GoodVs>().notNull().default({ yes: [], no: [] }),
     approvedAt: timestamp({ withTimezone: true }),
     approvedBy: uuid().references(() => users.id, { onDelete: "set null" }),
     sort: integer().notNull().default(0),

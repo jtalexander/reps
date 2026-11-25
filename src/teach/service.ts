@@ -127,6 +127,8 @@ async function executeJobInner(job: typeof jobs.$inferSelect, database: Db) {
     else if (job.kind === "pick_core") result = await pickCoreQuestions(job.teamId, job.ref, database);
     else if (job.kind === "naming") result = await runNaming(job.teamId, database);
     else if (job.kind === "convert_drawing") await convertDrawing(job.teamId, job.ref, database);
+    else if (job.kind === "read_batch") await (await import("./read-batch")).runReadBatch(job.ref, database);
+    else if (job.kind === "import_batch") await (await import("./read-batch")).importBatch(job.ref, database);
     else throw new Error(`Unknown job kind ${job.kind}`);
     await setJob(job.id, { status: "done", result }, database);
   } catch (err) {

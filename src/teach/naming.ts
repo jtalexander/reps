@@ -37,7 +37,9 @@ export async function runNaming(teamId: string, database: Db = db) {
 
 export async function getNaming(teamId: string, database: Db = db) {
   const [t] = await database.select({ naming: teams.naming, approvedAt: teams.namingApprovedAt }).from(teams).where(eq(teams.id, teamId));
-  return { naming: t?.naming ?? null, approvedAt: t?.approvedAt ?? null };
+  // rules saved before the defense lists existed get empty ones
+  const naming = t?.naming ? { ...t.naming, fronts: t.naming.fronts ?? [], coverages: t.naming.coverages ?? [], stunts: t.naming.stunts ?? [], blitzes: t.naming.blitzes ?? [] } : null;
+  return { naming, approvedAt: t?.approvedAt ?? null };
 }
 
 /** The coach's edits; saving again leaves it unconfirmed unless `approve`. */

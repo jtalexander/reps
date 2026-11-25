@@ -17,11 +17,13 @@ export function UploadForm({ teamId }: { teamId: string }) {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const file = new FormData(e.currentTarget).get("file");
+    const form = new FormData(e.currentTarget);
+    const file = form.get("file");
+    const side = form.get("side") === "defense" ? "defense" : "offense";
     if (!(file instanceof File) || file.size === 0) return fail("Pick a PDF first.");
     if (file.size > MAX_UPLOAD_BYTES) return fail(`That PDF is ${mb(file.size)}. The limit is ${mb(MAX_UPLOAD_BYTES)}; split it into smaller files.`);
 
-    const start = await safeCall(() => startUploadAction(teamId, file.name, file.size), "Starting the upload");
+    const start = await safeCall(() => startUploadAction(teamId, file.name, file.size, side), "Starting the upload");
     if (!start.ok) return fail(start.error);
 
     const chunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
@@ -61,6 +63,15 @@ export function UploadForm({ teamId }: { teamId: string }) {
           : "Upload and split pages";
   return (
     <form onSubmit={onSubmit} className="card flex flex-col gap-3 p-4">
+      <fieldset className="flex flex-wrap gap-4 text-sm" disabled={busy}>
+        <legend className="pb-1 font-semibold">What kind of playbook is it?</legend>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="side" value="offense" defaultChecked className="h-5 w-5" /> Offense
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" name="side" value="defense" className="h-5 w-5" /> Defense
+        </label>
+      </fieldset>
       <input name="file" type="file" accept="application/pdf" required disabled={busy} className="text-sm" />
       <button className="btn btn-primary" disabled={busy}>
         {label}

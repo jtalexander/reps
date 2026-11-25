@@ -14,7 +14,7 @@ import { safeCall } from "@/lib/safe-call";
 import type { PageRef } from "@/teach/page-images";
 import { confirmNamingAction, saveNamingAction } from "../../../teach/actions";
 
-const ROLES = ["QB", "RB", "WR", "TE", "OL", "flex"] as const;
+const ROLES = ["QB", "RB", "WR", "TE", "OL", "flex", "DL", "LB", "DB"] as const;
 const LIST_HELP: Record<NamingList, string> = {
   formations: "The base formation words in your play calls.",
   formation_tags: "Words added to a formation that move players.",
@@ -22,6 +22,10 @@ const LIST_HELP: Record<NamingList, string> = {
   motions: "Motion and shift words.",
   plays: "Your run, pass, screen and trick play names.",
   other: "Protections, tempos, cadence, audibles and other calls.",
+  fronts: "Your defense's front words.",
+  coverages: "Your defense's coverage words.",
+  stunts: "Your defensive line's stunts and slants.",
+  blitzes: "Your blitz and pressure calls.",
 };
 
 type StepKey = "positions" | "call" | NamingList | "routes" | "done";

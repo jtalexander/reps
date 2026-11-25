@@ -11,7 +11,7 @@ import { db, type Db } from "@/db";
 import { plays } from "@/db/schema";
 import { conceptByName, type Concept } from "@/domain/concepts";
 import type { Naming } from "@/domain/naming";
-import { MOTION_TYPES, type PlayData } from "@/domain/play";
+import { isDefense, MOTION_TYPES, type PlayData } from "@/domain/play";
 import { conceptsForTeam } from "@/server/plays";
 import { playbookDrawings } from "./drawings";
 import { formationText, has, passConcept, readFormation, runConcept, teamWord } from "./name-drawing";
@@ -37,6 +37,7 @@ export const TYPE_LABEL: Record<string, string> = {
   screen: "Screen",
   option: "Option",
   special: "Special",
+  defense: "Defense",
 };
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
@@ -49,6 +50,12 @@ function conceptLabel(c: Concept, n: Naming | null, concepts: Concept[]) {
 
 /** What a play is, for the install filters: formation, motion, concept and type. No AI. */
 export function playTags(label: string, data: PlayData, n: Naming | null, concepts: Concept[]): PlayTags {
+  if (isDefense(data)) {
+    // a defensive call: its front, and its coverage where an offense has its concept
+    const front = data.defense?.front?.trim().toUpperCase() || null;
+    const cov = data.defense?.coverage?.trim() || null;
+    return { formation: front, motion: null, concept: cov ? `w:${cov.toUpperCase()}` : null, conceptLabel: cov, type: "defense" };
+  }
   // the formation: the team's word; without one, a short name that isn't a play word ("vs 4-3" is the front, not the formation)
   const text = formationText(label, data, n).split(/\bvs\b/i)[0]!;
   const read = readFormation(text, n).formation.trim();

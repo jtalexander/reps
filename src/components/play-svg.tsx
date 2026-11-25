@@ -6,7 +6,8 @@
  */
 import { useId, useRef, useState } from "react";
 import { buildLook, defenderForKey, playSideSign, type DefensiveLook, type Front } from "@/domain/defense";
-import { flipPlay, isLineman, type Coverage, type Line, type PlayData, type Player, type Point } from "@/domain/play";
+import { defLine } from "@/domain/defense-play";
+import { flipPlay, isDefense, isLineman, type Coverage, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTE_BY_KEY, outsideSign, routePath } from "@/domain/routes";
 
 const TOP = 22;
@@ -98,6 +99,10 @@ function extent(data: PlayData, strength: string, extra: Array<{ x: number; y: n
     const rel = p.route ? routePath(p.route, p, strength) : p.block?.path ?? p.path;
     for (const [dx, dy] of rel ?? []) pts.push([start[0] + dx, start[1] + dy]);
     if (data.motion?.player === p.id) for (const [dx, dy] of data.motion.path ?? []) pts.push([p.x + dx, p.y + dy]);
+  }
+  if (isDefense(data)) {
+    for (const p of data.vs ?? []) pts.push([p.x, p.y]);
+    for (const p of data.players) for (const q of defLine(p, data)?.pts ?? []) pts.push(q);
   }
   for (const d of extra) pts.push([d.x, d.y]);
   const xs = pts.map((q) => q[0]);
@@ -195,6 +200,7 @@ export function PlaySvg(props: PlaySvgProps) {
   const hits: Array<{ ref: LineRef; pts: Point[] }> = [];
   const abs = (pts: Point[], from: Point) => pts.map(([x, y]) => [from[0] + x, from[1] + y] as Point);
   const picked = (ref: LineRef) => sameLine(props.selectedLine, ref);
+  const defense = isDefense(data);
   data.players.forEach((p, i) => {
     if (!showAssignment(p)) return;
     const start: Point = data.motion && data.motion.player === p.id && data.motion.end ? data.motion.end : [p.x, p.y];
@@ -202,6 +208,26 @@ export function PlaySvg(props: PlaySvgProps) {
     const op = dim ? 0.35 : 1;
     const jobRef: LineRef = { kind: "job", id: p.id };
     const color = picked(jobRef) ? "var(--brand)" : undefined;
+    if (defense) {
+      // a defender's job: his drawn line, or the usual one (gap, zone drop, man...)
+      const dl = defLine(p, data);
+      if (!dl) return;
+      hits.push({ ref: jobRef, pts: dl.pts });
+      lines.push(
+        <path
+          key={`d${i}`}
+          d={toPath(dl.pts, 0, 0)}
+          stroke={color ?? "currentColor"}
+          strokeWidth={color ? 0.4 : 0.26}
+          strokeDasharray={dl.style === "dashed" ? "1 0.6" : dl.style === "dotted" ? "0.3 0.5" : undefined}
+          fill="none"
+          markerEnd={dl.end === "arrow" ? `url(#arrow-${uid})` : undefined}
+          opacity={op}
+          className={props.animate ? "draw" : undefined}
+        />,
+      );
+      return;
+    }
     const jobPts = p.route ? routePath(p.route, p, strength) : p.block ? (p.block.path && p.block.path.length >= 2 ? p.block.path : ([[0, 0], [0, 1.2]] as Point[])) : p.path && p.path.length >= 2 ? p.path : null;
     if (jobPts) hits.push({ ref: jobRef, pts: abs(jobPts, start) });
     // option branches off the route: dotted, he reads it and picks one
@@ -440,6 +466,22 @@ export function PlaySvg(props: PlaySvgProps) {
         </g>
       )}
 
+      {/* a defensive call: the offense it's drawn against, faint */}
+      {defense &&
+        (data.vs ?? []).map((p, i) => (
+          <g key={`vs${i}`} opacity={0.35} pointerEvents="none">
+            {p.id === "C" ? (
+              <rect x={p.x - 0.5} y={sy(p.y) - 0.5} width={1} height={1} fill="none" stroke="currentColor" strokeWidth={0.14} />
+            ) : (
+              <circle cx={p.x} cy={sy(p.y)} r={isLineman(p.id) ? 0.5 : 0.7} fill="none" stroke="currentColor" strokeWidth={0.14} />
+            )}
+            {!isLineman(p.id) && (
+              <text x={p.x} y={sy(p.y) + 0.3} fontSize={0.7} textAnchor="middle" fill="currentColor">
+                {p.id}
+              </text>
+            )}
+          </g>
+        ))}
       {!props.routeOnly && lines}
       {props.onLineTap &&
         !props.pen &&
@@ -478,12 +520,25 @@ export function PlaySvg(props: PlaySvgProps) {
             >
               {(tap || props.onPlayerDrag) && <circle cx={p.x} cy={sy(p.y)} r={1.6} fill="transparent" />}
               {props.selected === p.id && <circle cx={p.x} cy={sy(p.y)} r={1.4} fill="none" stroke="var(--brand)" strokeWidth={0.25} />}
-              {isC ? (
+              {defense ? (
+                // a defender: his letter in a point-down triangle, facing the offense
+                <path
+                  d={`M${p.x - 1} ${sy(p.y) - 0.75} L${p.x + 1} ${sy(p.y) - 0.75} L${p.x} ${sy(p.y) + 0.95} Z`}
+                  fill={hl ? "var(--hl)" : "var(--card)"}
+                  stroke="currentColor"
+                  strokeWidth={0.18}
+                  strokeLinejoin="round"
+                />
+              ) : isC ? (
                 <rect x={p.x - r * 0.8} y={sy(p.y) - r * 0.8} width={r * 1.6} height={r * 1.6} fill={hl ? "var(--hl)" : "var(--card)"} stroke="currentColor" strokeWidth={0.18} />
               ) : (
                 <circle cx={p.x} cy={sy(p.y)} r={r} fill={hl ? "var(--hl)" : "var(--card)"} stroke="currentColor" strokeWidth={0.18} />
               )}
-              {!isLineman(p.id) && (
+              {defense ? (
+                <text x={p.x} y={sy(p.y) + 0.05} fontSize={p.id.length > 1 ? 0.6 : 0.8} fontWeight={700} textAnchor="middle" fill={hl ? "var(--hl-ink)" : "currentColor"}>
+                  {p.id}
+                </text>
+              ) : !isLineman(p.id) && (
                 <text x={p.x} y={sy(p.y) + 0.38} fontSize={p.id.length > 1 ? 0.8 : 1.05} fontWeight={700} textAnchor="middle" fill={hl ? "var(--hl-ink)" : "currentColor"}>
                   {p.id}
                 </text>

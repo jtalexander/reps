@@ -17,6 +17,10 @@ import { LEVELS, readiness, type Level } from "@/domain/readiness";
 import { TermsSchema } from "@/domain/terms";
 import { lineupFor, type LineupResult } from "@/teach/lineup";
 import { drawPlay, type DrawResult } from "@/teach/play-draw";
+import { readAhead, type ReadAhead } from "@/teach/read-ahead";
+import { customLook } from "@/domain/matchups";
+import { keepSuggestedLooks, playLooks, setPlayLook, type PlayLooks } from "@/server/matchups";
+import { checkBatches, ensureBatchRead } from "@/teach/read-batch";
 import { nameDrawnPlay, type NameGuess } from "@/teach/name-drawing";
 import { PlayDataSchema, PlayerSchema } from "@/domain/play";
 import { z } from "zod";
@@ -55,10 +59,10 @@ const fail = (err: unknown): { ok: false; error: string } => ({
 
 // ---------- upload pipeline ----------
 // The browser sends the PDF in pieces: one request can't exceed ~6 MB on Netlify.
-export async function startUploadAction(teamId: string, filename: string, size: number): Promise<Result<{ uploadId: string }>> {
+export async function startUploadAction(teamId: string, filename: string, size: number, side: "offense" | "defense" = "offense"): Promise<Result<{ uploadId: string }>> {
   try {
     const { user } = await requireCoach(teamId);
-    const upload = await startUpload(teamId, user.id, filename, size);
+    const upload = await startUpload(teamId, user.id, filename, size, undefined, side === "defense" ? "defense" : "offense");
     return { ok: true, uploadId: upload.id };
   } catch (err) {
     return fail(err);
@@ -151,6 +155,52 @@ export async function approveAction(teamId: string, playId: string): Promise<Res
     const row = await approvePlay(teamId, playId, user.id, team.level);
     revalidatePath(`/t/${teamId}`);
     return { ok: true, status: row.status };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+// ---------- what a play is good against ----------
+const PLAY_ID = /^[0-9a-f-]{36}$/i;
+
+/** Keep or drop one "good against" tag on a play. */
+export async function setPlayLookAction(teamId: string, playId: string, key: string, on: boolean): Promise<Result<{ looks: PlayLooks | null }>> {
+  try {
+    await requireCoach(teamId);
+    if (!PLAY_ID.test(playId)) throw new Error("Play not found.");
+    await setPlayLook(teamId, playId, String(key), Boolean(on));
+    revalidatePath(`/t/${teamId}/gameplan`);
+    return { ok: true, looks: await playLooks(teamId, playId) };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Add a tag in the coach's own words ("Cover 6", "Trips"); Reps uses its shared tag when one fits. */
+export async function addPlayLookAction(teamId: string, playId: string, text: string): Promise<Result<{ looks: PlayLooks | null }>> {
+  try {
+    await requireCoach(teamId);
+    if (!PLAY_ID.test(playId)) throw new Error("Play not found.");
+    const looks = await playLooks(teamId, playId);
+    if (!looks) throw new Error("Play not found.");
+    const key = customLook(String(text), looks.side);
+    if (!key) throw new Error("Type what it's good against first.");
+    await setPlayLook(teamId, playId, key, true);
+    revalidatePath(`/t/${teamId}/gameplan`);
+    return { ok: true, looks: await playLooks(teamId, playId) };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Keep every tag Reps suggests for a play. */
+export async function keepSuggestedLooksAction(teamId: string, playId: string): Promise<Result<{ looks: PlayLooks | null }>> {
+  try {
+    await requireCoach(teamId);
+    if (!PLAY_ID.test(playId)) throw new Error("Play not found.");
+    await keepSuggestedLooks(teamId, playId);
+    revalidatePath(`/t/${teamId}/gameplan`);
+    return { ok: true, looks: await playLooks(teamId, playId) };
   } catch (err) {
     return fail(err);
   }
@@ -383,6 +433,24 @@ export async function lineupForAction(teamId: string, call: { formation: string;
       await requestOrigin(),
     );
     return { ok: true, lineup };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Read the playbook's formations (and the install's drawings) ahead of time, a few per call; the builder asks again until none are left. */
+export async function readAheadAction(teamId: string): Promise<Result<{ ahead: ReadAhead }>> {
+  try {
+    await requireCoach(teamId);
+    const origin = await requestOrigin();
+    // the whole playbook in the background once the naming rules are confirmed; pick up its answers when they're back
+    try {
+      await ensureBatchRead(teamId, origin);
+      await checkBatches(teamId);
+    } catch (err) {
+      console.error("read batch", teamId, err);
+    }
+    return { ok: true, ahead: await readAhead(teamId, origin) };
   } catch (err) {
     return fail(err);
   }

@@ -8,6 +8,10 @@ import { hasApiKey } from "@/ingest/extract";
 import { conceptsForTeam, getPlay, isBuilt, isConverted } from "@/server/plays";
 import { requireCoach } from "@/server/teams";
 import { startBlankAction } from "../../actions";
+import { isDefense } from "@/domain/play";
+import { playLooks } from "@/server/matchups";
+import { DefenseReview } from "./defense-review";
+import { GoodVs } from "./good-vs";
 import { PlayReview } from "./play-review";
 
 export const metadata = { title: "Review play" };
@@ -52,7 +56,18 @@ export default async function PlayPage({ params }: PageProps<"/t/[teamId]/plays/
     );
   }
 
+  const looks = await playLooks(teamId, playId);
+  const goodVs = looks && <GoodVs teamId={teamId} playId={playId} initial={looks} />;
+  if (isDefense(play.data))
+    return (
+      <div className="flex flex-col gap-4">
+        <DefenseReview teamId={teamId} playId={playId} initial={play.data} status={play.status} cropUrl={cropUrl} nextId={nextNeeding?.id ?? null} />
+        {goodVs}
+      </div>
+    );
+
   return (
+    <div className="flex flex-col gap-4">
     <PlayReview
       teamId={teamId}
       playId={playId}
@@ -68,5 +83,7 @@ export default async function PlayPage({ params }: PageProps<"/t/[teamId]/plays/
       converted={isConverted(play)}
       built={isBuilt(play)}
     />
+    {goodVs}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 "use server";
 /** Coach actions for Teach. Every action checks the coach first. */
 import { setInstallName, setPlaysInstall } from "@/teach/install";
+import { ensureBatchRead } from "@/teach/read-batch";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -368,6 +369,8 @@ export async function confirmNamingAction(teamId: string, naming: Naming, tree: 
   try {
     const { user, team } = await requireCoach(teamId);
     await saveNaming(teamId, naming, true);
+    // now Reps can read every drawing behind the scenes, so plays are ready before the coach needs them
+    await ensureBatchRead(teamId, await origin()).catch((err) => console.error("read batch", teamId, err));
     const saveTree = Boolean(tree && !team.routeTree && tree.routes.length);
     if (saveTree) await saveRouteTree(teamId, tree!, user.id);
     revalidatePath(`/t/${teamId}`, "layout");

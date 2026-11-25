@@ -7,8 +7,12 @@
  * from a seeded generator so a quiz can be rebuilt for grading.
  */
 import { COVERAGE_LABEL, COVERAGE_TELL, REACTIONS, READ_KEY_BY_KEY } from "./defense";
+import { defJobText, ZONE_LABEL } from "./defense-play";
+import { lookLabel } from "./matchups";
 import {
   COVERAGES,
+  DEF_ASSIGNMENT_TYPES,
+  isDefense,
   isPassFamily,
   isUnknown,
   needsOptionRules,
@@ -22,6 +26,8 @@ import { ROUTES, ROUTE_BY_KEY, normalizeRouteName } from "./routes";
 import { assignmentLabel, blockLabel, reactionLabel, term, title, type Terms } from "./terms";
 import type { Level } from "./readiness";
 
+const DEF_JOBS = new Set<string>(DEF_ASSIGNMENT_TYPES);
+
 export const QUIZ_TYPES = [
   "formation_id",
   "assignment",
@@ -32,6 +38,8 @@ export const QUIZ_TYPES = [
   "progression",
   "option_decision",
   "breakdown",
+  "call_vs",
+  "def_call_id",
 ] as const;
 export type QuizType = (typeof QUIZ_TYPES)[number];
 
@@ -45,12 +53,16 @@ export const QUIZ_TYPE_LABEL: Record<QuizType, string> = {
   progression: "Progression",
   option_decision: "Option / RPO decision",
   breakdown: "Play-call breakdown",
+  call_vs: "What to call",
+  def_call_id: "Name the call",
 };
 
 export interface QuizPlay {
   id: string;
   data: PlayData;
   qbReady: boolean;
+  /** what the coach says it's good against (kept tags only) */
+  goodVs?: string[];
 }
 
 export interface Choice {
@@ -149,6 +161,7 @@ export function formationLabel(play: PlayData): string {
 }
 
 export function assignmentText(p: Player, terms: Terms): string {
+  if (DEF_JOBS.has(String(p.assignment_type))) return defJobText(p);
   if (p.assignment_type === "route" && p.route) {
     const name = term(terms, "routes", normalizeRouteName(p.route.name));
     const depth = typeof p.route.depth_yards === "number" ? ` at ${p.route.depth_yards}` : "";
@@ -162,6 +175,12 @@ export function assignmentText(p: Player, terms: Terms): string {
 
 function explainAssignment(p: Player, play: PlayData): string {
   const parts: string[] = [];
+  if (isDefense(play)) {
+    const call = [play.defense?.front, play.defense?.coverage, play.defense?.stunt, play.defense?.pressure].filter(Boolean).join(", ");
+    parts.push(`${defJobText(p)}${call ? ` in ${call}` : ""}.`);
+    if (p.notes) parts.push(p.notes);
+    return parts.join(" ");
+  }
   if (p.route) {
     const def = ROUTE_BY_KEY.get(normalizeRouteName(p.route.name));
     if (def) parts.push(`${def.label}: ${def.describe}.`);
@@ -194,7 +213,7 @@ const qid = (type: string, playId: string, extra = "") => `${type}:${playId}${ex
 
 const formationId: Gen = (play, all, ctx, rand) => {
   const correct = formationLabel(play.data);
-  if (isUnknown(play.data.formation.name)) return [];
+  if (isUnknown(play.data.formation.name) || isDefense(play.data)) return [];
   const pool = all.map((p) => formationLabel(p.data));
   // also offer the mirror name as a distractor: swap RIGHT/LEFT in the name, or add the other side
   const name = play.data.formation.name;
@@ -237,6 +256,7 @@ const assignment: Gen = (play, all, ctx, rand) => {
     if (p.assignment_type === "route") {
       pool.push(...ROUTES.filter((r) => ctx.level !== "youth" || r.basic).map((r) => term(ctx.terms, "routes", r.key)));
     }
+    if (DEF_JOBS.has(String(p.assignment_type))) pool.push(...Object.values(ZONE_LABEL), ...["A", "B", "C", "D"].map((g) => `Rush the ${g} gap`), "Contain", "Spy the QB");
     const { choices, answer } = choicesFrom(correct, pool, rand);
     if (choices.length < 2) continue;
     const flip = ctx.allowFlip && rand() < 0.3;
@@ -495,6 +515,58 @@ const breakdown: Gen = (play, all, ctx, rand) => {
   return out;
 };
 
+/** What to call: "They're in Cover 2. Which of our plays is built to beat it?" From the coach's kept tags only. */
+const callVs: Gen = (play, all, ctx, rand) => {
+  const tags = play.goodVs ?? [];
+  // offense players get offensive plays, defenders get defensive calls
+  if (!tags.length || !play.data.players.some((p) => playerMatches(p, ctx.positions))) return [];
+  const defense = isDefense(play.data);
+  const tag = tags[Math.floor(rand() * tags.length)]!;
+  const label = lookLabel(tag);
+  const name = (q: QuizPlay) => (q.data.name && q.data.name !== "unknown" ? q.data.name : "");
+  const others = all.filter((q) => q.id !== play.id && isDefense(q.data) === defense && !(q.goodVs ?? []).includes(tag)).map(name);
+  if (!name(play)) return [];
+  const { choices, answer } = choicesFrom(name(play), others, rand);
+  if (choices.length < 2) return [];
+  const why = tags.map((t) => lookLabel(t)).join(", ");
+  return [
+    {
+      id: qid("call_vs", play.id, tag),
+      type: "call_vs",
+      playId: play.id,
+      prompt: defense ? `The offense shows ${label}. Which of our calls is built for it?` : `The defense shows ${label}. Which of our plays is built to beat it?`,
+      kind: "choice",
+      choices,
+      answer,
+      explanation: `${name(play)}: your coach tagged it good against ${why}.`,
+      diagram: null,
+    },
+  ];
+};
+
+/** Name the call: a defensive call drawn on the field; which one is it? */
+const defCallId: Gen = (play, all, ctx, rand) => {
+  if (!isDefense(play.data) || !play.data.players.some((p) => playerMatches(p, ctx.positions))) return [];
+  const name = play.data.name;
+  if (!name || name === "unknown") return [];
+  const others = all.filter((q) => q.id !== play.id && isDefense(q.data)).map((q) => q.data.name).filter((n) => n && n !== "unknown");
+  const { choices, answer } = choicesFrom(name, others, rand);
+  if (choices.length < 2) return [];
+  return [
+    {
+      id: qid("def_call_id", play.id),
+      type: "def_call_id",
+      playId: play.id,
+      prompt: "Name this call.",
+      kind: "choice",
+      choices,
+      answer,
+      explanation: `${name}.`,
+      diagram: { playId: play.id, flip: false, hide: "none" },
+    },
+  ];
+};
+
 const GENERATORS: Record<QuizType, Gen> = {
   formation_id: formationId,
   assignment,
@@ -505,13 +577,16 @@ const GENERATORS: Record<QuizType, Gen> = {
   progression,
   option_decision: optionDecision,
   breakdown,
+  call_vs: callVs,
+  def_call_id: defCallId,
 };
 
 /** Quiz types that make sense for a set of positions. */
 export function typesForPositions(positions: string[]): QuizType[] {
   const qb = positions.some((p) => p.toUpperCase() === "QB");
   const back = positions.some((p) => /^(RB|TB|HB|FB|F|B|R)$/i.test(p));
-  const types: QuizType[] = ["formation_id", "assignment", "draw_job", "motion", "route_recognition", "breakdown"];
+  // what to call and naming the call ask only about plays the player is in (offense or defense)
+  const types: QuizType[] = ["formation_id", "assignment", "draw_job", "motion", "route_recognition", "breakdown", "call_vs", "def_call_id"];
   if (qb) types.push("presnap_read", "progression", "option_decision");
   else if (back) types.push("option_decision");
   return types;

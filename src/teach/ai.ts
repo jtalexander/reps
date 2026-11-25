@@ -18,7 +18,7 @@ import { checkAi, recordUsage } from "./usage";
 import { AUDIENCES } from "./types";
 
 export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5";
-type Effort = "low" | "medium" | "high";
+export type Effort = "low" | "medium" | "high";
 
 export interface PageImage {
   pageNo: number;
@@ -43,6 +43,8 @@ async function structured<T extends z.ZodType>(
   effort: Effort,
   maxTokens: number,
   step = "other",
+  model = MODEL,
+  speed?: "fast",
 ): Promise<z.infer<T>> {
   await checkAi();
   const client = new Anthropic({ timeout: 10 * 60 * 1000, maxRetries: 2 });
@@ -50,13 +52,14 @@ async function structured<T extends z.ZodType>(
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await client.messages.parse({
-        model: MODEL,
+        model,
+        ...(speed ? { speed } : {}),
         max_tokens: maxTokens,
         system,
         output_config: { effort, format: zodOutputFormat(schema) },
         messages: [{ role: "user", content }],
       });
-      await recordUsage(MODEL, res.usage, step);
+      await recordUsage(res.usage?.speed === "fast" ? `${model}:fast` : model, res.usage, step);
       if (res.stop_reason === "refusal") throw new Error("The model declined this request.");
       if (res.stop_reason === "max_tokens") throw new Error("The answer was too long to finish. Try fewer pages at once.");
       if (!res.parsed_output) throw new Error("The model returned nothing usable.");
@@ -364,7 +367,7 @@ export const DrawingSchema = z.object({
 });
 export type Drawing = z.infer<typeof DrawingSchema>;
 
-const DRAWING_SYSTEM = `${VOICE}
+export const DRAWING_SYSTEM = `${VOICE}
 
 You turn one football diagram, cropped from the coach's playbook, into data: where each OFFENSIVE player really lines up and the line drawn from him, in yards.
 - Coordinates are field yards with the ball at (0, 0): x to the right (+) as the offense faces up, y downfield (+) and into the backfield (-).
@@ -376,26 +379,116 @@ You turn one football diagram, cropped from the coach's playbook, into data: whe
 - Never invent a line that isn't drawn: use nothing_drawn and path null.
 - A formation drawing with no lines is kind "formation"; a protection drawing is kind "protection".`;
 
-export async function readDrawing(png: Uint8Array, width: number, height: number, label: string, notes: string, naming = ""): Promise<Drawing> {
-  return structured(
-    DrawingSchema,
-    DRAWING_SYSTEM,
-    [
-      { type: "image", source: { type: "base64", media_type: "image/png", data: Buffer.from(png).toString("base64") } },
-      {
-        type: "text",
-        text: `The image is ${width} by ${height} pixels.
+/** Reading one drawing into a play: the model and effort (set by env to try others). */
+export const DRAWING_MODEL = process.env.DRAWING_MODEL ?? MODEL;
+export const DRAWING_EFFORT = (process.env.DRAWING_EFFORT ?? "high") as Effort;
+/** DRAWING_SPEED=fast: fast mode (same model, up to 2.5x faster output, twice the price) */
+export const DRAWING_SPEED = process.env.DRAWING_SPEED === "fast" ? ("fast" as const) : undefined;
+
+/** What the model is shown for one drawing: the crop, its label, the page around it and the team's naming rules. */
+export function drawingContent(png: Uint8Array, width: number, height: number, label: string, notes: string, naming = ""): Anthropic.ContentBlockParam[] {
+  return [
+    { type: "image", source: { type: "base64", media_type: "image/png", data: Buffer.from(png).toString("base64") } },
+    {
+      type: "text",
+      text: `The image is ${width} by ${height} pixels.
 The playbook labels this drawing: ${label}
 ${notes ? `What the page says around it:
 ${notes}
 ` : ""}${naming ? `The team's naming rules (use these letters for every player, including unlabeled markers: the passer is the QB letter, backs get their back letters):
 ${naming}
 ` : ""}Return the drawing as data.`,
-      },
-    ],
-    "high",
+    },
+  ];
+}
+
+/** One drawing as a batch request (half price, answered within the hour): same prompt as readDrawing / readDefDrawing. */
+export function drawingBatchParams(content: Anthropic.ContentBlockParam[], model: string, effort: Effort = DRAWING_EFFORT, side: "offense" | "defense" = "offense"): Anthropic.MessageCreateParamsNonStreaming {
+  return {
+    model,
+    max_tokens: 12000,
+    system: side === "defense" ? DEF_DRAWING_SYSTEM : DRAWING_SYSTEM,
+    output_config: { effort, format: side === "defense" ? zodOutputFormat(DefDrawingSchema) : zodOutputFormat(DrawingSchema) },
+    messages: [{ role: "user", content }],
+  };
+}
+
+// ---------------- defensive drawings ----------------
+
+/** One defensive drawing, kept small: each defender, his job and his line, in field yards; the offense when drawn. */
+export const DefDrawingSchema = z.object({
+  is_play: z.boolean().describe("false when the box isn't a field drawing with defenders (a legend, a list, a logo)"),
+  front: z.string().describe("the front as the label or drawing writes it, e.g. '4-3 Over', 'Bear'; 'unknown' if none"),
+  coverage: z.string().nullable().describe("the coverage as written, e.g. 'Cover 3', 'Quarters'; null if none"),
+  stunt: z.string().nullable().describe("a line stunt or slant as written, e.g. 'Tex', 'Slant Strong'; null if none"),
+  pressure: z.string().nullable().describe("a blitz or pressure as written, e.g. 'Sam Fire', 'Mike A-gap'; null if none"),
+  defenders: z
+    .array(
+      z.object({
+        id: z.string().describe("the defender's letter or name on the drawing (E, T, N, W, M, S, C, FS...)"),
+        at: yd,
+        does: z.enum(["rush", "gap", "zone_drop", "man", "blitz", "contain", "spy", "nothing_drawn"]),
+        gap: z.enum(["A", "B", "C", "D"]).nullable().describe("the gap he rushes, fits or blitzes, else null"),
+        zone: z.enum(["deep_third", "deep_half", "deep_quarter", "deep_middle", "flat", "curl", "hook", "middle_hole"]).nullable().describe("his zone when he drops, else null"),
+        man: z.string().nullable().describe("the offensive player he covers in man (their letter), else null"),
+        path: z.array(yd).nullable().describe("the line drawn from him, start to end, up to 6 points, in field yards; null when nothing is drawn"),
+      }),
+    )
+    .describe("defenders only"),
+  offense: z.array(z.object({ id: z.string(), at: yd })).describe("the offensive players the call is drawn against, when they're drawn; empty if not"),
+});
+export type DefDrawing = z.infer<typeof DefDrawingSchema>;
+
+export const DEF_DRAWING_SYSTEM = `${VOICE}
+
+You turn one diagram from the coach's DEFENSIVE playbook into data: where each defender lines up and his job, in yards.
+- Coordinates are field yards with the ball at (0, 0): x to the right (+) as the offense faces up the page, y toward the defense (+, downfield from the offense) and into the offense's backfield (-). Defenders are at y > 0.
+- Drawings are NOT to scale. Keep the drawing's order (who is left/right of whom, who is deeper) but place defenders where they really line up: linemen about 1 yard off the ball over their technique; linebackers 4-5 yards deep; corners 5-7 yards off the widest receivers; safeties 10-12 yards deep.
+- Defenders are letters, Vs, triangles or Ts on the defense's side. Offensive players are circles and squares (list them in offense, or leave it empty when only defenders are drawn).
+- Jobs: a short line into the line = rush (linemen) or gap (a fit); a line through the line by a linebacker or back = blitz; a line that drops back to an area = zone_drop with the zone; a line or note tying him to a receiver = man with that receiver's letter; a line up and outside = contain; nothing drawn = nothing_drawn.
+- Gaps: A between center and guard, B guard-tackle, C outside the tackle, D outside the tight end.
+- Up to 6 points per line, starting at the defender. Never invent a line that isn't drawn: use path null.
+- Front, coverage, stunt and pressure: use the label's words exactly as written.`;
+
+export async function readDefDrawing(
+  png: Uint8Array,
+  width: number,
+  height: number,
+  label: string,
+  notes: string,
+  naming = "",
+  opts: { model?: string; effort?: Effort; speed?: "fast" } = {},
+): Promise<DefDrawing> {
+  return structured(
+    DefDrawingSchema,
+    DEF_DRAWING_SYSTEM,
+    drawingContent(png, width, height, label, notes, naming),
+    opts.effort ?? DRAWING_EFFORT,
     12000,
     "drawing",
+    opts.model ?? DRAWING_MODEL,
+    opts.speed ?? DRAWING_SPEED,
+  );
+}
+
+export async function readDrawing(
+  png: Uint8Array,
+  width: number,
+  height: number,
+  label: string,
+  notes: string,
+  naming = "",
+  opts: { model?: string; effort?: Effort; speed?: "fast" } = {},
+): Promise<Drawing> {
+  return structured(
+    DrawingSchema,
+    DRAWING_SYSTEM,
+    drawingContent(png, width, height, label, notes, naming),
+    opts.effort ?? DRAWING_EFFORT,
+    12000,
+    "drawing",
+    opts.model ?? DRAWING_MODEL,
+    opts.speed ?? DRAWING_SPEED,
   );
 }
 
@@ -410,7 +503,8 @@ From what Reps read on every page of the playbook, write down the team's naming 
 - Plays: every run, pass, screen and gadget name, with what it is in a few words.
 - Leave out wristband codes (ALPHA, BRAVO..., pod colors and numbers) and team code names for plays; those are a separate system. "other" is for protections, tempos, cadence words, audible and check words.
 - List the pages where each word is shown or explained.
-- route_tree: if the playbook numbers its routes (a route tree), list each number and the route it calls, as written. Empty if it doesn't.`;
+- route_tree: if the playbook numbers its routes (a route tree), list each number and the route it calls, as written. Empty if it doesn't.
+- fronts, coverages, stunts, blitzes: the DEFENSE's words when the playbook has defensive pages (fronts, coverages, line stunts and slants, blitzes and pressures), with what each one does. Empty for an offense-only playbook. Defensive position letters go in positions too, with role DL, LB or DB.`;
 
 export async function draftNaming(material: string) {
   return structured(

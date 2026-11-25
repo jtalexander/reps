@@ -6,12 +6,12 @@
  */
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, type Db } from "@/db";
-import { plays, uploadPages } from "@/db/schema";
+import { plays, uploadPages, uploads } from "@/db/schema";
 import { teachPages } from "@/db/teach-schema";
 import { toPlayData, type Extracted } from "@/domain/extraction";
-import { UNKNOWN } from "@/domain/play";
+import { isDefense, PlayDataSchema, renameLinemen, UNKNOWN, type PlayData, type Player } from "@/domain/play";
 import { media } from "@/media/store";
-import { readDrawing, type Drawing } from "./ai";
+import { readDefDrawing, readDrawing, type DefDrawing, type Drawing } from "./ai";
 import { pngSize } from "./png";
 import { playbookPages } from "./drawings";
 import { getNaming } from "./naming";
@@ -131,13 +131,15 @@ export async function prepareCrop(teamId: string, key: string, database: Db = db
   return crop;
 }
 
-/** Convert one drawing (`${pageNo}.${id}`) into a draft play. Returns the play id. */
-export async function convertDrawing(teamId: string, key: string, database: Db = db) {
-  const done = await playForDrawing(teamId, key, database);
-  if (done) return { playId: done.id, existed: true };
+/**
+ * Everything the model is shown for one drawing. Uses the stored crop; makes
+ * it only when `crop` is allowed (the image library runs in normal requests).
+ */
+export async function drawingInput(teamId: string, key: string, database: Db = db, crop = true) {
   const { page, drawing, tp } = await locate(teamId, key, database);
   const cropKey = cropKeyFor(teamId, key);
   const stored = await media().get(cropKey);
+  if (!stored && !crop) return null;
   const png = stored ? stored.bytes : (await prepareCrop(teamId, key, database)).png;
   const { width, height } = pngSize(png);
   const notes = page.facts
@@ -145,11 +147,61 @@ export async function convertDrawing(teamId: string, key: string, database: Db =
     .join("\n")
     .slice(0, 1500);
   const { naming } = await getNaming(teamId, database);
-  const d = await readDrawing(png, width, height, drawing.label, notes, namingBrief(naming));
-  let data = null;
-  if (d.is_play && d.players.length > 0) {
+  // an offensive or a defensive playbook: decides which reader reads it
+  const [up] = await database.select({ side: uploads.side }).from(uploads).where(and(eq(uploads.teamId, teamId), eq(uploads.id, tp.uploadId)));
+  const side: "offense" | "defense" = up?.side === "defense" ? "defense" : "offense";
+  return { page, drawing, tp, cropKey, png, width, height, notes, label: drawing.label, naming: namingBrief(naming), side };
+}
+export type DrawingInput = NonNullable<Awaited<ReturnType<typeof drawingInput>>>;
+
+/** A defensive drawing as a defensive call: the defenders and their jobs, against the offense when drawn. */
+export function defDrawingToPlay(d: DefDrawing, label: string): PlayData | null {
+  if (!d.is_play || !d.defenders.length) return null;
+  const r = (v: number) => Math.round(v * 10) / 10;
+  const player = (id: string, at: { x: number; y: number }): Player => ({
+    id,
+    position: id,
+    x: r(at.x),
+    y: r(at.y),
+    on_ball: Math.abs(at.y) < 1.5,
+    side: at.x < -1 ? "left" : at.x > 1 ? "right" : "middle",
+    split: null,
+    assignment_type: "unknown",
+    route: null,
+    block: null,
+    path: null,
+    notes: null,
+  });
+  const parts = { front: d.front && d.front !== "unknown" ? d.front : null, coverage: d.coverage, stunt: d.stunt, pressure: d.pressure };
+  return PlayDataSchema.parse({
+    name: label,
+    play_type: "unknown",
+    formation: { name: parts.front ?? "unknown", personnel: "unknown", strength: "unknown", backfield_alignment: "unknown" },
+    players: d.defenders.map((x) => ({
+      ...player(x.id, x.at),
+      assignment_type: x.does === "nothing_drawn" ? "unknown" : x.does,
+      def: { gap: x.gap, zone: x.zone, man: x.man, technique: null },
+      // drawn lines kept relative to the defender
+      path: x.path && x.path.length >= 2 ? x.path.map((q) => [r(q.x - x.at.x), r(q.y - x.at.y)]) : null,
+    })),
+    side: "defense",
+    defense: parts,
+    vs: d.offense.map((o) => player(o.id, o.at)),
+    coaching_points: [],
+  });
+}
+
+/** Save what the model read as a draft play (once per drawing; a second answer is ignored). */
+export async function saveDrawing(teamId: string, key: string, input: DrawingInput, d: Drawing | DefDrawing, database: Db = db) {
+  const done = await playForDrawing(teamId, key, database);
+  if (done) return { playId: done.id, existed: true };
+  const { page, drawing, tp } = input;
+  let data: PlayData | null = null;
+  if ("defenders" in d) data = defDrawingToPlay(d, drawing.label);
+  else if (d.is_play && d.players.length > 0) {
     // already in field yards (the model places players by football norms)
     data = toPlayData(drawingToExtracted(d, drawing.label), (x, y) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+    data = { ...data, players: await sameLinemen(teamId, drawing.label, data.players, database) };
   }
   const [row] = await database
     .insert(plays)
@@ -159,11 +211,12 @@ export async function convertDrawing(teamId: string, key: string, database: Db =
       pageId: tp.pageId,
       sourcePage: page.pageNo,
       box: drawing.box,
-      cropKey,
-      cropWidth: width,
-      cropHeight: height,
+      cropKey: input.cropKey,
+      cropWidth: input.width,
+      cropHeight: input.height,
       name: drawing.label,
       playType: data?.play_type ?? UNKNOWN,
+      side: data && isDefense(data) ? "defense" : "offense",
       data,
       aiRaw: { drawingKey: key, topicId: drawing.topicId, drawing: d },
       extraction: data ? "done" : "not_a_play",
@@ -172,4 +225,34 @@ export async function convertDrawing(teamId: string, key: string, database: Db =
     })
     .returning({ id: plays.id });
   return { playId: row!.id, existed: false };
+}
+
+/**
+ * Linemen named the way this team's plays already name them: LT/LG/RG/RT or
+ * play side / back side (PST, PSG, BSG, BST; play side = the formation's side).
+ */
+async function sameLinemen(teamId: string, label: string, players: Player[], database: Db) {
+  const rows = await database
+    .select({ data: plays.data })
+    .from(plays)
+    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false)));
+  let lt = 0;
+  let ps = 0;
+  for (const r of rows)
+    for (const p of r.data?.players ?? []) {
+      if (/^(LT|LG|RG|RT)$/.test(p.id)) lt++;
+      if (/^(PST|PSG|BSG|BST)$/.test(p.id)) ps++;
+    }
+  if (lt === ps) return players;
+  return renameLinemen(players, ps > lt ? "ps" : "lt", /\b(LEFT|LT)\b/i.test(label) ? "left" : "right");
+}
+
+/** Convert one drawing (`${pageNo}.${id}`) into a draft play. Returns the play id. */
+export async function convertDrawing(teamId: string, key: string, database: Db = db) {
+  const done = await playForDrawing(teamId, key, database);
+  if (done) return { playId: done.id, existed: true };
+  const input = (await drawingInput(teamId, key, database))!;
+  const read = input.side === "defense" ? readDefDrawing : readDrawing;
+  const d = await read(input.png, input.width, input.height, input.label, input.notes, input.naming);
+  return saveDrawing(teamId, key, input, d, database);
 }

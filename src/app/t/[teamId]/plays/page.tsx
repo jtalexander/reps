@@ -56,9 +56,12 @@ export default async function Playbook({ params, searchParams }: PageProps<"/t/[
       <div>
         <div className="flex items-baseline justify-between gap-2">
           <h1 className="text-4xl">Playbook</h1>
-          <span className="flex gap-3 text-sm font-semibold">
+          <span className="flex flex-wrap gap-3 text-sm font-semibold">
             <Link href={`/t/${teamId}/plays/build`} className="underline">
               Draw a play
+            </Link>
+            <Link href={`/t/${teamId}/plays/build?side=defense`} className="underline">
+              Draw a defensive call
             </Link>
             <Link href={`/t/${teamId}/plays/converted`} className="underline">
               Real plays

@@ -64,6 +64,10 @@ const naming: Naming = {
     { word: "24 POWER", means: "power run, guard pulls", pages: [] },
   ],
   other: [],
+  fronts: [],
+  coverages: [],
+  stunts: [],
+  blitzes: [],
 };
 
 describe("weekly installs, play by play", () => {

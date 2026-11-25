@@ -14,3 +14,16 @@ describe("option routes", () => {
     expect(flipPlay(play).players[0]!.route!.options).toEqual([[[-0, 3], [-2, 6]]]);
   });
 });
+
+describe("naming the offensive line the team's way", () => {
+  const line = ["LT", "LG", "C", "RG", "RT"].map((id, i) => ({ ...z, id, position: id, x: (i - 2) * 1.3, route: null, assignment_type: "unknown" as const }));
+  it("maps left/right to play side/back side by the formation's side, and back", async () => {
+    const { renameLinemen } = await import("@/domain/play");
+    expect(renameLinemen(line, "ps", "right").map((p) => p.id)).toEqual(["BST", "BSG", "C", "PSG", "PST"]);
+    expect(renameLinemen(line, "ps", "left").map((p) => p.id)).toEqual(["PST", "PSG", "C", "BSG", "BST"]);
+    const ps = renameLinemen(line, "ps", "right");
+    expect(renameLinemen(ps, "lt", "right").map((p) => p.id)).toEqual(["LT", "LG", "C", "RG", "RT"]);
+    // a mixed line is left alone rather than doubling a letter
+    expect(renameLinemen([...line, { ...line[0]!, id: "PST" }], "ps", "right").map((p) => p.id)).toContain("LT");
+  });
+});

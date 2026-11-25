@@ -2,10 +2,11 @@ import Link from "next/link";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { plays } from "@/db/schema";
-import type { PlayData } from "@/domain/play";
+import { isDefense, type PlayData } from "@/domain/play";
 import { getPlay, isConverted } from "@/server/plays";
 import { requireCoach } from "@/server/teams";
 import { getNaming } from "@/teach/naming";
+import { DefenseBuilder } from "./defense-builder";
 import { PlayBuilder } from "./play-builder";
 
 export const metadata = { title: "Draw a play" };
@@ -56,6 +57,22 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
     .where(and(eq(plays.teamId, teamId), eq(plays.archived, false), eq(plays.extraction, "done"), sql`${plays.aiRaw} is not null`, eq(plays.playType, "unknown")))
     .orderBy(asc(plays.name))
     .limit(300);
+
+  // a defensive call (new, or one being edited) opens the defense builder
+  if (sp.side === "defense" || (start && isDefense(start))) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div>
+          <Link href={`/t/${teamId}/plays`} className="text-sm text-muted underline">
+            Playbook
+          </Link>
+          <h1 className="text-4xl">{editing ? "Edit call" : "Draw a defensive call"}</h1>
+          <p className="text-sm text-muted">Pick the front and coverage and Reps lines your defense up with their jobs. Drag anyone, draw lines, and tap a defender to change his job.</p>
+        </div>
+        <DefenseBuilder teamId={teamId} naming={naming} start={start && isDefense(start) ? start : null} playId={start && isDefense(start) ? editing : null} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">

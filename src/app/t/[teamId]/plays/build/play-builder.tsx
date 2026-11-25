@@ -7,9 +7,9 @@ import { emptyPlay, flipPlay, isLineman, PLAY_TYPES, type Line, type PlayData, t
 import { ROUTES } from "@/domain/routes";
 import { applyStroke, matchRoute, simplify } from "@/domain/sketch";
 import { safeCall } from "@/lib/safe-call";
-import { drawPlayAction, lineupForAction, nameDrawingAction, saveBuiltPlayAction } from "../../actions";
+import { drawPlayAction, lineupForAction, nameDrawingAction, readAheadAction, saveBuiltPlayAction } from "../../actions";
 
-const mk = (id: string, x: number, y: number): Player => ({
+export const mk = (id: string, x: number, y: number): Player => ({
   id,
   position: id,
   x,
@@ -25,7 +25,7 @@ const mk = (id: string, x: number, y: number): Player => ({
 });
 
 /** A 2x2 shotgun lineup, using the team's letters when its naming rules have them. */
-function blankLineup(n: Naming | null): Player[] {
+export function blankLineup(n: Naming | null): Player[] {
   const has = (l: string) => !n || n.positions.some((p) => p.letter.toUpperCase() === l);
   const pick = (want: string, fallback: string) => (has(want) ? want : fallback);
   return [
@@ -98,6 +98,30 @@ export function PlayBuilder(props: {
   }, [parts]);
   const name = ownName || built;
 
+  // Read the playbook's formations ahead of time so picks don't wait (each drawing is read once, ever)
+  const [ahead, setAhead] = useState(0);
+  const [batch, setBatch] = useState<{ status: string; drawings: number } | null>(null);
+  useEffect(() => {
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const go = async () => {
+      const r = await safeCall(() => readAheadAction(props.teamId), "Reading ahead");
+      if (stop || !r.ok) return;
+      const a = r.ahead;
+      setAhead(a.blocked ? 0 : a.left + a.reading);
+      setBatch(a.batch ?? null);
+      // queue more right away; once all are queued, check back while they're read
+      if (!a.blocked && a.left > 0) timer = setTimeout(go, 1500);
+      else if (!a.blocked && a.reading > 0) timer = setTimeout(go, 10000);
+      else if (a.batch) timer = setTimeout(go, 60000);
+    };
+    void go();
+    return () => {
+      stop = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [props.teamId]);
+
   // Picking a formation lines the players up the way the playbook draws it.
   const [lineupNote, setLineupNote] = useState<{ text: string; tone: "ok" | "muted" | "warn" } | null>(null);
   const [lineupVersion, setLineupVersion] = useState(0);
@@ -119,7 +143,7 @@ export function PlayBuilder(props: {
       const l = r.lineup;
       if (l.kind === "converting") {
         setLineupNote({ text: `Reading your drawing of ${l.from} (p${l.page}) to line up the players… a few seconds.`, tone: "muted" });
-        if (++tries < 40) timer = setTimeout(run, 3000);
+        if (++tries < 60) timer = setTimeout(run, 3000);
         else setLineupNote({ text: "That's taking too long. Drag the players into place, or try again in a minute.", tone: "warn" });
         return;
       }
@@ -168,7 +192,7 @@ export function PlayBuilder(props: {
       const res = r.result;
       if (res.kind === "reading") {
         setPlayNote({ lines: [`Reading your drawing of ${res.from} (p${res.page})… a few seconds.`], tone: "muted" });
-        if (++tries < 40) timer = setTimeout(run, 3000);
+        if (++tries < 60) timer = setTimeout(run, 3000);
         else setPlayNote({ lines: ["That's taking too long. Draw the jobs yourself, or try again in a minute."], tone: "warn" });
         return;
       }
@@ -436,6 +460,16 @@ export function PlayBuilder(props: {
             ))}
           </div>
         )}
+        {batch && (
+          <p className="text-xs text-muted" aria-live="polite">
+            Reps is reading all {batch.drawings} drawings in your playbook behind the scenes ({batch.status === "importing" ? "almost done" : "usually under an hour"}). Until then, a formation or play Reps hasn&apos;t read yet takes about 30 seconds the first time.
+          </p>
+        )}
+        {ahead > 0 && (
+          <p className="text-xs text-muted" aria-live="polite">
+            Reps is reading your playbook&apos;s formations ahead of time ({ahead} to go), so picking one is instant once it&apos;s read. You can keep working.
+          </p>
+        )}
         {lineupNote && (
           <p className={`text-sm ${lineupNote.tone === "ok" ? "text-ok" : lineupNote.tone === "warn" ? "text-warn" : "text-muted"}`} aria-live="polite">
             {lineupNote.text}
@@ -669,7 +703,7 @@ export function PlayBuilder(props: {
 }
 
 /** A row of pen buttons, each a little picture of the line. */
-function PenGroup<T extends string>({ label, value, options, onChange, disabled }: { label: string; value: T; options: Array<[T, string, React.ReactNode]>; onChange: (v: T) => void; disabled?: boolean }) {
+export function PenGroup<T extends string>({ label, value, options, onChange, disabled }: { label: string; value: T; options: Array<[T, string, React.ReactNode]>; onChange: (v: T) => void; disabled?: boolean }) {
   return (
     <div className={`flex items-center gap-1 text-xs ${disabled ? "opacity-40" : ""}`} role="group" aria-label={label}>
       <span className="text-muted">{label}</span>
@@ -693,7 +727,7 @@ function PenGroup<T extends string>({ label, value, options, onChange, disabled 
 }
 
 /** A select of the team's words, plus "type your own" when `free`. */
-function Pick({ label, value, options, onChange, free = true }: { label: string; value: string; options: string[]; onChange: (v: string) => void; free?: boolean }) {
+export function Pick({ label, value, options, onChange, free = true }: { label: string; value: string; options: string[]; onChange: (v: string) => void; free?: boolean }) {
   const own = free && value !== "" && !options.includes(value);
   return (
     <label className="flex flex-col gap-1 text-xs">

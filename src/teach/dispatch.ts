@@ -49,6 +49,15 @@ export function verifyWorker(teamId: string, origin: string, sig: string) {
   return same(signWorker(teamId, origin), sig);
 }
 
+/** The background reader asks the site to crop a batch's drawings; the request carries this. */
+export function signBatch(batchId: string) {
+  return createHmac("sha256", secret()).update(`read-batch:${batchId}`).digest("hex");
+}
+
+export function verifyBatch(batchId: string, sig: string) {
+  return same(signBatch(batchId), sig);
+}
+
 export const onNetlify = () => !!(process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT);
 
 /** Hand a queued job to whatever can run it. Never throws. */

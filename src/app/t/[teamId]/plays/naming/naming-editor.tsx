@@ -1,12 +1,12 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { NAMING_LIST_LABEL, NAMING_LISTS, type Naming, type NamingList, type Word } from "@/domain/naming";
+import { DEFENSE_LISTS, NAMING_LIST_LABEL, NAMING_LISTS, type Naming, type NamingList, type Word } from "@/domain/naming";
 import { safeCall } from "@/lib/safe-call";
 import { draftNamingAction, saveNamingAction } from "../../teach/actions";
 import { runAndWait } from "../../teach/wait-job";
 
-const ROLES = ["QB", "RB", "WR", "TE", "OL", "flex"] as const;
+const ROLES = ["QB", "RB", "WR", "TE", "OL", "flex", "DL", "LB", "DB"] as const;
 const pagesText = (p: number[]) => p.join(", ");
 const toPages = (s: string) =>
   s
@@ -20,6 +20,7 @@ export function NamingEditor({ teamId, initial, approvedAt }: { teamId: string; 
   const router = useRouter();
   const [n, setN] = useState<Naming | null>(initial);
   const [busy, setBusy] = useState<string | null>(null);
+  const [showDef, setShowDef] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
@@ -64,7 +65,7 @@ export function NamingEditor({ teamId, initial, approvedAt }: { teamId: string; 
     setMsg(approve ? "Confirmed. Reps will use these when it converts your drawings." : "Saved.");
     router.refresh();
   };
-  const setWord = (list: NamingList, i: number, patch: Partial<Word>) => edit({ ...n, [list]: n[list].map((w, j) => (j === i ? { ...w, ...patch } : w)) });
+  const setWord = (list: NamingList, i: number, patch: Partial<Word>) => edit({ ...n, [list]: (n[list] ?? []).map((w, j) => (j === i ? { ...w, ...patch } : w)) });
 
   return (
     <div className="flex flex-col gap-5">
@@ -132,12 +133,12 @@ export function NamingEditor({ teamId, initial, approvedAt }: { teamId: string; 
         <input id="order" className="input" value={n.call_order.join(", ")} onChange={(e) => edit({ ...n, call_order: e.target.value.split(",").map((x) => x.trim()) })} />
       </section>
 
-      {NAMING_LISTS.map((list) => (
+      {NAMING_LISTS.filter((l) => showDef || !(DEFENSE_LISTS as readonly string[]).includes(l) || DEFENSE_LISTS.some((d) => (n[d] ?? []).length)).map((list) => (
         <section key={list} className="card flex flex-col gap-2 p-4">
           <h2 className="text-2xl">
-            {NAMING_LIST_LABEL[list]} <span className="text-base text-muted">· {n[list].length}</span>
+            {NAMING_LIST_LABEL[list]} <span className="text-base text-muted">· {(n[list] ?? []).length}</span>
           </h2>
-          {n[list].map((w, i) => (
+          {(n[list] ?? []).map((w, i) => (
             <div key={i} className="grid grid-cols-[8rem_1fr_2rem] gap-2 border-t border-line pt-2 sm:grid-cols-[10rem_1fr_6rem_2rem]">
               <input className="input font-bold" value={w.word} onChange={(e) => setWord(list, i, { word: e.target.value })} aria-label="Word" />
               <textarea className="input min-h-11 text-sm" value={w.means} onChange={(e) => setWord(list, i, { means: e.target.value })} aria-label="What it means" />
@@ -148,16 +149,21 @@ export function NamingEditor({ teamId, initial, approvedAt }: { teamId: string; 
                 onBlur={(e) => setWord(list, i, { pages: toPages(e.target.value) })}
                 aria-label="Pages"
               />
-              <button className="text-muted" aria-label="Remove" onClick={() => edit({ ...n, [list]: n[list].filter((_, j) => j !== i) })}>
+              <button className="text-muted" aria-label="Remove" onClick={() => edit({ ...n, [list]: (n[list] ?? []).filter((_, j) => j !== i) })}>
                 ✕
               </button>
             </div>
           ))}
-          <button className="self-start text-sm underline" onClick={() => edit({ ...n, [list]: [...n[list], { word: "", means: "", pages: [] }] })}>
+          <button className="self-start text-sm underline" onClick={() => edit({ ...n, [list]: [...(n[list] ?? []), { word: "", means: "", pages: [] }] })}>
             Add one
           </button>
         </section>
       ))}
+      {!showDef && !DEFENSE_LISTS.some((d) => (n[d] ?? []).length) && (
+        <button className="self-start text-sm underline" onClick={() => setShowDef(true)}>
+          Add your defense&apos;s words (fronts, coverages, stunts, blitzes)
+        </button>
+      )}
 
       <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t border-line bg-bg py-3">
         <button className="btn btn-primary" disabled={!!busy} onClick={() => save(true)}>

@@ -27,12 +27,12 @@ const partKey = (teamId: string, uploadId: string, i: number) => `${teamId}/uplo
  * Chunked upload, step 1: create the upload row. The browser then sends the
  * file in UPLOAD_CHUNK_BYTES pieces (appendChunk) and calls finishUpload.
  */
-export async function startUpload(teamId: string, userId: string | null, filename: string, size: number, database: Db = db) {
+export async function startUpload(teamId: string, userId: string | null, filename: string, size: number, database: Db = db, side: "offense" | "defense" = "offense") {
   if (!Number.isFinite(size) || size <= 0) throw new Error("That file is empty.");
   if (size > MAX_UPLOAD_BYTES) throw new Error("That PDF is over 150 MB. Split it into smaller files.");
   const [upload] = await database
     .insert(uploads)
-    .values({ teamId, filename: filename.slice(0, 200), mediaKey: "pending", pageCount: 0, status: "uploading", createdBy: userId })
+    .values({ teamId, filename: filename.slice(0, 200), mediaKey: "pending", pageCount: 0, status: "uploading", createdBy: userId, side })
     .returning();
   return upload!;
 }

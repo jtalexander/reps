@@ -142,7 +142,7 @@ describe("coach tools", () => {
     const { copyFromTeam } = await import("@/teach/reuse");
     const last = await createTeam(db, ownerId, "Last season", "youth");
     const next = await createTeam(db, ownerId, "This season", "youth");
-    await db.update(teams).set({ naming: { positions: [], direction: { words: [], rule: "R" }, call_order: [], formations: [], formation_tags: [], backfields: [], motions: [], plays: [], other: [] } }).where(eq(teams.id, last.id));
+    await db.update(teams).set({ naming: { positions: [], direction: { words: [], rule: "R" }, call_order: [], formations: [], formation_tags: [], backfields: [], motions: [], plays: [], other: [], fronts: [], coverages: [], stunts: [], blitzes: [] } }).where(eq(teams.id, last.id));
     const [lt] = await db.insert(topics).values({ teamId: last.id, name: "Veer", nameKey: "VEER" }).returning();
     const [nt] = await db.insert(topics).values({ teamId: next.id, name: "Veer", nameKey: "VEER" }).returning();
     await db.insert(gaps).values([

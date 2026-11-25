@@ -43,6 +43,11 @@ export const ASSIGNMENT_TYPES = [
   "lead",
 ] as const;
 export type AssignmentType = (typeof ASSIGNMENT_TYPES)[number];
+/** A defender's job on a defensive call. */
+export const DEF_ASSIGNMENT_TYPES = ["rush", "gap", "zone_drop", "man", "blitz", "contain", "spy"] as const;
+export type DefAssignmentType = (typeof DEF_ASSIGNMENT_TYPES)[number];
+/** Zones a defender drops to. */
+export const DEF_ZONES = ["deep_third", "deep_half", "deep_quarter", "flat", "curl", "hook", "middle_hole", "deep_middle"] as const;
 
 export const BLOCK_TYPES = [
   "zone",
@@ -123,7 +128,7 @@ export const PlayerSchema = z.object({
   on_ball: z.boolean(),
   side: z.enum(["left", "right", "middle"]),
   split: str.nullable().default(null), // wide / slot / tight / wing / backfield
-  assignment_type: maybe(z.enum(ASSIGNMENT_TYPES)),
+  assignment_type: maybe(z.enum([...ASSIGNMENT_TYPES, ...DEF_ASSIGNMENT_TYPES])),
   route: RouteSchema.nullable().default(null),
   block: BlockSchema.nullable().default(null),
   /** ball carrier path / fake path / lead path, relative to the player */
@@ -131,6 +136,11 @@ export const PlayerSchema = z.object({
   notes: str.nullable().default(null),
   /** drawn by hand in the play builder: how the line looks (absent = Reps' usual look for the job) */
   line: LineSchema.nullable().optional(),
+  /** a defender's job details: his gap ("B"), zone ("deep_third"), man (the offensive letter he covers), technique ("5") */
+  def: z
+    .object({ gap: str.nullable().default(null), zone: str.nullable().default(null), man: str.nullable().default(null), technique: str.nullable().default(null) })
+    .nullable()
+    .optional(),
 });
 export type Player = z.infer<typeof PlayerSchema>;
 
@@ -224,8 +234,15 @@ export const PlayDataSchema = z.object({
   suggested: z.array(str).default([]),
   /** dotted paths filled from the concept library; team concept edits flow into these */
   from_concept: z.array(str).default([]),
+  /** a defensive call: players are the defenders (y > 0 is the defense's side) */
+  side: z.enum(["offense", "defense"]).optional(),
+  /** a defensive call's parts, in the coach's words */
+  defense: z.object({ front: str.nullable(), coverage: str.nullable(), stunt: str.nullable(), pressure: str.nullable() }).nullable().optional(),
+  /** a defensive call: the offense it's drawn against (shown faintly) */
+  vs: z.array(PlayerSchema).optional(),
 });
 export type PlayData = z.infer<typeof PlayDataSchema>;
+export const isDefense = (p: Pick<PlayData, "side">) => p.side === "defense";
 
 export const PLAY_STATUSES = ["draft", "needs_coach_input", "approved"] as const;
 export type PlayStatus = (typeof PLAY_STATUSES)[number];
@@ -309,5 +326,19 @@ export function flipPlay(play: PlayData): PlayData {
       block: p.block ? { ...p.block, path: mirror(p.block.path) } : null,
       path: mirror(p.path),
     })),
+    ...(play.vs ? { vs: play.vs.map((p) => ({ ...p, x: -p.x, side: side(p.side) })) } : {}),
   };
+}
+
+/**
+ * Rename the offensive line between left/right (LT, LG, RG, RT) and play
+ * side/back side (PST, PSG, BSG, BST), with the play side on `side`. Leaves the
+ * players alone if a renamed letter is already taken.
+ */
+export function renameLinemen(players: Player[], to: "lt" | "ps", side: "left" | "right"): Player[] {
+  const toPs: Record<string, string> = side === "right" ? { RT: "PST", RG: "PSG", LG: "BSG", LT: "BST" } : { LT: "PST", LG: "PSG", RG: "BSG", RT: "BST" };
+  const map: Record<string, string> = to === "ps" ? toPs : Object.fromEntries(Object.entries(toPs).map(([a, b]) => [b, a]));
+  const ids = new Set(players.map((p) => p.id));
+  if (players.some((p) => map[p.id] && ids.has(map[p.id]!))) return players;
+  return players.map((p) => (map[p.id] ? { ...p, id: map[p.id]!, position: p.position === p.id ? map[p.id]! : p.position } : p));
 }

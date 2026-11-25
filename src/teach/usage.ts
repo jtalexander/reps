@@ -15,6 +15,10 @@ import { aiUsage } from "@/db/teach-schema";
 /** Dollars per million tokens (Anthropic list prices; thinking counts as output). */
 export const PRICES: Record<string, { input: number; output: number }> = {
   "claude-opus-5-5": { input: 4, output: 20 },
+  "claude-opus-5-5:fast": { input: 8, output: 40 },
+  "claude-opus-5-5:batch": { input: 2, output: 10 },
+  "claude-sonnet-5-5": { input: 2, output: 10 },
+  "claude-sonnet-5-5:batch": { input: 1, output: 5 },
 };
 const DEFAULT_PRICE = PRICES["claude-opus-5-5"]!;
 

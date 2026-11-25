@@ -177,7 +177,7 @@ export const jobs = pgTable(
   {
     id: id(),
     teamId: team(),
-    kind: text().$type<"decode_page" | "find_gaps" | "write_topic" | "triage" | "pick_core" | "playbook" | "naming" | "convert_drawing">().notNull(),
+    kind: text().$type<"decode_page" | "find_gaps" | "write_topic" | "triage" | "pick_core" | "playbook" | "naming" | "convert_drawing" | "read_batch" | "import_batch">().notNull(),
     /** what the job works on: a teach page, a topic, the team (triage, naming), the upload (a whole-playbook run), or a drawing key ("12.abc") */
     ref: text().notNull(),
     status: text().$type<"queued" | "running" | "done" | "failed">().notNull().default("queued"),
@@ -188,6 +188,37 @@ export const jobs = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index("jobs_team_ref").on(t.teamId, t.ref)],
+);
+
+/**
+ * Reading the whole playbook's drawings in the background, after the naming
+ * rules are confirmed: cropped, sent as one Message Batch (half price, usually
+ * answered within the hour), then turned into plays. "cropping" -> "submitted"
+ * -> "importing" -> "imported" (or "failed").
+ */
+export const readBatches = pgTable(
+  "read_batches",
+  {
+    id: id(),
+    teamId: team(),
+    status: text().$type<"cropping" | "submitted" | "importing" | "imported" | "failed">().notNull().default("cropping"),
+    /** drawing keys to read, in order; request i in the batch is keys[i] */
+    keys: jsonb().$type<string[]>().notNull().default([]),
+    /** how many of keys have been cropped so far */
+    cropped: integer().notNull().default(0),
+    /** keys that couldn't be cropped (left for an on-demand read) */
+    skipped: jsonb().$type<string[]>().notNull().default([]),
+    model: text().notNull(),
+    batchId: text(),
+    /** the site address workers call back to */
+    origin: text(),
+    made: integer().notNull().default(0),
+    failed: integer().notNull().default(0),
+    error: text(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("read_batches_team").on(t.teamId, t.status)],
 );
 
 export const attempts = pgTable(

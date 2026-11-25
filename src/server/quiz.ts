@@ -9,7 +9,7 @@ import { db, type Db } from "@/db";
 import { answers, plays, quizSessions, srsItems, studySets, teams } from "@/db/schema";
 import { z } from "zod";
 import { gradeDrawing } from "@/domain/draw-grade";
-import { LineSchema, type PlayData } from "@/domain/play";
+import { isDefense, LineSchema, type PlayData } from "@/domain/play";
 import { isCorrect, type QuizContext, type QuizPlay, type QuizType, type Question } from "@/domain/quiz";
 import { buildQuiz, nextState, type QuizMode, type SrsState } from "@/domain/srs";
 import { term, TermsSchema } from "@/domain/terms";
@@ -29,7 +29,7 @@ export function contextFor(team: Team, position: string): QuizContext {
 
 export async function quizPlays(teamId: string, ids?: string[], database: Db = db): Promise<QuizPlay[]> {
   const rows = await approvedPlays(teamId, ids, database);
-  return rows.filter((r) => r.data).map((r) => ({ id: r.id, data: r.data!, qbReady: r.qbReady }));
+  return rows.filter((r) => r.data).map((r) => ({ id: r.id, data: r.data!, qbReady: r.qbReady, goodVs: r.goodVs.yes }));
 }
 
 export async function srsFor(playerId: string, database: Db = db): Promise<SrsState[]> {
@@ -56,7 +56,8 @@ export function diagramData(data: PlayData, q: Pick<Question, "diagram">, reveal
   const d = q.diagram;
   const players = data.players.map((p) => {
     const hidden = !reveal && (d.hide === "all" || (d.hide === "player" && p.id === d.highlight));
-    return hidden ? { ...p, route: null, block: null, path: null, notes: null } : { ...p, notes: null };
+    // a hidden defender's job goes too (the field draws the usual line for a job even with no path)
+    return hidden ? { ...p, route: null, block: null, path: null, notes: null, ...(isDefense(data) ? { assignment_type: "unknown" as const, def: null } : {}) } : { ...p, notes: null };
   });
   return {
     ...data,
@@ -72,6 +73,7 @@ export function diagramData(data: PlayData, q: Pick<Question, "diagram">, reveal
     suggested: [],
     from_concept: [],
     concept_key: null,
+    defense: reveal ? data.defense : null,
   };
 }
 
