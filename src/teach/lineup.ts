@@ -22,7 +22,7 @@ export interface Call {
 }
 
 export type LineupResult =
-  | { kind: "lineup"; players: Player[]; from: string; page: number | null; mirrored: boolean }
+  | { kind: "lineup"; players: Player[]; from: string; page: number | null; mirrored: boolean; withoutTag?: string }
   | { kind: "converting"; from: string; page: number }
   | { kind: "none"; why: string };
 
@@ -92,7 +92,15 @@ export async function lineupFor(teamId: string, call: Call, origin: string | nul
 
   if (bestPlay && (!bestDrawing || bestPlay.f!.score >= bestDrawing.f!.score))
     return { kind: "lineup", players: lineupOf(bestPlay.p.data!.players, bestPlay.f!.mirror), from: bestPlay.p.name, page: bestPlay.p.page ?? null, mirrored: bestPlay.f!.mirror };
-  if (!bestDrawing) return { kind: "none", why: `Your playbook has no drawing of ${label}. Drag the players into place.` };
+  if (!bestDrawing) {
+    // no drawing with that tag: line up the plain formation and let the coach move players for the tag
+    if (call.tag.trim()) {
+      const base = await lineupFor(teamId, { ...call, tag: "" }, origin, database);
+      if (base.kind === "lineup") return { ...base, withoutTag: call.tag.trim() };
+      if (base.kind === "converting") return base;
+    }
+    return { kind: "none", why: `Your playbook has no drawing of ${label}. Drag the players into place.` };
+  }
 
   // turn that one drawing into a play now (the builder asks again until it's done)
   const read = await readDrawingOnce(teamId, bestDrawing.d.key, origin, database);

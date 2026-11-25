@@ -1,7 +1,4 @@
 import Link from "next/link";
-import { and, asc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { plays } from "@/db/schema";
 import { isDefense, type PlayData } from "@/domain/play";
 import { getPlay, isConverted } from "@/server/plays";
 import { requireCoach } from "@/server/teams";
@@ -50,14 +47,6 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
         players: row.data.players.map((p) => ({ ...p, assignment_type: "unknown", route: null, block: null, path: null })),
       };
   }
-  // formations the team already has as real plays (drawings with no lines)
-  const lineups = await db
-    .select({ id: plays.id, name: plays.name })
-    .from(plays)
-    .where(and(eq(plays.teamId, teamId), eq(plays.archived, false), eq(plays.extraction, "done"), sql`${plays.aiRaw} is not null`, eq(plays.playType, "unknown")))
-    .orderBy(asc(plays.name))
-    .limit(300);
-
   // a defensive call (new, or one being edited) opens the defense builder
   if (sp.side === "defense" || (start && isDefense(start))) {
     return (
@@ -85,7 +74,7 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
           Drag players into place, then draw each line by hand or tap a player to pick his job. Reps names the play from your naming rules. Save and approve it like any play.
         </p>
       </div>
-      <PlayBuilder teamId={teamId} naming={naming} start={start} playId={editing} lineups={lineups} fromId={fromId} />
+      <PlayBuilder teamId={teamId} naming={naming} start={start} playId={editing} />
     </div>
   );
 }

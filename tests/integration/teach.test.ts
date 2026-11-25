@@ -600,6 +600,8 @@ describe("teach loop", () => {
     for (let i = 0; i < 100 && (lu = await lineupFor(teamF.id, trips, null, db)).kind === "converting"; i++) await new Promise((r) => setTimeout(r, 50));
     expect(lu.kind === "lineup" && lu.from).toBe("TRIPS RIGHT STACK");
     expect((await db.select().from(jobs).where(and(eq(jobs.teamId, teamF.id), eq(jobs.kind, "convert_drawing"), eq(jobs.ref, "1.d1")))).length).toBeLessThanOrEqual(1);
+    // a tag the playbook never drew: the plain formation, and the coach moves players for the tag
+    expect(await lineupFor(teamF.id, { formation: "VEER", dir: "RIGHT", tag: "ZIP" }, null, db)).toMatchObject({ kind: "lineup", from: "VEER RIGHT vs 4-3", withoutTag: "ZIP" });
     // nothing drawn: say so
     expect(await lineupFor(teamF.id, { formation: "BUNCH", dir: "RIGHT", tag: "" }, null, db)).toMatchObject({ kind: "none" });
 

@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PlaySvg, type LineRef } from "@/components/play-svg";
 import type { Naming } from "@/domain/naming";
+import { motionKind } from "@/domain/motion-draw";
 import { emptyPlay, flipPlay, isLineman, PLAY_TYPES, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTES } from "@/domain/routes";
 import { applyStroke, matchRoute, simplify } from "@/domain/sketch";
@@ -65,8 +66,6 @@ export function PlayBuilder(props: {
   naming: Naming | null;
   start: PlayData | null;
   playId: string | null;
-  lineups: Array<{ id: string; name: string }>;
-  fromId: string | null;
 }) {
   const router = useRouter();
   const [data, setData] = useState<PlayData>(() => props.start ?? { ...emptyPlay(), players: blankLineup(props.naming) });
@@ -75,7 +74,7 @@ export function PlayBuilder(props: {
   const [msg, setMsg] = useState<string | null>(null);
   const n = props.naming;
   // the call, built from the naming rules
-  const [parts, setPartsRaw] = useState({ formation: "", dir: "RIGHT", tag: "", motionPlayer: "", motion: "", play: "", playDir: "" });
+  const [parts, setPartsRaw] = useState({ shift: "", formation: "", dir: "RIGHT", tag: "", motionPlayer: "", motion: "", play: "", playDir: "" });
   type Parts = typeof parts;
   // parts the coach picked himself (Reps' naming leaves them alone) and parts Reps filled in from a drawing
   const mine = useRef(new Set<keyof Parts>());
@@ -91,7 +90,8 @@ export function PlayBuilder(props: {
   const [ownName, setOwnName] = useState(props.start && props.start.name !== "unknown" ? props.start.name : "");
   const built = useMemo(() => {
     const t = (s: string) => s.trim();
-    const f = [t(parts.formation), t(parts.formation) ? parts.dir : "", t(parts.tag)].filter(Boolean).join(" ");
+    // a shift is called in front of the formation it ends in: "DANCE SLOT RIGHT"
+    const f = [t(parts.shift), t(parts.formation), t(parts.formation) ? parts.dir : "", t(parts.tag)].filter(Boolean).join(" ");
     const m = parts.motionPlayer && t(parts.motion) ? `${parts.motionPlayer}-${t(parts.motion)}` : "";
     const p = [t(parts.play), t(parts.play) ? parts.playDir : ""].filter(Boolean).join(" ");
     return [f, m, p].filter(Boolean).join(", ");
@@ -158,7 +158,11 @@ export function PlayBuilder(props: {
         }),
       }));
       setLineupVersion((v) => v + 1);
-      setLineupNote({ text: `Lined up from ${l.from}${l.page ? ` (p${l.page})` : ""}${l.mirrored ? ", flipped" : ""}. Drag anyone who should be somewhere else.`, tone: "ok" });
+      setLineupNote(
+        l.withoutTag
+          ? { text: `Your playbook has no drawing with ${l.withoutTag}, so Reps lined up ${l.from}${l.page ? ` (p${l.page})` : ""}${l.mirrored ? ", flipped" : ""}. Drag the players where ${l.withoutTag} puts them.`, tone: "warn" }
+          : { text: `Lined up from ${l.from}${l.page ? ` (p${l.page})` : ""}${l.mirrored ? ", flipped" : ""}. Drag anyone who should be somewhere else.`, tone: "ok" },
+      );
     };
     const start = setTimeout(run, 400); // wait for typing to settle
     return () => {
@@ -392,36 +396,36 @@ export function PlayBuilder(props: {
   };
 
   const words = (list: Array<{ word: string }> | undefined) => (list ?? []).map((w) => w.word);
+  // shifts (everyone resets before the snap) get their own pick; motions are one player moving
+  const isShift = (w: { word: string; means: string }) => motionKind(w.word, w.means) === "shift";
+  const shifts = (n?.motions ?? []).filter(isShift);
+  const motions = (n?.motions ?? []).filter((w) => !isShift(w));
+  const shiftMeans = shifts.find((w) => w.word === parts.shift.trim())?.means;
   const skill = data.players.filter((p) => !isLineman(p.id));
 
   return (
     <div className="flex flex-col gap-4 pb-24">
-      {!props.playId && props.lineups.length > 0 && (
-        <label className="flex flex-wrap items-center gap-2 text-sm">
-          Start from your formation:
-          <select
-            className="input w-auto"
-            value={props.fromId ?? ""}
-            onChange={(e) => router.push(`/t/${props.teamId}/plays/build${e.target.value ? `?from=${e.target.value}` : ""}`)}
-          >
-            <option value="">Blank 2x2 lineup</option>
-            {props.lineups.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-
       <section className="card flex flex-col gap-2 p-3">
-        <div className="font-semibold">Name {n ? "from your naming rules" : ""}</div>
+        <div className="font-semibold">Pick the call {n ? "from your naming rules" : ""}</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Formation</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {shifts.length > 0 && <Pick label="Shift (optional)" value={parts.shift} options={words(shifts)} onChange={(v) => setParts({ ...parts, shift: v })} />}
           <Pick label="Formation" value={parts.formation} options={words(n?.formations)} onChange={(v) => setParts({ ...parts, formation: v })} />
           <Pick label="Direction" value={parts.dir} options={["RIGHT", "LEFT"]} onChange={(v) => setParts({ ...parts, dir: v })} free={false} />
           <Pick label="Tag" value={parts.tag} options={words(n?.formation_tags)} onChange={(v) => setParts({ ...parts, tag: v })} />
-          <Pick label="Motion" value={parts.motion} options={words(n?.motions)} onChange={(v) => setParts({ ...parts, motion: v })} />
+        </div>
+        {shiftMeans && (
+          <p className="text-xs text-muted">
+            {parts.shift.trim()}: {shiftMeans} The players are drawn where they end up{parts.formation.trim() ? ` (${parts.formation.trim()} ${parts.dir})` : ""}.
+          </p>
+        )}
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Motion</div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Pick label="Motion" value={parts.motion} options={words(motions)} onChange={(v) => setParts({ ...parts, motion: v })} />
           <Pick label="Who motions" value={parts.motionPlayer} options={skill.map((p) => p.id)} onChange={(v) => setParts({ ...parts, motionPlayer: v })} free={false} />
+        </div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Play</div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Pick label="Play" value={parts.play} options={words(n?.plays)} onChange={(v) => setParts({ ...parts, play: v })} />
           <Pick label="Play direction" value={parts.playDir} options={["RIGHT", "LEFT"]} onChange={(v) => setParts({ ...parts, playDir: v })} free={false} />
           <label className="flex flex-col gap-1 text-xs">
