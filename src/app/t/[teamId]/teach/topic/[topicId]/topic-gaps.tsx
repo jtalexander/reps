@@ -35,7 +35,7 @@ export function TopicGaps({ teamId, topicId, items, optional }: { teamId: string
           {suggested.length > 0 && (
             <div className="card flex flex-wrap items-center gap-2 p-3 text-sm">
               <span className="flex-1">
-                Read Reps&apos; suggestions below. If they&apos;re right, accept {suggested.length === 1 ? "it" : `all ${suggested.length}`} at once.
+                Read RepWon&apos;s suggestions below. If they&apos;re right, accept {suggested.length === 1 ? "it" : `all ${suggested.length}`} at once.
               </span>
               <button
                 className="btn btn-primary min-h-9 px-3"
@@ -108,7 +108,7 @@ function GapCard({ teamId, gap, onDone }: { teamId: string; gap: Gap; onDone: (l
       )}
       {gap.suggestion && !writing && (
         <div className="rounded-lg bg-suggest-bg p-2">
-          <div className="text-[11px] font-semibold text-suggest uppercase">Reps&apos; suggestion</div>
+          <div className="text-[11px] font-semibold text-suggest uppercase">RepWon&apos;s suggestion</div>
           <p>{gap.suggestion}</p>
         </div>
       )}

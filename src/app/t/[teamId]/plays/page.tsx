@@ -13,7 +13,7 @@ const tab = (on: boolean) => `px-3 py-1.5 text-sm font-semibold ${on ? "bg-brand
 
 /**
  * The playbook: every play, findable by anything it is (the Plays view), or
- * the coach's own pages with every drawing Reps found on them (Pages).
+ * the coach's own pages with every drawing RepWon found on them (Pages).
  */
 export default async function Playbook({ params, searchParams }: PageProps<"/t/[teamId]/plays">) {
   const { teamId } = await params;

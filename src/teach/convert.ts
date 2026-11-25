@@ -1,5 +1,5 @@
 /**
- * Turning a drawing Teach found into a real Reps play: crop it from the page
+ * Turning a drawing Teach found into a real RepWon play: crop it from the page
  * image, have Claude locate each offensive player and the line drawn from
  * him, convert pixels to yards, and save it as a draft play the coach checks
  * next to the original.

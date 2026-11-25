@@ -26,7 +26,7 @@ export default async function BlockingSchemes({ params, searchParams }: PageProp
         </Link>
         <h1 className="text-4xl">Blocking schemes</h1>
         <p className="text-sm text-muted">
-          Give each blocker his rule once. Reps works out who he blocks against every front, on every play that runs the scheme. Fix any single play in the builder.
+          Give each blocker his rule once. RepWon works out who he blocks against every front, on every play that runs the scheme. Fix any single play in the builder.
         </p>
       </div>
       <SchemeEditor teamId={teamId} schemes={schemes} fronts={fronts} initial={pick} matches={matches} otherTeams={otherTeams} />

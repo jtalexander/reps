@@ -12,7 +12,8 @@ export default async function Home() {
           Playbook study for every position
         </p>
         <h1 className="mt-4 text-8xl leading-[0.85]">
-          <span className="gold-text">Reps</span>
+          <span className="gold-text">RepWon</span>
+          <span className="mt-2 block text-5xl">Install</span>
         </h1>
         <p className="mt-4 text-muted">Your playbook, turned into study and quizzes for every position.</p>
       </div>

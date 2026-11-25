@@ -97,7 +97,7 @@ export default async function TeachResults({ params }: PageProps<"/t/[teamId]/te
 
       <section>
         <h2 className="mb-2 font-semibold">Answers in players&apos; own words</h2>
-        <p className="mb-2 text-sm text-muted">Graded by Reps against your model answer. Change any grade you disagree with.</p>
+        <p className="mb-2 text-sm text-muted">Graded by RepWon against your model answer. Change any grade you disagree with.</p>
         {open.length === 0 ? (
           <p className="text-sm text-muted">None yet.</p>
         ) : (
@@ -109,7 +109,7 @@ export default async function TeachResults({ params }: PageProps<"/t/[teamId]/te
                 </div>
                 <div className="font-semibold">{prompt}</div>
                 <p className="mt-1">&ldquo;{String(a.given ?? "")}&rdquo;</p>
-                {a.feedback && <p className="mt-1 text-muted">Reps: {a.feedback}</p>}
+                {a.feedback && <p className="mt-1 text-muted">RepWon: {a.feedback}</p>}
                 <GradeOverride teamId={teamId} attemptId={a.id} correct={a.correct} score={a.score} byCoach={a.gradedBy === "coach"} />
               </li>
             ))}

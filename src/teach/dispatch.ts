@@ -80,7 +80,7 @@ export async function dispatchJob(jobId: string, origin: string | null, database
     console.error("job dispatch", jobId, err);
     await database
       .update(jobs)
-      .set({ status: "failed", error: "Reps couldn't start this. Try again in a minute." })
+      .set({ status: "failed", error: "RepWon couldn't start this. Try again in a minute." })
       .where(eq(jobs.id, jobId));
   }
 }

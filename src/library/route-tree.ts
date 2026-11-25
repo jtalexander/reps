@@ -62,7 +62,7 @@ export function buildRouteTree(team: TeamCtx): { lessons: LibLesson[]; questions
       common ? "The route tree" : "Our route tree",
       `${
         common
-          ? "Many teams give their basic routes numbers, so a play call can tell every receiver his route in one word. Your coach hasn't set our team's tree in Reps yet, so here is a common one. If your playbook numbers routes differently, your playbook wins."
+          ? "Many teams give their basic routes numbers, so a play call can tell every receiver his route in one word. Your coach hasn't set our team's tree in RepWon yet, so here is a common one. If your playbook numbers routes differently, your playbook wins."
           : "We give our basic routes numbers, so a play call can tell every receiver his route in one word. Learn these cold: when you hear the number, you know the route."
       }
 ${rows.map((r) => `- ${r.n}: ${name(r.route)} (${ROUTE_BY_KEY.get(r.route)!.describe})`).join("\n")}${

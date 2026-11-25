@@ -1,5 +1,5 @@
 /**
- * Reps database schema.
+ * RepWon database schema.
  *
  * Every team-owned table carries a NOT NULL team_id, and every query in
  * src/db/repo goes through a team-scoped function (see `teamRepo`). Team
@@ -111,7 +111,7 @@ export const teams = pgTable("teams", {
   /** bumped when the coach resets the code: old player cookies stop working */
   joinCodeVersion: integer().notNull().default(1),
   terms: jsonb().$type<Terms>().notNull().default(sql`'{}'::jsonb`),
-  /** naming rules Reps drafted from the playbook (null until drafted) */
+  /** naming rules RepWon drafted from the playbook (null until drafted) */
   naming: jsonb().$type<Naming>(),
   /** when the coach confirmed the naming rules (null = still a draft) */
   namingApprovedAt: timestamp({ withTimezone: true }),
@@ -125,11 +125,11 @@ export const teams = pgTable("teams", {
   installName: text(),
   /** secret in the link that adds an assistant coach to the team (null = no link yet) */
   coachInviteCode: text().unique(),
-  /** monthly AI cap in dollars, set by the Reps admin; AI stops when reached (null = the default cap) */
+  /** monthly AI cap in dollars, set by the RepWon admin; AI stops when reached (null = the default cap) */
   aiBudgetUsd: integer(),
-  /** whether Reps may run AI for this team: new teams wait for the Reps admin */
+  /** whether RepWon may run AI for this team: new teams wait for the RepWon admin */
   aiAccess: text().$type<"pending" | "on" | "off">().notNull().default("pending"),
-  /** this team's approved answers help Reps' suggestions for other coaches (as concepts, never names) */
+  /** this team's approved answers help RepWon's suggestions for other coaches (as concepts, never names) */
   shareAnswers: boolean().notNull().default(true),
   /** Football basics: the coach's pick where coaches teach it differently, { styleKey: optionKey } */
   libraryStyles: jsonb().$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
@@ -147,7 +147,7 @@ export const teams = pgTable("teams", {
   updatedAt: updatedAt(),
 });
 
-/** People who run Reps itself: they see every team on /admin and turn AI on or off. */
+/** People who run RepWon itself: they see every team on /admin and turn AI on or off. */
 export const admins = pgTable("admins", {
   userId: uuid()
     .primaryKey()
@@ -265,7 +265,7 @@ export const plays = pgTable(
     inInstall: boolean().notNull().default(false),
     /** an offensive play or a defensive call */
     side: text().$type<"offense" | "defense">().notNull().default("offense"),
-    /** what it's good against: tags the coach kept or added, and Reps' suggestions he dropped */
+    /** what it's good against: tags the coach kept or added, and RepWon's suggestions he dropped */
     goodVs: jsonb().$type<GoodVs>().notNull().default({ yes: [], no: [] }),
     approvedAt: timestamp({ withTimezone: true }),
     approvedBy: uuid().references(() => users.id, { onDelete: "set null" }),

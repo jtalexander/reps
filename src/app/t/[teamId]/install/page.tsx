@@ -30,7 +30,7 @@ function options(ps: InstallPlay[], get: (p: InstallPlay) => [string, string] | 
 }
 
 const tagLine = (p: InstallPlay) =>
-  [p.tags.formation, p.tags.motion, p.tags.conceptLabel, TYPE_LABEL[p.tags.type]].filter(Boolean).join(" · ") || "Reps couldn't tell its formation or concept";
+  [p.tags.formation, p.tags.motion, p.tags.conceptLabel, TYPE_LABEL[p.tags.type]].filter(Boolean).join(" · ") || "RepWon couldn't tell its formation or concept";
 
 /**
  * This week's install: name it, see what's in it, and pick plays one by one,

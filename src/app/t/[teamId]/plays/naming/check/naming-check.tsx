@@ -1,6 +1,6 @@
 "use client";
 /**
- * One section at a time: Reps shows what it read in plain words, the coach
+ * One section at a time: RepWon shows what it read in plain words, the coach
  * taps Yes or Fix. Fixes are saved as they go; the last step confirms the
  * rules (and the route tree, when the playbook had one).
  */
@@ -111,7 +111,7 @@ export function NamingCheck({
     return (
       <div className="card flex flex-col gap-3 p-4">
         <p className="text-2xl font-bold text-ok">Done. Your naming rules are confirmed.</p>
-        <p className="text-sm">Reps now names your players and plays with your words when it turns drawings into plays, and the play builder builds calls the way you say them.</p>
+        <p className="text-sm">RepWon now names your players and plays with your words when it turns drawings into plays, and the play builder builds calls the way you say them.</p>
         {done.routeTree && <p className="text-sm">Your route tree is saved too, and Football basics teaches it to your receivers.</p>}
         <div className="flex flex-wrap gap-2">
           <Link href={`/t/${teamId}/plays/converted`} className="btn btn-primary">
@@ -245,7 +245,7 @@ export function NamingCheck({
     );
   } else if (step === "routes") {
     title = "Your route tree";
-    help = "Your playbook numbers its routes. Check each number; pick the route for any Reps couldn't match.";
+    help = "Your playbook numbers its routes. Check each number; pick the route for any RepWon couldn't match.";
     const setRow = (j: number, route: string | null) => setTree(tree.map((r, k) => (k === j ? { ...r, route } : r)));
     view = (
       <ul className="flex flex-col">
@@ -293,7 +293,7 @@ export function NamingCheck({
       {step === "done" ? (
         <div className="card flex flex-col gap-3 p-4">
           <h2 className="text-2xl">That&apos;s everything</h2>
-          <p className="text-sm">Confirm and Reps will use these rules to name your players and plays.</p>
+          <p className="text-sm">Confirm and RepWon will use these rules to name your players and plays.</p>
           <button className="btn btn-primary self-start" disabled={!!busy} onClick={confirm}>
             {busy ?? "Confirm my naming rules"}
           </button>
@@ -326,7 +326,7 @@ export function NamingCheck({
               </>
             )}
           </div>
-          {step === "routes" && !treeReady && <p className="text-xs text-warn">Pick a route for each number Reps couldn&apos;t match.</p>}
+          {step === "routes" && !treeReady && <p className="text-xs text-warn">Pick a route for each number RepWon couldn&apos;t match.</p>}
         </div>
       )}
 

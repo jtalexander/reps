@@ -250,7 +250,7 @@ export function PlaySvg(props: PlaySvgProps) {
         <path key={`o${i}-${k}`} d={toPath(o, start[0], start[1])} stroke={picked(ref) ? "var(--brand)" : "currentColor"} strokeWidth={picked(ref) ? 0.4 : 0.26} strokeDasharray="0.6 0.5" fill="none" markerEnd={`url(#arrow-${uid})`} opacity={op} />,
       );
     });
-    // a line the coach drew by hand keeps its look (dotted, arrow or T); otherwise Reps' usual look for the job
+    // a line the coach drew by hand keeps its look (dotted, arrow or T); otherwise RepWon's usual look for the job
     const hand = p.line;
     const dash = (usual?: string) => (hand ? (hand.style === "dotted" ? "0.6 0.5" : undefined) : usual);
     const end = (usual: string) =>

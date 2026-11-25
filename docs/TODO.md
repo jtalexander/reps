@@ -21,7 +21,7 @@ Decided 2026-11-25. Keep it as easy as possible for coaches: nobody uses it if i
 
 May be a feature coaches don't use, so keep it out of the way until turned on.
 
-- **The state comes from the school's address** (no state picker). Reps fills in that state's rule with a link to the source and the date checked; the coach taps "Looks right" or changes it. Recheck at the start of each season and ask again only if the rule changed. The log keeps which rule the coach agreed to.
+- **The state comes from the school's address** (no state picker). RepWon fills in that state's rule with a link to the source and the date checked; the coach taps "Looks right" or changes it. Recheck at the start of each season and ask again only if the rule changed. The log keeps which rule the coach agreed to.
 - **After each game:** Q1–Q4 boxes on each player row, plus "Played all 4". Totals add up across every team a kid played for.
 - **Warnings:** yellow one quarter from a limit, red at it. A "Who can still play" list before each game. Warn only; never block the coach.
 - **Audit log by week:** every team tick and every quarter entered or corrected, with who and when. Prints as a weekly report for the athletic director or the state association.

@@ -1,7 +1,7 @@
 /**
  * Defense and matchups end to end (Claude mocked): a defensive playbook's
  * drawing becomes a defensive call, the coach approves it without the
- * offense's checklist, Reps suggests what each play is good against, the
+ * offense's checklist, RepWon suggests what each play is good against, the
  * game plan finds plays by what the opponent shows, and defenders are quizzed.
  */
 import { and, eq } from "drizzle-orm";
@@ -92,7 +92,7 @@ describe("defensive playbooks and what plays are good against", () => {
     const { approvePlay } = await import("@/server/plays");
     expect((await approvePlay(team.id, playId, ownerId, "youth", db)).status).toBe("approved");
 
-    // Reps suggests from the page ("best call vs Trips") and the coverage (Cover 3 stops the run and the pass)
+    // RepWon suggests from the page ("best call vs Trips") and the coverage (Cover 3 stops the run and the pass)
     const m = await import("@/server/matchups");
     const looks = await m.playLooks(team.id, playId, db);
     expect(looks!.side).toBe("defense");

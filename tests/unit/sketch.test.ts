@@ -1,4 +1,4 @@
-/** Lines a coach draws by hand: which route, block, carry or motion Reps reads from them. */
+/** Lines a coach draws by hand: which route, block, carry or motion RepWon reads from them. */
 import { describe, expect, it } from "vitest";
 import { emptyPlay, type Player, type Point } from "@/domain/play";
 import { applyStroke, matchRoute, simplify } from "@/domain/sketch";

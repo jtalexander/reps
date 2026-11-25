@@ -593,7 +593,7 @@ describe("teach loop", () => {
     let lu = await lineupFor(teamF.id, { formation: "VEER", dir: "LEFT", tag: "" }, null, db);
     expect(lu.kind === "lineup" && lu.mirrored && lu.from).toBe("VEER RIGHT vs 4-3");
     expect(lu.kind === "lineup" && lu.players.every((p) => p.route === null && p.path === null)).toBe(true);
-    // only drawn so far: Reps reads that one drawing, then lines up from it
+    // only drawn so far: RepWon reads that one drawing, then lines up from it
     const trips = { formation: "TRIPS", dir: "RIGHT" as const, tag: "STACK" };
     lu = await lineupFor(teamF.id, trips, null, db);
     expect(lu.kind).toBe("converting");
@@ -605,7 +605,7 @@ describe("teach loop", () => {
     // nothing drawn: say so
     expect(await lineupFor(teamF.id, { formation: "BUNCH", dir: "RIGHT", tag: "" }, null, db)).toMatchObject({ kind: "none" });
 
-    // pick the play and Reps draws it: the team's own VEER first (jobs laid on by letter, flipped for LEFT)
+    // pick the play and RepWon draws it: the team's own VEER first (jobs laid on by letter, flipped for LEFT)
     const { drawPlay, fitPlay } = await import("@/teach/play-draw");
     const call = (play: string, more: Partial<import("@/teach/play-draw").PlayCall> = {}) => ({ formation: "VEER", dir: "RIGHT" as const, tag: "", play, playDir: "" as const, motion: "", motionPlayer: "", ...more });
     expect(fitPlay("SPREAD RIGHT ZOOT, SMASH", call("SMASH", { formation: "SPREAD" }))?.mirror).toBe(false);
@@ -616,7 +616,7 @@ describe("teach loop", () => {
     expect(drawn.kind === "done" && drawn.jobs?.find((j) => j.id === "QB")?.path).toEqual([[0, 0], [2, 8]]);
     drawn = await drawPlay(teamF.id, call("VEER", { playDir: "LEFT" }), board, null, db);
     expect(drawn.kind === "done" && drawn.jobs?.find((j) => j.id === "QB")?.path).toEqual([[-0, 0], [-2, 8]]);
-    // not drawn in this playbook, but a known concept: Reps' own version
+    // not drawn in this playbook, but a known concept: RepWon's own version
     drawn = await drawPlay(teamF.id, call("SMASH"), board, null, db);
     expect(drawn.kind === "done" && drawn.notes[0]).toMatch(/standard Smash/);
     // unknown play: say so; a motion with no drawing gets a guessed path

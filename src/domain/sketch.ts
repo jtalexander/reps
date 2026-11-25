@@ -3,7 +3,7 @@
  * is the motion, a line ending in a T is a block, an arrow from a receiver is
  * a route (named from the route tree when it fits one), an arrow from a back
  * is his run path, a dotted one is a fake. The drawing itself is kept as is;
- * the job is Reps' best guess and the coach can change it.
+ * the job is RepWon's best guess and the coach can change it.
  */
 import { isLineman, type Line, type Motion, type PlayData, type Player, type Point } from "./play";
 import { outsideSign, ROUTES } from "./routes";
@@ -124,7 +124,7 @@ function blockType(rel: Point[], p: Player): string {
 
 export interface StrokeResult {
   data: PlayData;
-  /** what Reps made of it, e.g. "Z: 12-yard dig" */
+  /** what RepWon made of it, e.g. "Z: 12-yard dig" */
   said: string;
 }
 

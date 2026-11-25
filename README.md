@@ -1,4 +1,4 @@
-# Reps
+# RepWon Install
 
 Turns a coach's playbook PDF into study and quizzes for players. The AI drafts each play; the coach confirms it; players are quizzed only on confirmed plays.
 

@@ -9,7 +9,7 @@ export const metadata = { title: "Admin" };
 const money = (n: number) => `$${n < 10 ? n.toFixed(2) : Math.round(n).toLocaleString()}`;
 const day = (d: Date | null) => (d ? d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "never");
 
-/** Every team on Reps: who runs it, how big it is, what its AI costs, and the switch and cap for its AI. */
+/** Every team on RepWon: who runs it, how big it is, what its AI costs, and the switch and cap for its AI. */
 export default async function Admin() {
   await requireAdmin();
   const list = await adminTeams();
@@ -38,7 +38,7 @@ export default async function Admin() {
         <section className="card flex flex-col gap-2 p-4">
           <h2 className="font-semibold">Waiting for you to turn on AI</h2>
           <p className="text-sm text-muted">
-            New coaches can make a team and invite players, but Reps won&apos;t read their playbook until you turn AI on. Coaches you&apos;ve approved before skip this for
+            New coaches can make a team and invite players, but RepWon won&apos;t read their playbook until you turn AI on. Coaches you&apos;ve approved before skip this for
             their next teams.
           </p>
           <ul className="flex flex-col">

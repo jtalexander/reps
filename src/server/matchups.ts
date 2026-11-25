@@ -1,5 +1,5 @@
 /**
- * What each play is good against, per team: the tags the coach kept, Reps'
+ * What each play is good against, per team: the tags the coach kept, RepWon's
  * suggestions he hasn't decided on yet, and the game plan (our plays that
  * beat what the opponent shows).
  */
@@ -13,7 +13,7 @@ import { isDefense, type PlayData } from "@/domain/play";
 import { playbookPages } from "@/teach/drawings";
 import { conceptsForTeam, getPlay } from "./plays";
 
-/** A tag key Reps accepts: a shared word, a concept ("c:smash") or the coach's own words ("x:Cover 6"). */
+/** A tag key RepWon accepts: a shared word, a concept ("c:smash") or the coach's own words ("x:Cover 6"). */
 export const LOOK_KEY = /^(?:[a-z0-9_]{1,30}|c:[a-z0-9_]{1,40}|x:[^\n]{1,40})$/;
 
 export interface PlayLooks {
@@ -26,7 +26,7 @@ export interface PlayLooks {
 
 const sideOf = (data: PlayData | null): Side => (data && isDefense(data) ? "defense" : "offense");
 
-/** The words around a play on its playbook page (what Reps read there), for "good vs" sentences. */
+/** The words around a play on its playbook page (what RepWon read there), for "good vs" sentences. */
 async function pageText(teamId: string, page: number | null, database: Db) {
   if (!page) return [];
   const p = (await playbookPages(teamId, database)).find((x) => x.pageNo === page);
@@ -58,7 +58,7 @@ export async function playLooks(teamId: string, playId: string, database: Db = d
 
 /** Keep (or add) a tag, or drop it. */
 export async function setPlayLook(teamId: string, playId: string, key: string, on: boolean, database: Db = db) {
-  if (!LOOK_KEY.test(key)) throw new Error("That isn't a tag Reps knows.");
+  if (!LOOK_KEY.test(key)) throw new Error("That isn't a tag RepWon knows.");
   const row = await getPlay(teamId, playId, database);
   if (!row) throw new Error("Play not found.");
   const next: GoodVs = setLook(row.goodVs, key, on);
@@ -66,7 +66,7 @@ export async function setPlayLook(teamId: string, playId: string, key: string, o
   return next;
 }
 
-/** Keep every suggestion Reps has for a play. */
+/** Keep every suggestion RepWon has for a play. */
 export async function keepSuggestedLooks(teamId: string, playId: string, database: Db = db) {
   const looks = await playLooks(teamId, playId, database);
   if (!looks) throw new Error("Play not found.");

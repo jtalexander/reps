@@ -13,7 +13,7 @@ export function RewriteButton({ teamId, topicId, answersSinceWrite, answered }: 
       {answersSinceWrite ? (
         <p>
           You&apos;ve answered {answered} question{answered === 1 ? "" : "s"} since these drafts were written. Rewrite them so lessons and questions use your answers. Anything you already
-          approved stays as it is, and Reps only adds what it doesn&apos;t already cover.
+          approved stays as it is, and RepWon only adds what it doesn&apos;t already cover.
         </p>
       ) : (
         <p className="text-muted">The drafts below already include every answer you&apos;ve given on this topic.</p>

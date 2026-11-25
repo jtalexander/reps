@@ -29,7 +29,7 @@ export default async function Join({ searchParams }: PageProps<"/join">) {
         <button className="btn btn-accent text-base">Next</button>
       </form>
       <p className="mt-auto pt-6 text-xs text-muted">
-        Reps saves your name, position and answers so your coach can see how you&apos;re doing.{" "}
+        RepWon saves your name, position and answers so your coach can see how you&apos;re doing.{" "}
         <a className="underline" href="/privacy">
           Privacy
         </a>

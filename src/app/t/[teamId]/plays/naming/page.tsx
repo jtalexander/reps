@@ -8,7 +8,7 @@ import { NamingEditor } from "./naming-editor";
 
 export const metadata = { title: "Naming rules" };
 
-/** The team's naming rules: Reps drafts them from the playbook, the coach fixes and confirms. */
+/** The team's naming rules: RepWon drafts them from the playbook, the coach fixes and confirms. */
 export default async function NamingPage({ params }: PageProps<"/t/[teamId]/plays/naming">) {
   const { teamId } = await params;
   await requireCoach(teamId);
@@ -22,7 +22,7 @@ export default async function NamingPage({ params }: PageProps<"/t/[teamId]/play
         </Link>
         <h1 className="text-4xl">Naming rules</h1>
         <p className="text-sm text-muted">
-          How your offense names things: position letters, formation words, tags, motions, plays and the order of a call. Reps uses these to name players and plays when
+          How your offense names things: position letters, formation words, tags, motions, plays and the order of a call. RepWon uses these to name players and plays when
           it turns your drawings into plays.
         </p>
       </div>

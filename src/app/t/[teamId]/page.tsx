@@ -26,7 +26,7 @@ export default async function Dashboard({ params }: PageProps<"/t/[teamId]">) {
 
   const steps = [
     { done: plays.length > 0 || teach.length > 0, label: "Upload your playbook PDF", href: `/t/${teamId}/uploads` },
-    { done: teach.length > 0, label: "Have Reps read it (Teach → Read the whole playbook)", href: `/t/${teamId}/teach` },
+    { done: teach.length > 0, label: "Have RepWon read it (Teach → Read the whole playbook)", href: `/t/${teamId}/teach` },
     { done: teachTotals.live > 0 || stats.approved > 0, label: "Approve lessons and questions, topic by topic", href: `/t/${teamId}/teach` },
     { done: roster.length > 0, label: "Add your players", href: `/t/${teamId}/roster` },
     { done: false, label: `Give players the join code: ${team.joinCode}`, href: `/t/${teamId}/settings` },
@@ -40,7 +40,7 @@ export default async function Dashboard({ params }: PageProps<"/t/[teamId]">) {
           <span className="text-lg font-semibold">
             {teach.length} topics · {teachTotals.gaps} questions for you · {teachTotals.drafts} to approve · {teachTotals.live} live
           </span>
-          <span className="text-sm text-muted">Answer Reps&apos; questions, then approve lessons and questions. →</span>
+          <span className="text-sm text-muted">Answer RepWon&apos;s questions, then approve lessons and questions. →</span>
         </Link>
       )}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">

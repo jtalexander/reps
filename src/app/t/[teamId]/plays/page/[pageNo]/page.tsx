@@ -7,7 +7,7 @@ import { pageRefs } from "@/teach/page-images";
 
 export const metadata = { title: "Playbook page" };
 
-/** One playbook page: the chosen drawing big, the page's other drawings, and what Reps read from it. */
+/** One playbook page: the chosen drawing big, the page's other drawings, and what RepWon read from it. */
 export default async function PlaybookPage({ params, searchParams }: PageProps<"/t/[teamId]/plays/page/[pageNo]">) {
   const { teamId, pageNo: raw } = await params;
   const { d, full } = await searchParams;
@@ -84,7 +84,7 @@ export default async function PlaybookPage({ params, searchParams }: PageProps<"
 
       {(page.summary || page.facts.length > 0) && (
         <section className="card flex flex-col gap-2 p-4">
-          <h2 className="text-2xl">What Reps read from this page</h2>
+          <h2 className="text-2xl">What RepWon read from this page</h2>
           {page.summary && <p className="text-sm">{page.summary}</p>}
           <ul className="flex flex-col gap-1.5 text-sm">
             {page.facts.map((f) => (
@@ -94,7 +94,7 @@ export default async function PlaybookPage({ params, searchParams }: PageProps<"
               </li>
             ))}
           </ul>
-          <p className="text-xs text-muted">This is Reps&apos; reading of your page, used to write the lessons. Fix anything wrong in the topic&apos;s lessons before you approve them.</p>
+          <p className="text-xs text-muted">This is RepWon&apos;s reading of your page, used to write the lessons. Fix anything wrong in the topic&apos;s lessons before you approve them.</p>
         </section>
       )}
     </div>

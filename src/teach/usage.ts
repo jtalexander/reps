@@ -4,7 +4,7 @@
  * never see it; it feeds how teams are charged. Recording never throws.
  *
  * The gate: before every call, `checkAi` makes sure the team's AI is turned on
- * (new teams wait for the Reps admin) and that it's under its monthly cap.
+ * (new teams wait for the RepWon admin) and that it's under its monthly cap.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { and, eq, gte, sql } from "drizzle-orm";
@@ -34,12 +34,12 @@ export function withAi<T>(teamId: string, kind: string, fn: () => Promise<T>): P
   return ctx.run({ teamId, kind }, fn);
 }
 
-/** A new team's AI stays off until the Reps admin turns it on. */
-export const AI_NOT_ON = "Reps turns on playbook reading once your account is checked, usually within a day.";
-/** The Reps admin turned this team's AI off. */
-export const AI_OFF = "Playbook reading is turned off for this team. Contact Reps to turn it back on.";
-/** The team hit its monthly AI cap; Reps stops until next month or the admin raises it. */
-export const AI_LIMIT = "This team reached its monthly limit for Reps' playbook reading. It starts again next month.";
+/** A new team's AI stays off until the RepWon admin turns it on. */
+export const AI_NOT_ON = "RepWon turns on playbook reading once your account is checked, usually within a day.";
+/** The RepWon admin turned this team's AI off. */
+export const AI_OFF = "Playbook reading is turned off for this team. Contact RepWon to turn it back on.";
+/** The team hit its monthly AI cap; RepWon stops until next month or the admin raises it. */
+export const AI_LIMIT = "This team reached its monthly limit for RepWon's playbook reading. It starts again next month.";
 /** Monthly cap in dollars when the admin hasn't set one for the team. */
 export const DEFAULT_CAP_USD = 100;
 
@@ -130,7 +130,7 @@ export async function monthSpendByTeam(teamIds: string[], database: Db = db) {
 
 export const STEP_LABEL: Record<string, string> = {
   decode: "Reading pages",
-  gaps: "Finding Reps' questions",
+  gaps: "Finding RepWon's questions",
   triage: "Sorting questions",
   write: "Writing lessons and questions",
   core: "Choosing core questions",

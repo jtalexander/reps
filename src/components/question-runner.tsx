@@ -81,7 +81,7 @@ export function QuestionRunner({
         setResult(r);
         setScore((s) => ({ right: s.right + (r.correct ? 1 : 0), total: s.total + 1 }));
       } catch {
-        setError("That didn't go through. If Reps was just updated, reload the page.");
+        setError("That didn't go through. If RepWon was just updated, reload the page.");
       }
     });
   }
@@ -233,7 +233,7 @@ export function QuestionRunner({
                       setFlagSent((s) => ({ ...s, [id]: true }));
                       setFlag(null);
                     } catch {
-                      setError("That didn't go through. If Reps was just updated, reload the page.");
+                      setError("That didn't go through. If RepWon was just updated, reload the page.");
                     }
                   }}
                 >

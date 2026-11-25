@@ -183,7 +183,7 @@ export async function setPlayLookAction(teamId: string, playId: string, key: str
   }
 }
 
-/** Add a tag in the coach's own words ("Cover 6", "Trips"); Reps uses its shared tag when one fits. */
+/** Add a tag in the coach's own words ("Cover 6", "Trips"); RepWon uses its shared tag when one fits. */
 export async function addPlayLookAction(teamId: string, playId: string, text: string): Promise<Result<{ looks: PlayLooks | null }>> {
   try {
     await requireCoach(teamId);
@@ -200,7 +200,7 @@ export async function addPlayLookAction(teamId: string, playId: string, text: st
   }
 }
 
-/** Keep every tag Reps suggests for a play. */
+/** Keep every tag RepWon suggests for a play. */
 export async function keepSuggestedLooksAction(teamId: string, playId: string): Promise<Result<{ looks: PlayLooks | null }>> {
   try {
     await requireCoach(teamId);
@@ -413,7 +413,7 @@ export async function removeCoachAction(teamId: string, userId: string): Promise
 }
 
 // ---------- player data ----------
-/** Delete one player and everything Reps saved about them. */
+/** Delete one player and everything RepWon saved about them. */
 export async function deletePlayerAction(teamId: string, playerId: string): Promise<void> {
   await requireCoach(teamId);
   if (/^[0-9a-f-]{36}$/i.test(playerId)) await deletePlayer(teamId, playerId);
@@ -526,7 +526,7 @@ export async function saveSchemeAction(teamId: string, scheme: TeamScheme): Prom
   }
 }
 
-/** Back to Reps' rules for one of its schemes, or remove one the coach added. */
+/** Back to RepWon's rules for one of its schemes, or remove one the coach added. */
 export async function resetSchemeAction(teamId: string, key: string): Promise<Result<{ plays: number }>> {
   try {
     await requireCoach(teamId);

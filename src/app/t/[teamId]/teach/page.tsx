@@ -95,11 +95,11 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
       <div>
         <h1 className="text-4xl">Teach</h1>
         <p className="mt-1 text-sm text-muted">
-          Reps reads your playbook, asks you about what isn&apos;t written down, then writes lessons and questions for each position. Nothing reaches players until you approve it.
+          RepWon reads your playbook, asks you about what isn&apos;t written down, then writes lessons and questions for each position. Nothing reaches players until you approve it.
         </p>
       </div>
 
-      {!hasApiKey() && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">The server has no Anthropic API key, so Reps can&apos;t read pages yet.</p>}
+      {!hasApiKey() && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">The server has no Anthropic API key, so RepWon can&apos;t read pages yet.</p>}
 
       {blocked && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm font-semibold text-warn">{blocked}</p>}
 
@@ -136,7 +136,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
           <div className="flex-1">
             <div className="font-semibold">Go topic by topic</div>
             <p className="text-sm text-muted">
-              Each topic is one page: answer Reps&apos; few questions, skim the lessons and its core quiz questions, approve them all with one tap.
+              Each topic is one page: answer RepWon&apos;s few questions, skim the lessons and its core quiz questions, approve them all with one tap.
               {firstTodo.inInstall ? " Your install comes first." : ""}
             </p>
           </div>
@@ -191,7 +191,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
         <Step n={1} title="Read pages" note={`${decoded} pages read`} />
         <Link href={`/t/${teamId}/teach/interview`} className="card p-3 hover:border-ink">
           <div className="text-xs text-muted">Step 2</div>
-          <div className="font-semibold">Answer Reps&apos; questions</div>
+          <div className="font-semibold">Answer RepWon&apos;s questions</div>
           <div className={`text-sm ${totals.gaps ? "font-semibold text-warn" : "text-muted"}`}>
             {totals.gaps} waiting{optional ? <span className="font-normal text-muted"> · {optional} optional</span> : null}
           </div>
@@ -224,7 +224,7 @@ export default async function TeachHub({ params, searchParams }: PageProps<"/t/[
         <section className="flex flex-col gap-2">
           <h2 className="font-semibold">Topics</h2>
           <p className="text-sm text-muted">
-            One topic per thing players learn, named from your playbook.{focused ? " Only this week's install is shown; Reps asks about and writes for these first." : ""}
+            One topic per thing players learn, named from your playbook.{focused ? " Only this week's install is shown; RepWon asks about and writes for these first." : ""}
           </p>
           <ul className="flex flex-col gap-2">
             {working.map((t) => (

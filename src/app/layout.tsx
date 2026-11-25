@@ -7,7 +7,7 @@ const shoulders = Big_Shoulders({ variable: "--font-shoulders", subsets: ["latin
 const oswald = Oswald({ variable: "--font-oswald", subsets: ["latin"], weight: ["500", "600", "700"] });
 
 export const metadata: Metadata = {
-  title: { default: "Reps", template: "%s · Reps" },
+  title: { default: "RepWon Install", template: "%s · RepWon Install" },
   description: "Turn your playbook into study and quizzes for your players.",
 };
 

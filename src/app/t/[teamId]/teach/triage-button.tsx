@@ -4,7 +4,7 @@ import { useState } from "react";
 import { triageAction } from "./actions";
 import { runAndWait } from "./wait-job";
 
-/** Re-rank Reps' open questions and link repeats across topics (one AI call). */
+/** Re-rank RepWon's open questions and link repeats across topics (one AI call). */
 export function TriageButton({ teamId }: { teamId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -25,7 +25,7 @@ export function TriageButton({ teamId }: { teamId: string }) {
           router.refresh();
         }}
       >
-        {busy ? "Sorting Reps' questions…" : "Re-sort Reps' questions"}
+        {busy ? "Sorting RepWon's questions…" : "Re-sort RepWon's questions"}
       </button>
       {msg && <span className="text-muted">{msg}</span>}
     </span>

@@ -1,6 +1,6 @@
 /**
  * The playbook's drawings, as Teach found them: every labeled diagram region
- * on every page Reps read (formations, plays, blocking against fronts), filed
+ * on every page RepWon read (formations, plays, blocking against fronts), filed
  * under the topic that page belongs to. Nothing here costs an AI call; it's
  * what decodePage already stored.
  */

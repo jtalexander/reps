@@ -1,5 +1,5 @@
 /**
- * A team's blocking schemes: Reps' usual rules for each run, changed or added
+ * A team's blocking schemes: RepWon's usual rules for each run, changed or added
  * to by the coach, and the defensive fronts the team sees. Changing a
  * scheme's rules redraws the blocking on every play that uses it.
  */
@@ -51,7 +51,7 @@ export async function saveScheme(teamId: string, input: unknown, database: Db = 
   return { scheme: s, plays: redrawn, matched: await assignSchemes(teamId, database) };
 }
 
-/** Put one of Reps' schemes back to Reps' rules, or remove a scheme the coach added (plays keep their last rules). */
+/** Put one of RepWon's schemes back to RepWon's rules, or remove a scheme the coach added (plays keep their last rules). */
 export async function resetScheme(teamId: string, key: string, database: Db = db): Promise<{ plays: number }> {
   const { raw } = await getBlocking(teamId, database);
   await database
@@ -83,7 +83,7 @@ async function redrawPlays(teamId: string, s: TeamScheme, database: Db): Promise
     const data = parsed.data;
     const b = withScheme(data.blocking!, s);
     const front = frontOk(b.front) ? b.front : BLOCK_FRONTS[0];
-    // a playbook drawing keeps its own blocks; only Reps-built blocking is redrawn
+    // a playbook drawing keeps its own blocks; only RepWon-built blocking is redrawn
     const next = { ...data, blocking: b, players: b.drawn ? data.players : applyBlocking(data, b, front) };
     await database.update(plays).set({ data: next }).where(and(eq(plays.teamId, teamId), eq(plays.id, r.id)));
     n++;

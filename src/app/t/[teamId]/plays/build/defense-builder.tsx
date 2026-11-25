@@ -34,7 +34,7 @@ function offense(kind: string, n: Naming | null): Player[] {
 
 /**
  * Draw a defensive call: pick the front and coverage (in the team's words or
- * the usual ones) and Reps lines the defenders up and gives them their jobs;
+ * the usual ones) and RepWon lines the defenders up and gives them their jobs;
  * drag anyone, draw lines, tap a defender to change his job.
  */
 export function DefenseBuilder(props: { teamId: string; naming: Naming | null; start: PlayData | null; playId: string | null; formations?: Array<{ id: string; name: string; players: Player[] }>; planId?: string | null }) {
@@ -89,12 +89,12 @@ export function DefenseBuilder(props: { teamId: string; naming: Naming | null; s
       const f = frontOf(next.front);
       if (placed) players = placed;
       else if (f) players = frontLineup(f);
-      else if (next.front.trim()) notes.push(`Reps doesn't know where ${next.front} lines up: drag the defenders into place.`);
+      else if (next.front.trim()) notes.push(`RepWon doesn't know where ${next.front} lines up: drag the defenders into place.`);
     }
     if (next.coverage !== parts.coverage || next.front !== parts.front) {
       const c = coverageOf(next.coverage);
       if (c || next.front !== parts.front) players = applyCoverage(players, c, vs);
-      if (next.coverage.trim() && !c) notes.push(`Reps doesn't know ${next.coverage}: tap each defender to give him his job.`);
+      if (next.coverage.trim() && !c) notes.push(`RepWon doesn't know ${next.coverage}: tap each defender to give him his job.`);
     }
     commit({ parts: next, data: { ...data, players } });
     setNote(notes.join(" ") || null);

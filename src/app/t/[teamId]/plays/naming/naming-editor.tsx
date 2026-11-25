@@ -42,7 +42,7 @@ export function NamingEditor({ teamId, initial, approvedAt }: { teamId: string; 
   if (!n) {
     return (
       <div className="card flex flex-col gap-3 p-4">
-        <p className="text-sm">Reps hasn&apos;t drafted your naming rules yet. It reads what it already found on every page (no new page reading) and writes them down for you to check.</p>
+        <p className="text-sm">RepWon hasn&apos;t drafted your naming rules yet. It reads what it already found on every page (no new page reading) and writes them down for you to check.</p>
         <button className="btn btn-primary self-start" disabled={!!busy} onClick={draft}>
           {busy ? "Drafting…" : "Draft my naming rules"}
         </button>
@@ -62,7 +62,7 @@ export function NamingEditor({ teamId, initial, approvedAt }: { teamId: string; 
     setBusy(null);
     if (!r.ok) return setMsg(r.error);
     setDirty(false);
-    setMsg(approve ? "Confirmed. Reps will use these when it converts your drawings." : "Saved.");
+    setMsg(approve ? "Confirmed. RepWon will use these when it converts your drawings." : "Saved.");
     router.refresh();
   };
   const setWord = (list: NamingList, i: number, patch: Partial<Word>) => edit({ ...n, [list]: (n[list] ?? []).map((w, j) => (j === i ? { ...w, ...patch } : w)) });

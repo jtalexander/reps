@@ -52,7 +52,7 @@ describe("blocking schemes for a team", () => {
     expect((await b.getBlocking(team.id, db)).schemes.find((s) => s.key === "power")!.words).toEqual(["26", "27"]);
     await expect(b.saveScheme(team.id, { ...power, rules: { PST: "tackle the QB" } }, db)).rejects.toThrow();
 
-    // back to Reps' rules
+    // back to RepWon's rules
     await b.resetScheme(team.id, "power", db);
     const [reset] = await db.select().from(plays).where(eq(plays.id, row!.id));
     expect(reset!.data!.blocking!.rules.PSG).toBe("down");

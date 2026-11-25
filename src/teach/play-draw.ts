@@ -1,8 +1,8 @@
 /**
- * The play builder's "pick the play and Reps draws it": every player's job
+ * The play builder's "pick the play and RepWon draws it": every player's job
  * (route, block, carry) and the motion, laid onto the coach's lineup by
  * position letter. From the team's own playbook first (reading that one
- * drawing if needed), then Reps' built-in concepts. Always a starting point.
+ * drawing if needed), then RepWon's built-in concepts. Always a starting point.
  */
 import { and, eq } from "drizzle-orm";
 import { db, type Db } from "@/db";
@@ -141,7 +141,7 @@ export async function drawPlay(teamId: string, call: PlayCall, lineup: Player[],
       notes.push(`Drawn from your playbook: ${label(best.p)}${best.p.page ? ` (p${best.p.page})` : ""}${mirror ? ", flipped" : ""}${moved.length ? ` (${moved.join(", ")})` : ""}.`);
       if (missing.length) notes.push(`${missing.join(", ")} ${missing.length === 1 ? "has" : "have"} a job in that play but ${missing.length === 1 ? "isn't" : "aren't"} in this formation. In your playbook it's run from ${usedIn.join(", ") || "another formation"}.`);
     } else {
-      // Reps' own version of a known concept
+      // RepWon's own version of a known concept
       const concepts = await conceptsForTeam(teamId, database);
       const concept = conceptByName(call.play, concepts) ?? words(call.play).map((w) => conceptByName(w, concepts)).find(Boolean);
       const side = (call.playDir || call.dir) === "LEFT" ? "left" : "right";
@@ -149,8 +149,8 @@ export async function drawPlay(teamId: string, call: PlayCall, lineup: Player[],
       if (concept && drawn) {
         jobs = drawn;
         playType = concept.kind === "run" ? "run" : concept.kind === "screen" ? "screen" : "pass";
-        notes.push(`Your playbook doesn't draw ${call.play}, so Reps drew a standard ${concept.name}. Change anything that isn't how you run it.`);
-      } else notes.push(`Reps doesn't have ${call.play} drawn. Tap each player to give him his job.`);
+        notes.push(`Your playbook doesn't draw ${call.play}, so RepWon drew a standard ${concept.name}. Change anything that isn't how you run it.`);
+      } else notes.push(`RepWon doesn't have ${call.play} drawn. Tap each player to give him his job.`);
     }
   }
 
@@ -176,7 +176,7 @@ export async function drawPlay(teamId: string, call: PlayCall, lineup: Player[],
       motion = drawn.motion;
       if (drawn.kind === "shift") notes.push(`${call.motion} is a shift, not a motion: line the players up where they end up.`);
       else if (def && drawn.kind !== "across") notes.push(`${call.motion} drawn from your naming rules: ${def.means}`);
-      else notes.push(`Reps guessed the ${call.motion} motion path. Drag or redraw it if it's not right.`);
+      else notes.push(`RepWon guessed the ${call.motion} motion path. Drag or redraw it if it's not right.`);
     }
   }
 

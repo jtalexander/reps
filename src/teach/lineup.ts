@@ -1,6 +1,6 @@
 /**
  * The play builder's lineup from a formation call: "TRIPS RIGHT STACK" puts
- * the players where the team's own playbook draws them. Reps looks for a play
+ * the players where the team's own playbook draws them. RepWon looks for a play
  * already made from that formation; failing that, it turns the matching
  * drawing into a play (one drawing, a few seconds) and uses that. A call
  * drawn the other way is mirrored.
@@ -116,11 +116,11 @@ export async function lineupFor(teamId: string, call: Call, origin: string | nul
   if (read.state === "blocked") return { kind: "none", why: read.reason };
   // read before and nothing usable came of it: don't spend AI on it again
   if (bestPlay) return { kind: "lineup", players: lineupOf(bestPlay.p.data!.players, bestPlay.f!.mirror), from: bestPlay.p.name, page: bestPlay.p.page ?? null, mirrored: bestPlay.f!.mirror };
-  return { kind: "none", why: `Reps couldn't read your drawing of ${bestDrawing.d.label} (p${bestDrawing.d.pageNo}). Drag the players into place.` };
+  return { kind: "none", why: `RepWon couldn't read your drawing of ${bestDrawing.d.label} (p${bestDrawing.d.pageNo}). Drag the players into place.` };
 }
 
 /**
- * Make sure Reps has read one playbook drawing into a play: starts it the
+ * Make sure RepWon has read one playbook drawing into a play: starts it the
  * first time (one AI call), says "reading" while it runs, "done" once any
  * read finished (worked or not; a drawing is never read twice).
  */

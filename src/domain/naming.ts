@@ -1,8 +1,8 @@
 /**
  * A team's naming rules: what each position letter means, the words that
- * build a formation and a play call, and the order they're said in. Reps
+ * build a formation and a play call, and the order they're said in. RepWon
  * drafts them from the playbook; the coach corrects and confirms them.
- * Used to name players and plays when Reps turns drawings into plays.
+ * Used to name players and plays when RepWon turns drawings into plays.
  */
 import { z } from "zod";
 
