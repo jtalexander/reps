@@ -6,6 +6,7 @@
  * Pure: plays + player position + terms in, questions out. Randomness comes
  * from a seeded generator so a quiz can be rebuilt for grading.
  */
+import { frontOk, resolveBlocking, ROLE_LABEL, ruleWhy } from "./blocking";
 import { COVERAGE_LABEL, COVERAGE_TELL, REACTIONS, READ_KEY_BY_KEY } from "./defense";
 import { defJobText, ZONE_LABEL } from "./defense-play";
 import { lookLabel } from "./matchups";
@@ -40,6 +41,7 @@ export const QUIZ_TYPES = [
   "breakdown",
   "call_vs",
   "def_call_id",
+  "block_vs",
 ] as const;
 export type QuizType = (typeof QUIZ_TYPES)[number];
 
@@ -55,6 +57,7 @@ export const QUIZ_TYPE_LABEL: Record<QuizType, string> = {
   breakdown: "Play-call breakdown",
   call_vs: "What to call",
   def_call_id: "Name the call",
+  block_vs: "Who do I block",
 };
 
 export interface QuizPlay {
@@ -80,6 +83,8 @@ export interface DiagramSpec {
   coverage?: Coverage;
   /** option decision: the read key and how it reacts */
   readKey?: { key: string; reaction: string };
+  /** a run's blocking: draw this front and every block against it */
+  front?: string;
   /** route recognition: draw a single route on an empty field */
   routeOnly?: { route: string; side: "left" | "right" };
 }
@@ -567,6 +572,45 @@ const defCallId: Gen = (play, all, ctx, rand) => {
   ];
 };
 
+/**
+ * Who do I block: a run against a front the coach checked; the blocker picks
+ * his man. The answer comes from the scheme's rule (or the coach's fix).
+ */
+const blockVs: Gen = (play, _all, ctx, rand) => {
+  const b = play.data.blocking;
+  if (!b || isDefense(play.data)) return [];
+  const name = play.data.name && play.data.name !== "unknown" ? play.data.name : b.name;
+  const out: Question[] = [];
+  for (const front of b.checked.filter(frontOk)) {
+    const r = resolveBlocking(play.data, b, front);
+    const label = (id: string) => {
+      const d = r.defenders.find((x) => x.id === id);
+      return d ? `${d.level === "line" ? "the " : ""}${d.label} (${d.id})` : id;
+    };
+    for (const blk of r.blocks) {
+      const me = play.data.players.find((p) => p.id === blk.id);
+      if (!me || !blk.target || !playerMatches(me, ctx.positions)) continue;
+      const pool = r.defenders.filter((d) => d.level !== "back" && d.id !== blk.target).map((d) => label(d.id));
+      const { choices, answer } = choicesFrom(label(blk.target), pool, rand);
+      if (choices.length < 2) continue;
+      out.push({
+        id: qid("block_vs", play.id, `${front}:${me.id}`),
+        type: "block_vs",
+        playId: play.id,
+        prompt: `${name} against a ${front}: who do you block?`,
+        kind: "choice",
+        choices,
+        answer,
+        explanation: blk.fixed
+          ? `Your coach set it: against the ${front}, you take ${label(blk.target)}.`
+          : `${ROLE_LABEL[blk.role]} on ${b.name}: ${ruleWhy(blk.rule)}. Against the ${front}, that's ${label(blk.target)}.`,
+        diagram: { playId: play.id, flip: false, hide: "player", highlight: me.id, front },
+      });
+    }
+  }
+  return out;
+};
+
 const GENERATORS: Record<QuizType, Gen> = {
   formation_id: formationId,
   assignment,
@@ -579,6 +623,7 @@ const GENERATORS: Record<QuizType, Gen> = {
   breakdown,
   call_vs: callVs,
   def_call_id: defCallId,
+  block_vs: blockVs,
 };
 
 /** Quiz types that make sense for a set of positions. */
@@ -586,7 +631,7 @@ export function typesForPositions(positions: string[]): QuizType[] {
   const qb = positions.some((p) => p.toUpperCase() === "QB");
   const back = positions.some((p) => /^(RB|TB|HB|FB|F|B|R)$/i.test(p));
   // what to call and naming the call ask only about plays the player is in (offense or defense)
-  const types: QuizType[] = ["formation_id", "assignment", "draw_job", "motion", "route_recognition", "breakdown", "call_vs", "def_call_id"];
+  const types: QuizType[] = ["formation_id", "assignment", "draw_job", "motion", "route_recognition", "breakdown", "call_vs", "def_call_id", "block_vs"];
   if (qb) types.push("presnap_read", "progression", "option_decision");
   else if (back) types.push("option_decision");
   return types;

@@ -148,6 +148,13 @@
       "when": 1795564674193,
       "tag": "0020_matchups_defense",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795578375602,
+      "tag": "0021_blocking_schemes",
+      "breakpoints": true
     }
   ]
 }

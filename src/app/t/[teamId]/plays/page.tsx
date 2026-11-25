@@ -63,6 +63,9 @@ export default async function Playbook({ params, searchParams }: PageProps<"/t/[
             <Link href={`/t/${teamId}/plays/build?side=defense`} className="underline">
               Draw a defensive call
             </Link>
+            <Link href={`/t/${teamId}/plays/blocking`} className="underline">
+              Blocking schemes
+            </Link>
             <Link href={`/t/${teamId}/plays/converted`} className="underline">
               Real plays
             </Link>

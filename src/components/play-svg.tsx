@@ -6,6 +6,7 @@
  */
 import { useId, useRef, useState } from "react";
 import { buildLook, defenderForKey, playSideSign, type DefensiveLook, type Front } from "@/domain/defense";
+import { applyBlocking, frontOk, resolveBlocking, type Defender } from "@/domain/blocking";
 import { defLine } from "@/domain/defense-play";
 import { flipPlay, isDefense, isLineman, type Coverage, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTE_BY_KEY, outsideSign, routePath } from "@/domain/routes";
@@ -50,6 +51,12 @@ export interface PlaySvgProps {
   selectedLine?: LineRef | null;
   /** play builder: a dotted line drawn off a route, in field yards, starting on the route */
   onDrawOption?: (id: string, pts: Point[]) => void;
+  /** a run with a blocking scheme: draw this front's defenders and every block worked out against them */
+  blockFront?: string | null;
+  /** tapping one of those defenders (play builder: who the selected blocker takes) */
+  onBlockDefenderTap?: (id: string) => void;
+  /** a defender to ring (the selected blocker's man) */
+  markDefender?: string | null;
 }
 
 /** One line on the field: a player's job (route, block, run path), the motion, or an option branch off a route. */
@@ -182,7 +189,11 @@ export function PlaySvg(props: PlaySvgProps) {
     const snap = (v: number) => Math.round(v * 2) / 2;
     return [snap(pt.x), snap(TOP - pt.y)];
   };
-  const data = props.flip ? flipPlay(props.data) : props.data;
+  const flipped = props.flip ? flipPlay(props.data) : props.data;
+  // blocking against a front: the front's defenders, and each blocker's block on his man
+  const blockFront = props.blockFront && frontOk(props.blockFront) && flipped.blocking && !isDefense(flipped) ? props.blockFront : null;
+  const blockDefs: Defender[] = blockFront ? resolveBlocking(flipped, flipped.blocking!, blockFront).defenders : [];
+  const data = blockFront ? { ...flipped, players: applyBlocking(flipped, flipped.blocking!, blockFront) } : flipped;
   const hide = props.hide ?? "none";
   const look: DefensiveLook | null = props.coverage || props.readKey ? buildLook(data, props.coverage ?? "cover_3", props.front ?? "4-3") : null;
   const keyDef = props.readKey && look ? defenderForKey(look, props.readKey.key) : undefined;
@@ -303,7 +314,7 @@ export function PlaySvg(props: PlaySvgProps) {
   let vx = -HALF;
   let vw = HALF * 2;
   if (props.fit && data.players.length) {
-    const e = extent(data, strength, look?.defenders ?? []);
+    const e = extent(data, strength, [...(look?.defenders ?? []), ...blockDefs.filter((d) => d.level !== "back")]);
     const pad = 2.5;
     let x0 = e.x0 - pad;
     let x1 = e.x1 + pad;
@@ -465,6 +476,29 @@ export function PlaySvg(props: PlaySvgProps) {
           )}
         </g>
       )}
+
+      {/* the front a run is blocked against */}
+      {blockDefs.map((d) => {
+        const tap = props.onBlockDefenderTap ? () => props.onBlockDefenderTap!(d.id) : undefined;
+        const mark = props.markDefender === d.id;
+        return (
+          <g key={`bd-${d.id}`} onClick={tap} style={tap ? { cursor: "pointer" } : undefined}>
+            {tap && <circle cx={d.x} cy={sy(d.y)} r={1.5} fill="transparent" />}
+            {mark && <circle cx={d.x} cy={sy(d.y)} r={1.45} fill="var(--key)" opacity={0.4} />}
+            <path
+              d={`M${d.x - 0.85} ${sy(d.y) - 0.65} L${d.x + 0.85} ${sy(d.y) - 0.65} L${d.x} ${sy(d.y) + 0.8} Z`}
+              fill="var(--card)"
+              stroke="var(--def)"
+              strokeWidth={0.16}
+              strokeLinejoin="round"
+              opacity={d.level === "back" ? 0.55 : 1}
+            />
+            <text x={d.x} y={sy(d.y) + 0.02} fontSize={d.id.length > 1 ? 0.55 : 0.7} fontWeight={700} textAnchor="middle" fill="var(--def)">
+              {d.id}
+            </text>
+          </g>
+        );
+      })}
 
       {/* a defensive call: the offense it's drawn against, faint */}
       {defense &&

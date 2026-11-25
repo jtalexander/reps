@@ -20,6 +20,8 @@ import { drawPlay, type DrawResult } from "@/teach/play-draw";
 import { readAhead, type ReadAhead } from "@/teach/read-ahead";
 import { customLook } from "@/domain/matchups";
 import { keepSuggestedLooks, playLooks, setPlayLook, type PlayLooks } from "@/server/matchups";
+import { resetScheme, saveFronts, saveScheme } from "@/server/blocking";
+import type { TeamScheme } from "@/domain/blocking";
 import { checkBatches, ensureBatchRead } from "@/teach/read-batch";
 import { nameDrawnPlay, type NameGuess } from "@/teach/name-drawing";
 import { PlayDataSchema, PlayerSchema } from "@/domain/play";
@@ -502,6 +504,40 @@ export async function saveBuiltPlayAction(teamId: string, playId: string | null,
     const id = await createBuiltPlay(teamId, data);
     revalidatePath(`/t/${teamId}/plays`);
     return { ok: true, playId: id };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Save a blocking scheme's rules; every play blocked with it is redrawn. */
+export async function saveSchemeAction(teamId: string, scheme: TeamScheme): Promise<Result<{ plays: number }>> {
+  try {
+    await requireCoach(teamId);
+    const r = await saveScheme(teamId, scheme);
+    revalidatePath(`/t/${teamId}/plays`);
+    return { ok: true, plays: r.plays };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** Back to Reps' rules for one of its schemes, or remove one the coach added. */
+export async function resetSchemeAction(teamId: string, key: string): Promise<Result<{ plays: number }>> {
+  try {
+    await requireCoach(teamId);
+    const r = await resetScheme(teamId, String(key));
+    revalidatePath(`/t/${teamId}/plays`);
+    return { ok: true, plays: r.plays };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/** The defensive fronts this team sees (blocking is drawn and quizzed against these). */
+export async function saveFrontsAction(teamId: string, fronts: string[]): Promise<Result<{ fronts: string[] }>> {
+  try {
+    await requireCoach(teamId);
+    return { ok: true, fronts: await saveFronts(teamId, Array.isArray(fronts) ? fronts.map(String) : []) };
   } catch (err) {
     return fail(err);
   }

@@ -240,6 +240,20 @@ export const PlayDataSchema = z.object({
   defense: z.object({ front: str.nullable(), coverage: str.nullable(), stunt: str.nullable(), pressure: str.nullable() }).nullable().optional(),
   /** a defensive call: the offense it's drawn against (shown faintly) */
   vs: z.array(PlayerSchema).optional(),
+  /** a run's blocking scheme: each blocker's rule, worked out against any front (blocking.ts); fixes are the coach's, per front */
+  blocking: z
+    .object({
+      scheme: str,
+      name: str,
+      rules: z.record(str, str),
+      hole: z.enum(["A", "B", "C", "D", "edge"]),
+      side: z.enum(["left", "right"]),
+      front: str,
+      fixes: z.record(str, z.record(str, str.nullable())).default({}),
+      checked: z.array(str).default([]),
+    })
+    .nullable()
+    .optional(),
 });
 export type PlayData = z.infer<typeof PlayDataSchema>;
 export const isDefense = (p: Pick<PlayData, "side">) => p.side === "defense";
@@ -327,6 +341,7 @@ export function flipPlay(play: PlayData): PlayData {
       path: mirror(p.path),
     })),
     ...(play.vs ? { vs: play.vs.map((p) => ({ ...p, x: -p.x, side: side(p.side) })) } : {}),
+    ...(play.blocking ? { blocking: { ...play.blocking, side: play.blocking.side === "left" ? ("right" as const) : ("left" as const) } } : {}),
   };
 }
 

@@ -125,6 +125,7 @@ export function QuizRunner({ sessionId, mode, questions }: { sessionId: string; 
             coverage={q.diagram.coverage ?? null}
             readKey={q.diagram.readKey ?? null}
             routeOnly={q.diagram.routeOnly ?? null}
+            blockFront={q.diagram.front ?? null}
             animate={q.kind !== "draw" || !!result}
             compact
             pen={q.kind === "draw" && !result ? pen : null}

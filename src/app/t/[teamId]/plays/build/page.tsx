@@ -2,6 +2,7 @@ import Link from "next/link";
 import { isDefense, type PlayData } from "@/domain/play";
 import { getPlay, isConverted } from "@/server/plays";
 import { requireCoach } from "@/server/teams";
+import { getBlocking } from "@/server/blocking";
 import { getNaming } from "@/teach/naming";
 import { DefenseBuilder } from "./defense-builder";
 import { PlayBuilder } from "./play-builder";
@@ -19,6 +20,7 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
   const sp = await searchParams;
   await requireCoach(teamId);
   const { naming } = await getNaming(teamId);
+  const blocking = await getBlocking(teamId);
   const id = (v: unknown) => (typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v) ? v : null);
 
   let start: PlayData | null = null;
@@ -74,7 +76,7 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
           Drag players into place, then draw each line by hand or tap a player to pick his job. Reps names the play from your naming rules. Save and approve it like any play.
         </p>
       </div>
-      <PlayBuilder teamId={teamId} naming={naming} start={start} playId={editing} />
+      <PlayBuilder teamId={teamId} naming={naming} start={start} playId={editing} schemes={blocking.schemes} fronts={blocking.fronts} />
     </div>
   );
 }

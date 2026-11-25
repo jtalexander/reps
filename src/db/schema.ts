@@ -5,6 +5,7 @@
  * src/db/repo goes through a team-scoped function (see `teamRepo`). Team
  * separation is tested in tests/integration/tenancy.test.ts.
  */
+import type { TeamBlocking } from "@/domain/blocking";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -133,6 +134,8 @@ export const teams = pgTable("teams", {
   libraryStyles: jsonb().$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
   /** the team's route tree (numbers to routes), set on Settings; null = not set yet */
   routeTree: jsonb().$type<RouteTree>(),
+  /** blocking schemes the coach changed or added, and the fronts the team sees (domain/blocking.ts) */
+  blocking: jsonb().$type<TeamBlocking>().notNull().default(sql`'{}'::jsonb`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

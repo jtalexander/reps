@@ -12,6 +12,8 @@ import { isDefense } from "@/domain/play";
 import { playLooks } from "@/server/matchups";
 import { DefenseReview } from "./defense-review";
 import { GoodVs } from "./good-vs";
+import { BlockingView } from "./blocking-view";
+import { getBlocking } from "@/server/blocking";
 import { PlayReview } from "./play-review";
 
 export const metadata = { title: "Review play" };
@@ -83,6 +85,7 @@ export default async function PlayPage({ params }: PageProps<"/t/[teamId]/plays/
       converted={isConverted(play)}
       built={isBuilt(play)}
     />
+    {play.data.blocking && <BlockingView teamId={teamId} playId={playId} data={play.data} fronts={(await getBlocking(teamId)).fronts} />}
     {goodVs}
     </div>
   );

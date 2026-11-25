@@ -3,8 +3,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PlaySvg, type LineRef } from "@/components/play-svg";
 import type { Naming } from "@/domain/naming";
+import { applyBlocking, frontOk, newBlocking, resolveBlocking, ROLE_LABEL, RULE_LABEL, RULES, schemeForWords, withScheme, type TeamScheme } from "@/domain/blocking";
 import { motionKind } from "@/domain/motion-draw";
-import { emptyPlay, flipPlay, isLineman, PLAY_TYPES, type Line, type PlayData, type Player, type Point } from "@/domain/play";
+import { emptyPlay, flipPlay, isLineman, isPassFamily, PLAY_TYPES, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTES } from "@/domain/routes";
 import { applyStroke, matchRoute, simplify } from "@/domain/sketch";
 import { safeCall } from "@/lib/safe-call";
@@ -66,6 +67,9 @@ export function PlayBuilder(props: {
   naming: Naming | null;
   start: PlayData | null;
   playId: string | null;
+  /** the team's blocking schemes and the fronts it sees */
+  schemes: TeamScheme[];
+  fronts: string[];
 }) {
   const router = useRouter();
   const [data, setData] = useState<PlayData>(() => props.start ?? { ...emptyPlay(), players: blankLineup(props.naming) });
@@ -358,6 +362,52 @@ export function PlayBuilder(props: {
     set((d) => ({ ...d, players: d.players.map((p) => (p.id === id ? { ...p, ...patch, side: (patch.x ?? p.x) < -1 ? "left" : (patch.x ?? p.x) > 1 ? "right" : "middle" } : p)) }));
   const job: Job = !me ? "none" : me.route ? "route" : me.block ? "block" : me.assignment_type === "carry" ? "carry" : me.assignment_type === "fake" ? "fake" : me.assignment_type === "pass_pro" ? "pass_pro" : "none";
 
+  // Blocking: a run's scheme, worked out against each front the team sees; the coach fixes any block per front
+  const [front, setFront] = useState<string>(() => (props.start?.blocking?.front && props.fronts.includes(props.start.blocking.front) ? props.start.blocking.front : props.fronts[0] ?? "4-3"));
+  const schemeMine = useRef(Boolean(props.start?.blocking));
+  const [blockNote, setBlockNote] = useState<string | null>(null);
+  // the play goes the way the play direction (else the formation direction) says
+  const sideOf = (x: Parts) => ((x.playDir || x.dir) === "LEFT" ? ("left" as const) : ("right" as const));
+  const side = sideOf(parts);
+  const pickScheme = (key: string | null, mine: boolean) => {
+    const sc = key ? props.schemes.find((x) => x.key === key) : undefined;
+    if (mine) schemeMine.current = true;
+    set((d) => ({ ...d, play_type: sc && (d.play_type === "unknown" || isPassFamily(d.play_type)) ? "run" : d.play_type, blocking: sc ? (d.blocking ? withScheme(d.blocking, sc) : newBlocking(sc, side, front)) : null }));
+  };
+  // picking the play word picks the scheme ("24 POWER" -> Power) until the coach picks one himself
+  const playPicked = (next: Parts) => {
+    setParts(next);
+    if (schemeMine.current) return;
+    const key = next.play.trim() ? schemeForWords(next.play, props.schemes) : null;
+    if (key !== (data.blocking?.scheme ?? null)) pickScheme(key, false);
+  };
+  // the blocking always goes the play's way
+  const view: PlayData = useMemo(() => (data.blocking && data.blocking.side !== side ? { ...data, blocking: { ...data.blocking, side } } : data), [data, side]);
+  const resolved = useMemo(() => (view.blocking && frontOk(front) ? resolveBlocking(view, view.blocking, front) : null), [view, front]);
+  const myBlock = resolved && me ? (resolved.blocks.find((b) => b.id === me.id) ?? null) : null;
+  const defLabel = (id: string | null) => (id ? (resolved?.defenders.find((d) => d.id === id)?.label ?? id) : "no one");
+  const fixBlock = (blocker: string, target: string | null | undefined) =>
+    set((d) => {
+      if (!d.blocking) return d;
+      const forFront = { ...(d.blocking.fixes[front] ?? {}) };
+      if (target === undefined) delete forFront[blocker];
+      else forFront[blocker] = target;
+      return { ...d, blocking: { ...d.blocking, fixes: { ...d.blocking.fixes, [front]: forFront } } };
+    });
+  const onDefender = (id: string) => {
+    if (!myBlock || !me) return setBlockNote("Tap a blocker first, then tap the defender he blocks.");
+    fixBlock(me.id, id);
+    setBlockNote(`${me.id} blocks ${defLabel(id)} against the ${front}.`);
+  };
+  const checkFront = (on: boolean) =>
+    set((d) => {
+      if (!d.blocking) return d;
+      const checked = on ? [...new Set([...d.blocking.checked, front])] : d.blocking.checked.filter((f) => f !== front);
+      // the main drawing is the first front the coach checks
+      const main = checked.includes(d.blocking.front) ? d.blocking.front : (checked[0] ?? d.blocking.front);
+      return { ...d, blocking: { ...d.blocking, checked, front: main } };
+    });
+
   const setJob = (j: Job) => {
     if (!me) return;
     const drawn = me.line ? (me.route?.path ?? me.block?.path ?? me.path) : null;
@@ -381,7 +431,7 @@ export function PlayBuilder(props: {
     setBusy(true);
     setMsg(null);
     const play: PlayData = {
-      ...data,
+      ...view,
       name: name || "unknown",
       formation: { ...data.formation, name: [parts.formation, parts.formation ? parts.dir : "", parts.tag].filter(Boolean).join(" ") || data.formation.name, strength: parts.dir === "LEFT" ? "left" : parts.formation ? "right" : data.formation.strength },
       motion:
@@ -389,6 +439,11 @@ export function PlayBuilder(props: {
           ? { player: parts.motionPlayer, type: "unknown", direction: (data.players.find((p) => p.id === parts.motionPlayer)?.x ?? 0) > 0 ? "left" : "right", timing: "unknown", end: null }
           : data.motion,
     };
+    if (play.blocking) {
+      const main = frontOk(play.blocking.front) ? play.blocking.front : frontOk(front) ? front : "4-3";
+      play.blocking = { ...play.blocking, front: main };
+      play.players = applyBlocking(play, play.blocking, main);
+    }
     const r = await safeCall(() => saveBuiltPlayAction(props.teamId, props.playId, play), "Saving");
     setBusy(false);
     if (!r.ok) return setMsg(r.error);
@@ -426,7 +481,7 @@ export function PlayBuilder(props: {
         </div>
         <div className="text-xs font-semibold uppercase tracking-wide text-muted">Play</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Pick label="Play" value={parts.play} options={words(n?.plays)} onChange={(v) => setParts({ ...parts, play: v })} />
+          <Pick label="Play" value={parts.play} options={words(n?.plays)} onChange={(v) => playPicked({ ...parts, play: v })} />
           <Pick label="Play direction" value={parts.playDir} options={["RIGHT", "LEFT"]} onChange={(v) => setParts({ ...parts, playDir: v })} free={false} />
           <label className="flex flex-col gap-1 text-xs">
             Play type
@@ -435,6 +490,17 @@ export function PlayBuilder(props: {
               {PLAY_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t.replace("_", " ")}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            Blocking scheme
+            <select className="input" value={data.blocking?.scheme ?? ""} onChange={(e) => pickScheme(e.target.value, true)}>
+              <option value="">—</option>
+              {props.schemes.map((sc) => (
+                <option key={sc.key} value={sc.key}>
+                  {sc.name}
                 </option>
               ))}
             </select>
@@ -534,9 +600,35 @@ export function PlayBuilder(props: {
             {drawNote ? <span className="text-ok"> Got it: {drawNote}.</span> : null}
           </p>
         )}
+        {data.blocking && (
+          <div className="flex flex-col gap-1" aria-live="polite">
+            <div className="flex flex-wrap items-center gap-1 text-sm" role="group" aria-label="Blocking against">
+              <span className="text-xs text-muted">{data.blocking.name} against:</span>
+              {props.fronts.map((f) => (
+                <button key={f} onClick={() => setFront(f)} className={`px-2 py-1 ${front === f ? "bg-brand text-brand-ink" : "border border-line"}`} aria-pressed={front === f}>
+                  {f}
+                  {data.blocking!.checked.includes(f) ? " ✓" : ""}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="h-5 w-5" checked={data.blocking.checked.includes(front)} onChange={(e) => checkFront(e.target.checked)} />
+              The blocking against the {front} is right (players are quizzed on the fronts you check)
+            </label>
+            <p className="text-xs text-muted">
+              {blockNote ?? "Tap a lineman to see his rule, then tap a defender to change who he blocks against this front."}{" "}
+              <a className="underline" href={`/t/${props.teamId}/plays/blocking?scheme=${data.blocking.scheme}`}>
+                Change {data.blocking.name}&apos;s rules for every play
+              </a>
+            </p>
+          </div>
+        )}
         <div className="overflow-hidden">
           <PlaySvg
-            data={data}
+            data={view}
+            blockFront={data.blocking ? front : null}
+            onBlockDefenderTap={data.blocking ? onDefender : undefined}
+            markDefender={myBlock?.target ?? null}
             selected={sel}
             onPlayerTap={(id) => {
               setSel(id === sel ? null : id);
@@ -606,6 +698,40 @@ export function PlayBuilder(props: {
               Remove player
             </button>
           </div>
+          {myBlock && data.blocking && (
+            <div className="flex flex-col gap-2 rounded border border-line p-2 text-sm">
+              <div>
+                <span className="font-semibold">{ROLE_LABEL[myBlock.role]}</span> against the {front}: blocks <span className="font-semibold">{defLabel(myBlock.target)}</span>
+                {myBlock.fixed ? " (your fix)" : ""}. Tap a defender on the field to change it.
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1 text-xs">
+                  His rule on this play
+                  <select
+                    className="input w-auto"
+                    value={myBlock.rule}
+                    onChange={(e) => set((d) => (d.blocking ? { ...d, blocking: { ...d.blocking, rules: { ...d.blocking.rules, [myBlock.role]: e.target.value } } } : d))}
+                  >
+                    {RULES.map((r) => (
+                      <option key={r} value={r}>
+                        {RULE_LABEL[r]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {myBlock.fixed && (
+                  <button className="btn btn-outline min-h-9 px-3 text-sm" onClick={() => fixBlock(myBlock.id, undefined)}>
+                    Back to the rule
+                  </button>
+                )}
+                {myBlock.target && (
+                  <button className="text-muted underline" onClick={() => fixBlock(myBlock.id, null)}>
+                    He blocks no one
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-1">
             {JOBS.map(([j, label]) => (
               <button key={j} onClick={() => setJob(j)} className={`px-3 py-1.5 text-sm ${job === j ? "bg-brand text-brand-ink" : "border border-line"}`}>
