@@ -11,7 +11,7 @@ import { approveAction, savePlayAction, unapproveAction } from "../../actions";
 type Parts = NonNullable<PlayData["defense"]>;
 
 /**
- * Check a defensive call: the drawing next to Reps' version, the call's
+ * Check a defensive call: the drawing next to RepWon's version, the call's
  * parts (front, coverage, stunt, pressure) and every defender's job. Fix
  * anything, save, approve.
  */

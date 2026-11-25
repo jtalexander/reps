@@ -1,4 +1,4 @@
-# Netlify build configuration for Reps.
+# Netlify build configuration for RepWon Install.
 
 [build]
   command = "pnpm build"

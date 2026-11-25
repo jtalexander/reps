@@ -19,7 +19,7 @@ export async function QuickLook({ teamId, sp }: { teamId: string; sp: Record<str
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="text-2xl">Quick look</h2>
-        <p className="text-sm text-muted">Tap what a defense or offense shows. Reps lists your plays tagged as good against it, most matches first.</p>
+        <p className="text-sm text-muted">Tap what a defense or offense shows. RepWon lists your plays tagged as good against it, most matches first.</p>
       </div>
       <div className="flex overflow-hidden rounded border border-line text-sm" role="group" aria-label="Which side">
         {(
@@ -40,7 +40,7 @@ export async function QuickLook({ teamId, sp }: { teamId: string; sp: Record<str
           <Link className="underline" href={`/t/${teamId}/plays`}>
             Playbook
           </Link>{" "}
-          and keep the &quot;Good against&quot; tags Reps suggests, or add your own.
+          and keep the &quot;Good against&quot; tags RepWon suggests, or add your own.
         </p>
       ) : (
         <section className="card flex flex-col gap-3 p-4">

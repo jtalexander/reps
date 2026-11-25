@@ -11,7 +11,7 @@ export default async function TeamLayout({ children, params }: LayoutProps<"/t/[
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 pt-3 pb-2">
           <Link href={`/t/${team.id}`} className="flex min-w-0 flex-col leading-none">
             <span className="truncate font-display text-xl font-black tracking-wide uppercase">{team.name}</span>
-            <span className="font-display text-sm font-black tracking-wide text-brand uppercase">Reps playbook</span>
+            <span className="font-display text-sm font-black tracking-wide text-brand uppercase">RepWon Install</span>
           </Link>
           <Link href="/coach" className="shrink-0 font-label text-xs font-bold tracking-widest text-muted uppercase hover:text-brand">
             Teams

@@ -9,7 +9,7 @@ import { pageRefs } from "@/teach/page-images";
 const chip = (on: boolean) => `shrink-0 px-3 py-1.5 font-label text-xs font-bold tracking-widest uppercase ${on ? "bg-brand text-brand-ink" : "border border-line bg-card"}`;
 
 /**
- * Every drawing Reps found in the playbook (formations, plays, blocking vs
+ * Every drawing RepWon found in the playbook (formations, plays, blocking vs
  * fronts), by topic, cropped from the coach's own pages.
  */
 export async function PagesView({ teamId, sp, header }: { teamId: string; sp: Record<string, string | string[] | undefined>; header: React.ReactNode }) {
@@ -47,8 +47,8 @@ export async function PagesView({ teamId, sp, header }: { teamId: string; sp: Re
       {header}
       <p className="text-sm text-muted">
         {all.length
-          ? `${all.length} drawings Reps found on ${pages} pages of your playbook. Tap one to see it bigger with what Reps read from its page.`
-          : "Reps hasn't read any pages yet."}
+          ? `${all.length} drawings RepWon found on ${pages} pages of your playbook. Tap one to see it bigger with what RepWon read from its page.`
+          : "RepWon hasn't read any pages yet."}
       </p>
 
       {all.length === 0 ? (
@@ -115,7 +115,7 @@ export async function PagesView({ teamId, sp, header }: { teamId: string; sp: Re
 
       {(old?.converted ?? 0) > 0 && (
         <Link href={`/t/${teamId}/plays/converted`} className="self-start text-sm font-semibold underline">
-          Real plays Reps converted from these drawings ({old!.converted})
+          Real plays RepWon converted from these drawings ({old!.converted})
         </Link>
       )}
       {(old?.n ?? 0) > 0 && (

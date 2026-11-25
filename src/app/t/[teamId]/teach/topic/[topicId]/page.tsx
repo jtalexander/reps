@@ -14,7 +14,7 @@ import { TopicGaps } from "./topic-gaps";
 export const metadata = { title: "Topic" };
 
 /**
- * Everything for one topic on one page: the few questions Reps needs
+ * Everything for one topic on one page: the few questions RepWon needs
  * answered, then every draft lesson and question to skim and approve at once.
  */
 export default async function TopicPage({ params, searchParams }: PageProps<"/t/[teamId]/teach/topic/[topicId]">) {
@@ -96,7 +96,7 @@ export default async function TopicPage({ params, searchParams }: PageProps<"/t/
       </div>
 
       <section className="flex flex-col gap-2">
-        <h2 className="font-semibold">1. Reps&apos; questions for you</h2>
+        <h2 className="font-semibold">1. RepWon&apos;s questions for you</h2>
         <TopicGaps
           teamId={teamId}
           topicId={topicId}
@@ -122,7 +122,7 @@ export default async function TopicPage({ params, searchParams }: PageProps<"/t/
         <h2 className="font-semibold">{pile === "reserve" ? "Reserve questions" : "3. Skim and approve"}</h2>
         {pile === "reserve" ? (
           <p className="text-sm text-muted">
-            Extra questions Reps wrote beyond the core set. Players never see them unless you approve them, so come back when players have the core down and want more.{" "}
+            Extra questions RepWon wrote beyond the core set. Players never see them unless you approve them, so come back when players have the core down and want more.{" "}
             <Link className="underline" href={`/t/${teamId}/teach/topic/${topicId}`}>
               Back to the core set
             </Link>

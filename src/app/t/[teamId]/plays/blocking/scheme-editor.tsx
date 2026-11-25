@@ -133,7 +133,7 @@ export function SchemeEditor({
       setAll((a) => a.map((x) => (x.key === lib.key ? back : x)));
       setDraft(back);
       setWords("");
-      setMsg({ text: `Back to Reps' ${lib.name}. ${res.plays} play${res.plays === 1 ? "" : "s"} redrawn.`, ok: true });
+      setMsg({ text: `Back to RepWon's ${lib.name}. ${res.plays} play${res.plays === 1 ? "" : "s"} redrawn.`, ok: true });
     } else {
       const rest = all.filter((x) => x.key !== draft.key);
       setAll(rest);
@@ -170,7 +170,7 @@ export function SchemeEditor({
           ) : (
             <>
               <p className="text-sm">
-                {left} run play{left === 1 ? "" : "s"} in your playbook {left === 1 ? "fits" : "fit"} a scheme by name but {left === 1 ? "doesn't have one" : "don't have one"} yet. Reps keeps the blocks your playbook draws and adds the scheme, so you can see each play against every front.
+                {left} run play{left === 1 ? "" : "s"} in your playbook {left === 1 ? "fits" : "fit"} a scheme by name but {left === 1 ? "doesn't have one" : "don't have one"} yet. RepWon keeps the blocks your playbook draws and adds the scheme, so you can see each play against every front.
               </p>
               <button className="btn btn-primary self-start" disabled={busy} onClick={giveSchemes}>
                 Give {left === 1 ? "it its scheme" : "them their schemes"}
@@ -244,7 +244,7 @@ export function SchemeEditor({
           </button>
           {all.some((x) => x.key === draft.key) && (
             <button className="text-sm text-muted underline" disabled={busy} onClick={reset}>
-              {isLib ? "Back to Reps' rules" : "Remove this scheme"}
+              {isLib ? "Back to RepWon's rules" : "Remove this scheme"}
             </button>
           )}
           {msg && (

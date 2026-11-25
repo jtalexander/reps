@@ -84,7 +84,7 @@ describe("weekly installs, play by play", () => {
     const datas: PlayData[] = [
       // the team's word for smash, with jet motion
       play("SPREAD RIGHT ZOOT JET, DIVIDE", withJobs(smashJobs), { play_type: "pass", motion: jet }),
-      // no concept word in the name: Reps sees smash in the routes
+      // no concept word in the name: RepWon sees smash in the routes
       play("TRIPS LEFT, 52", withJobs(smashJobs), { play_type: "pass" }),
       // a run: the guard pulls and the F carries
       play(

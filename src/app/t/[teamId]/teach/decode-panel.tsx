@@ -66,7 +66,7 @@ export function DecodePanel({
           Pages of {upload.filename} ({upload.pageCount} pages)
         </label>
         <input id="pages" className="input" placeholder="e.g. 5-10, 21, 27" value={spec} onChange={(e) => setSpec(e.target.value)} disabled={!!run} />
-        <p className="mt-1 text-xs text-muted">Reading a page again replaces what Reps took from it before.</p>
+        <p className="mt-1 text-xs text-muted">Reading a page again replaces what RepWon took from it before.</p>
       </div>
       <button
         className="btn btn-primary"

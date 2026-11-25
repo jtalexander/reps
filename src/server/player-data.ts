@@ -1,5 +1,5 @@
 /**
- * Player data: what Reps keeps about players, and deleting it for good.
+ * Player data: what RepWon keeps about players, and deleting it for good.
  * Deleting a player removes their answers, practice schedule, lesson
  * progress, questions they asked and flags they raised (all cascade).
  */

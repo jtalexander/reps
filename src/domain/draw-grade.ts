@@ -1,6 +1,6 @@
 /**
  * Grading a "draw your job" answer: the player draws his line on the play and
- * Reps checks it like a coach would, not to the inch. A route has to be the
+ * RepWon checks it like a coach would, not to the inch. A route has to be the
  * right route, breaking the right way, within about two yards of its depth; a
  * block has to be the right kind going the right way; a carry has to hit the
  * right hole; a fake has to be dotted and go the right way.
@@ -27,7 +27,7 @@ const NO_BREAK = new Set(["go", "seam", "fade"]);
 const FAMILY: Record<string, string> = { quick_out: "out", speed_out: "out", dig: "in", flag: "corner", curl: "hitch", stick: "hitch", seam: "go", fade: "go" };
 const family = (k: string) => FAMILY[k] ?? k;
 
-/** The players Reps can ask to draw: a route, block, carry or fake with a line to compare to. */
+/** The players RepWon can ask to draw: a route, block, carry or fake with a line to compare to. */
 export function drawable(p: Player, play: PlayData): boolean {
   const strength = play.formation.strength === "left" ? "left" : "right";
   if (p.route) return routePath(p.route, p, strength) !== null && normalizeRouteName(p.route.name) !== "screen";
@@ -89,7 +89,7 @@ export function gradeDrawing(play: PlayData, playerId: string, answer: DrawnAnsw
       const off = Math.hypot(end[0] - lateral(rel), end[1] - rel[rel.length - 1]![1]);
       if (off <= Math.max(2.5, Math.hypot(end[0], end[1]) * 0.25) && sameBreak) return { correct: true, note: "Right: that's your route." };
     }
-    const drew = guess ? `${guess.depth && !NO_BREAK.has(guess.key) ? `a ${guess.depth}-yard ` : "a "}${label(guess.key).toLowerCase()}` : "something Reps can't name";
+    const drew = guess ? `${guess.depth && !NO_BREAK.has(guess.key) ? `a ${guess.depth}-yard ` : "a "}${label(guess.key).toLowerCase()}` : "something RepWon can't name";
     return { correct: false, note: `You drew ${drew}; you run ${is}.` };
   }
 
@@ -124,6 +124,6 @@ export function gradeDrawing(play: PlayData, playerId: string, answer: DrawnAnsw
     if (near) return { correct: true, note: `Right: ${isFake ? "fake" : "hit it"} ${holeText}.` };
     return { correct: false, note: `You went ${Math.abs(gotHole) < 1 ? "up the middle" : `${Math.abs(Math.round(gotHole))} yards to the ${side(gotHole)}`}; it's ${holeText}.` };
   }
-  return { correct: false, note: "Reps can't grade this one." };
+  return { correct: false, note: "RepWon can't grade this one." };
 }
 

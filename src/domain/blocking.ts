@@ -2,7 +2,7 @@
  * Blocking schemes: most runs are defined by how they're blocked, not by
  * where the back runs. A scheme is a rule for each blocker ("play-side tackle:
  * block down", "back-side guard: pull and wrap for the linebacker"). Pick a
- * defensive front and Reps lines that front up against the play's own
+ * defensive front and RepWon lines that front up against the play's own
  * offense, by technique, and turns every rule into a block on a named
  * defender. The coach can fix any block for any front; the fix is kept.
  *
@@ -261,7 +261,7 @@ export interface Scheme {
   hole: Hole;
 }
 
-/** Reps' usual rules for the runs most teams run. Every team can change them. */
+/** RepWon's usual rules for the runs most teams run. Every team can change them. */
 export const SCHEME_LIBRARY: Scheme[] = [
   { key: "power", name: "Power", hole: "C", rules: { PSTE: "down", PST: "down", PSG: "down", C: "back", BSG: "pull_wrap", BST: "hinge", BSTE: "hinge", PSW: "down", BSW: "hinge", FB: "kick" } },
   { key: "counter", name: "Counter", hole: "C", rules: { PSTE: "down", PST: "down", PSG: "down", C: "back", BSG: "pull_kick", BST: "pull_wrap", BSTE: "hinge", PSW: "down", BSW: "hinge", FB: "hinge" } },
@@ -616,7 +616,7 @@ export interface TeamBlocking {
   fronts?: string[];
 }
 
-/** Reps' schemes with the coach's changes, plus any he added. */
+/** RepWon's schemes with the coach's changes, plus any he added. */
 export function teamSchemes(tb: TeamBlocking | null | undefined): TeamScheme[] {
   const own = tb?.schemes ?? [];
   const base = SCHEME_LIBRARY.map((s) => own.find((o) => o.key === s.key) ?? { ...s, words: [] });

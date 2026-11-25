@@ -71,7 +71,7 @@ export function InstallOnlyToggle({ teamId, on }: { teamId: string; on: boolean 
         }}
       />
       <span>
-        <b>Only work on the install.</b> Reps asks you about, writes and has you review just these topics; the rest wait until you add them.
+        <b>Only work on the install.</b> RepWon asks you about, writes and has you review just these topics; the rest wait until you add them.
       </span>
     </label>
   );

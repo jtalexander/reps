@@ -1,7 +1,7 @@
 /**
  * Reusing a coach's own work across their teams: next season's playbook, or
  * the same offense at another level. Topics match by name. For each matching
- * topic, the other team's answers to Reps' questions and its approved lessons
+ * topic, the other team's answers to RepWon's questions and its approved lessons
  * and quiz questions come over as drafts the coach approves with one tap; the
  * team's own undecided drafts move to the reserve pile. Naming rules come
  * over when the team has none. Nothing goes live without approval.

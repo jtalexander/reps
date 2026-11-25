@@ -1,7 +1,7 @@
 /**
  * A team's route tree: which route each number calls. Teams number routes
  * differently (and some don't number them at all), so the coach sets it on
- * Settings, Reps can draft it from the playbook, and Football basics teaches
+ * Settings, RepWon can draft it from the playbook, and Football basics teaches
  * the team's own tree.
  */
 import { normalizeRouteName, ROUTE_BY_KEY } from "./routes";
@@ -43,7 +43,7 @@ export function cleanTree(tree: RouteTree): RouteTree {
 
 /**
  * A draft tree from what the playbook says (naming rules' route_tree words),
- * or null when it doesn't show one Reps can match to known routes.
+ * or null when it doesn't show one RepWon can match to known routes.
  */
 export function treeFromPlaybook(words: { number: string; route: string }[] | undefined | null): RouteTree | null {
   if (!words?.length) return null;

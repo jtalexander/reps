@@ -79,7 +79,7 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
             Playbook
           </Link>
           <h1 className="text-4xl">{editing ? "Edit call" : "Draw a defensive call"}</h1>
-          <p className="text-sm text-muted">Pick the front and coverage and Reps lines your defense up with their jobs. Drag anyone, draw lines, and tap a defender to change his job.</p>
+          <p className="text-sm text-muted">Pick the front and coverage and RepWon lines your defense up with their jobs. Drag anyone, draw lines, and tap a defender to change his job.</p>
         </div>
         <DefenseBuilder teamId={teamId} naming={naming} start={start && isDefense(start) ? start : null} playId={start && isDefense(start) ? editing : null} formations={formations.map((f) => ({ id: f.id, name: f.name, players: f.players }))} planId={planId} />
       </div>
@@ -94,7 +94,7 @@ export default async function Build({ params, searchParams }: PageProps<"/t/[tea
         </Link>
         <h1 className="text-4xl">{formationMode ? (formationMode.id ? `Formation: ${formationMode.name}` : "New formation") : editing ? "Edit play" : "Draw a play"}</h1>
         <p className="text-sm text-muted">
-          Drag players into place, then draw each line by hand or tap a player to pick his job. Reps names the play from your naming rules. Save and approve it like any play.
+          Drag players into place, then draw each line by hand or tap a player to pick his job. RepWon names the play from your naming rules. Save and approve it like any play.
         </p>
       </div>
       <PlayBuilder teamId={teamId} naming={naming} start={start} playId={editing} schemes={blocking.schemes} fronts={blocking.fronts} routeTree={team.routeTree ?? null} formationMode={formationMode} planId={planId} />

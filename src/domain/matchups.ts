@@ -1,7 +1,7 @@
 /**
  * Matchups: what a play is good against. An offensive play is tagged with the
  * defenses it beats (Cover 2, man, blitz, an odd front...); a defensive call
- * with the offenses it stops (Trips, the run, Smash...). Reps suggests tags
+ * with the offenses it stops (Trips, the run, Smash...). RepWon suggests tags
  * from the play's concept and from what the playbook says ("good vs Cover 3");
  * the coach keeps or drops each one, and can add his own.
  *
@@ -150,11 +150,11 @@ export function looksFromText(lines: string[], side: Side): string[] {
 
 export interface Suggestion {
   key: string;
-  /** "concept" (Reps' usual), "playbook" (the playbook says so) */
+  /** "concept" (RepWon's usual), "playbook" (the playbook says so) */
   from: "concept" | "playbook";
 }
 
-/** Reps' suggestions for a play: from what the playbook says, then from its concept or coverage. */
+/** RepWon's suggestions for a play: from what the playbook says, then from its concept or coverage. */
 export function suggestLooks(data: PlayData, side: Side, pageText: string[], conceptKey: string | null): Suggestion[] {
   const out = new Map<string, Suggestion>();
   for (const k of looksFromText([...pageText, ...data.coaching_points, data.name], side)) out.set(k, { key: k, from: "playbook" });

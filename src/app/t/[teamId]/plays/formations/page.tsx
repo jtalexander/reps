@@ -38,7 +38,7 @@ export default async function Formations({ params }: PageProps<"/t/[teamId]/play
       {fromBook.length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className="text-2xl">From your playbook</h2>
-          <p className="text-sm text-muted">Formation drawings Reps read from your playbook. Tick the ones to keep as your formations.</p>
+          <p className="text-sm text-muted">Formation drawings RepWon read from your playbook. Tick the ones to keep as your formations.</p>
           <FromPlaybook teamId={teamId} rows={fromBook.map((f) => ({ id: f.id, name: f.name, players: f.data.players }))} />
         </section>
       )}

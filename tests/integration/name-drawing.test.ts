@@ -103,7 +103,7 @@ describe("naming a hand-drawn play", () => {
     expect(g.parts).toMatchObject({ formation: "SPREAD", dir: "LEFT", tag: "ZOOT", play: "SMASH" });
     expect(g.same?.name).toBe("SPREAD RIGHT ZOOT, SMASH");
 
-    // a concept the playbook doesn't have: Reps says what it is and calls it that
+    // a concept the playbook doesn't have: RepWon says what it is and calls it that
     drawn = draw(play("unknown", spread()), [
       ["Z", solid, [0, 3], [-4, 7]],
       ["Y", solid, [2, 1], [7, 2]],

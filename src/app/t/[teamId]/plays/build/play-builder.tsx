@@ -96,10 +96,10 @@ export function PlayBuilder(props: {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [parts, setPartsRaw] = useState({ shift: "", formation: startParts.formation, dir: startParts.dir, tag: startParts.tag, motionPlayer: "", motion: "", play: "", playDir: "" });
   type Parts = typeof parts;
-  // parts the coach picked himself (Reps' naming leaves them alone) and parts Reps filled in from a drawing
+  // parts the coach picked himself (RepWon's naming leaves them alone) and parts RepWon filled in from a drawing
   const mine = useRef(new Set<keyof Parts>());
   const auto = useRef<Partial<Parts>>(startParts.formation ? { ...startParts } : {});
-  // Undo: every change is a step (a drag is one step); what Reps fills in after a pick undoes with the pick
+  // Undo: every change is a step (a drag is one step); what RepWon fills in after a pick undoes with the pick
   const restored = useRef<string | null>(null);
   const merge = useRef(false);
   const setParts = (next: Parts) => {
@@ -150,7 +150,7 @@ export function PlayBuilder(props: {
     const call = { formation: parts.formation.trim(), dir: parts.dir, tag: parts.tag.trim() };
     if (!call.formation) return;
     if (restored.current === JSON.stringify(parts)) return; // put back by Undo: the players are already where they were
-    // Reps named this formation from where the coach put the players: leave them there
+    // RepWon named this formation from where the coach put the players: leave them there
     if (auto.current.formation === parts.formation && auto.current.dir === parts.dir && auto.current.tag === parts.tag) return;
     const ask = JSON.stringify(call);
     asked.current = ask;
@@ -180,7 +180,7 @@ export function PlayBuilder(props: {
       setLineupVersion((v) => v + 1);
       setLineupNote(
         l.withoutTag
-          ? { text: `Your playbook has no drawing with ${l.withoutTag}, so Reps lined up ${l.from}${l.page ? ` (p${l.page})` : ""}${l.mirrored ? ", flipped" : ""}. Drag the players where ${l.withoutTag} puts them.`, tone: "warn" }
+          ? { text: `Your playbook has no drawing with ${l.withoutTag}, so RepWon lined up ${l.from}${l.page ? ` (p${l.page})` : ""}${l.mirrored ? ", flipped" : ""}. Drag the players where ${l.withoutTag} puts them.`, tone: "warn" }
           : { text: `Lined up from ${l.from}${l.page ? ` (p${l.page})` : ""}${l.mirrored ? ", flipped" : ""}. Drag anyone who should be somewhere else.`, tone: "ok" },
       );
     };
@@ -232,7 +232,7 @@ export function PlayBuilder(props: {
             })
           : d.players,
       }));
-      setPlayNote({ lines: res.notes, tone: res.missing.length || res.notes.some((n) => n.startsWith("Reps doesn't")) ? "warn" : "ok" });
+      setPlayNote({ lines: res.notes, tone: res.missing.length || res.notes.some((n) => n.startsWith("RepWon doesn't")) ? "warn" : "ok" });
     };
     const start = setTimeout(run, 400);
     return () => {
@@ -366,7 +366,7 @@ export function PlayBuilder(props: {
       const g = r.guess;
       const fill: Partial<Parts> = {};
       for (const [k, v] of Object.entries(g.parts) as Array<[keyof Parts, string]>) if (!mine.current.has(k)) fill[k] = v;
-      // a part Reps filled in before but can't tell any more is cleared, not left stale
+      // a part RepWon filled in before but can't tell any more is cleared, not left stale
       for (const k of Object.keys(auto.current) as Array<keyof Parts>) if (!(k in g.parts) && !mine.current.has(k)) fill[k] = k === "dir" ? "RIGHT" : "";
       auto.current = { ...auto.current, ...fill };
       if (Object.keys(fill).length) merge.current = true;
@@ -564,7 +564,7 @@ export function PlayBuilder(props: {
         </div>
           </>
         )}
-        {parts.motion.trim() && !parts.motionPlayer && <p className="text-sm text-warn">Pick who motions, and Reps draws the {parts.motion.trim()} motion.</p>}
+        {parts.motion.trim() && !parts.motionPlayer && <p className="text-sm text-warn">Pick who motions, and RepWon draws the {parts.motion.trim()} motion.</p>}
         {playNote && (
           <div className={`flex flex-col text-sm ${playNote.tone === "ok" ? "text-ok" : playNote.tone === "warn" ? "text-warn" : "text-muted"}`} aria-live="polite">
             {playNote.lines.map((l) => (
@@ -590,12 +590,12 @@ export function PlayBuilder(props: {
         )}
         {batch && (
           <p className="text-xs text-muted" aria-live="polite">
-            Reps is reading all {batch.drawings} drawings in your playbook behind the scenes ({batch.status === "importing" ? "almost done" : "usually under an hour"}). Until then, a formation or play Reps hasn&apos;t read yet takes about 30 seconds the first time.
+            RepWon is reading all {batch.drawings} drawings in your playbook behind the scenes ({batch.status === "importing" ? "almost done" : "usually under an hour"}). Until then, a formation or play RepWon hasn&apos;t read yet takes about 30 seconds the first time.
           </p>
         )}
         {ahead > 0 && (
           <p className="text-xs text-muted" aria-live="polite">
-            Reps is reading your playbook&apos;s formations ahead of time ({ahead} to go), so picking one is instant once it&apos;s read. You can keep working.
+            RepWon is reading your playbook&apos;s formations ahead of time ({ahead} to go), so picking one is instant once it&apos;s read. You can keep working.
           </p>
         )}
         {lineupNote && (
@@ -827,7 +827,7 @@ export function PlayBuilder(props: {
                 </select>
               </label>
               {me.line && me.route.path ? (
-                <span className="pb-2 text-xs text-muted">Drawn by hand. Pick the route name if Reps got it wrong; your drawing stays.</span>
+                <span className="pb-2 text-xs text-muted">Drawn by hand. Pick the route name if RepWon got it wrong; your drawing stays.</span>
               ) : (
               <>
               <label className="flex flex-col gap-1 text-xs">

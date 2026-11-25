@@ -12,7 +12,7 @@ import { ApproveTopicButton, AutoRefresh, ConvertButton, PlayCompare } from "./c
 export const metadata = { title: "Real plays" };
 
 /**
- * Turning the playbook's drawings into real Reps plays, topic by topic:
+ * Turning the playbook's drawings into real RepWon plays, topic by topic:
  * convert (install first), check each topic side by side, approve it.
  */
 export default async function Converted({ params, searchParams }: PageProps<"/t/[teamId]/plays/converted">) {
@@ -51,7 +51,7 @@ export default async function Converted({ params, searchParams }: PageProps<"/t/
       <AutoRefresh waiting={progress.waiting} />
       {progress.waiting > 0 && (
         <p className="border border-brand px-3 py-2 text-sm">
-          Reps is converting {progress.waiting} drawing{progress.waiting === 1 ? "" : "s"}. This page updates as they finish; you can leave and come back.
+          RepWon is converting {progress.waiting} drawing{progress.waiting === 1 ? "" : "s"}. This page updates as they finish; you can leave and come back.
         </p>
       )}
       {progress.failed > 0 && progress.waiting === 0 && (
@@ -78,7 +78,7 @@ export default async function Converted({ params, searchParams }: PageProps<"/t/
           </Link>
           <h1 className="text-4xl">{t.name}</h1>
           <p className="text-sm text-muted">
-            {s.made} of {s.total} drawings converted · {s.approved} approved. Left is your page, right is Reps&apos; play. Fix anything off, then approve the topic.
+            {s.made} of {s.total} drawings converted · {s.approved} approved. Left is your page, right is RepWon&apos;s play. Fix anything off, then approve the topic.
           </p>
         </div>
         {banner}
@@ -114,7 +114,7 @@ export default async function Converted({ params, searchParams }: PageProps<"/t/
         </Link>
         <h1 className="text-4xl">Real plays</h1>
         <p className="text-sm text-muted">
-          Reps turns each drawing into a real play: every player&apos;s spot and assignment, so it can flip it, quiz it and draw it against a defense. Convert a topic, check
+          RepWon turns each drawing into a real play: every player&apos;s spot and assignment, so it can flip it, quiz it and draw it against a defense. Convert a topic, check
           it next to your pages, then approve it.{" "}
           <Link className="underline" href={`/t/${teamId}/plays/naming`}>
             Naming rules

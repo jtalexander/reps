@@ -82,7 +82,7 @@ export const topics = pgTable(
   (t) => [uniqueIndex("topics_team_name").on(t.teamId, t.nameKey), index("topics_concept_words").using("gin", t.conceptWords)],
 );
 
-/** A question Reps asks the coach to fill a gap in the playbook. */
+/** A question RepWon asks the coach to fill a gap in the playbook. */
 export const gaps = pgTable(
   "gaps",
   {
@@ -95,7 +95,7 @@ export const gaps = pgTable(
     question: text().notNull(),
     why: text(),
     appliesTo: text().array().notNull().default(sql`'{}'::text[]`),
-    /** Reps' suggested answer, clearly labeled as a suggestion */
+    /** RepWon's suggested answer, clearly labeled as a suggestion */
     suggestion: text(),
     status: text().$type<"open" | "answered" | "approved" | "skipped">().notNull().default("open"),
     answer: text(),

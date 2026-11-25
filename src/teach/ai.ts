@@ -180,7 +180,7 @@ export type Triage = z.infer<typeof TriageSchema>;
 
 const TRIAGE_SYSTEM = `${VOICE}
 
-Reps found questions to ask the coach about what his playbook leaves out, topic by topic. Answering hundreds is too much for a coach, so sort them.
+RepWon found questions to ask the coach about what his playbook leaves out, topic by topic. Answering hundreds is too much for a coach, so sort them.
 1. For each topic, pick the open questions a player most needs answered to execute or understand that topic: at most the per-topic limit you're given, fewer when the rest are nice-to-know. Prefer questions about what a player must do (alignment, assignment, read, rule, cadence word) over background or philosophy.
 2. Find questions under different topics that ask the same thing, so one answer settles all of them (for example the same term asked about under three plays, or the same alignment rule for one formation asked again under each play). Only group questions whose single answer would fully answer each one; similar wording about different plays is NOT the same question. Questions marked "already answered" can be the one kept in a group.
 Use the question numbers as given.`;
@@ -204,7 +204,7 @@ export const CoreSchema = z.object({
 
 const CORE_SYSTEM = `${VOICE}
 
-Reps wrote more quiz questions for one topic than a coach can review at once. Pick the core set: the few questions that check what every player in this topic must know to line up and do his job (alignment, assignment, read, rule, the call). The rest stay in reserve for later.
+RepWon wrote more quiz questions for one topic than a coach can review at once. Pick the core set: the few questions that check what every player in this topic must know to line up and do his job (alignment, assignment, read, rule, the call). The rest stay in reserve for later.
 - Stay within the limit you're given.
 - Cover each position group that has questions before giving any group a second one.
 - Prefer questions about doing the job over background or terminology trivia, and skip near-duplicates.
@@ -496,7 +496,7 @@ export async function readDrawing(
 
 const NAMING_SYSTEM = `${VOICE}
 
-From what Reps read on every page of the playbook, write down the team's naming rules: what each position letter is, the words that build a formation and a play call, and the order a call is said in.
+From what RepWon read on every page of the playbook, write down the team's naming rules: what each position letter is, the words that build a formation and a play call, and the order a call is said in.
 - Use only what the playbook shows or says; keep the coach's exact words and spellings. Leave a list empty rather than invent.
 - "means" is what the word tells players to do or where it puts them, in one or two short sentences.
 - Formation tags are words added to a formation that move players (e.g. ZIP, ZOOT, STACK); list each once, not once per formation.

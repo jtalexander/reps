@@ -44,7 +44,7 @@ export default async function PlayPage({ params }: PageProps<"/t/[teamId]/plays/
         )}
         <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">
           {play.extraction === "failed"
-            ? `Reps couldn't read this play. ${play.extractionError ?? ""}`
+            ? `RepWon couldn't read this play. ${play.extractionError ?? ""}`
             : play.extraction === "not_a_play"
               ? "This box didn't look like a play, so it was skipped."
               : hasApiKey()

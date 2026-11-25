@@ -1,6 +1,6 @@
 import "server-only";
 /**
- * The Reps admin: people in the `admins` table see every team on /admin, turn
+ * The RepWon admin: people in the `admins` table see every team on /admin, turn
  * a team's AI on or off, and set its monthly AI cap. Nobody else can tell the
  * page exists (404).
  */

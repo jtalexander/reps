@@ -1,5 +1,5 @@
 "use server";
-/** Reps admin actions. Each one checks the admin first. */
+/** RepWon admin actions. Each one checks the admin first. */
 import { revalidatePath } from "next/cache";
 import { requireAdmin, setAiAccess, setAiCap } from "@/server/admin";
 

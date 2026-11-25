@@ -105,7 +105,7 @@ export function InterviewQueue({ teamId, items, doneMode }: { teamId: string; it
 
         {cur.suggestion && (
           <div className="rounded-lg bg-suggest-bg p-3 text-sm">
-            <div className="text-xs font-semibold text-suggest uppercase">Reps&apos; suggestion — not from your playbook</div>
+            <div className="text-xs font-semibold text-suggest uppercase">RepWon&apos;s suggestion — not from your playbook</div>
             <p className="mt-1">{cur.suggestion}</p>
             <div className="mt-2 flex gap-2">
               <button className="btn btn-primary min-h-9 px-3" disabled={busy} onClick={() => act({ kind: "approve" }, "approved")}>

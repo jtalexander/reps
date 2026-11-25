@@ -134,7 +134,7 @@ export const PlayerSchema = z.object({
   /** ball carrier path / fake path / lead path, relative to the player */
   path: z.array(point).nullable().default(null),
   notes: str.nullable().default(null),
-  /** drawn by hand in the play builder: how the line looks (absent = Reps' usual look for the job) */
+  /** drawn by hand in the play builder: how the line looks (absent = RepWon's usual look for the job) */
   line: LineSchema.nullable().optional(),
   /** a defender's job details: his gap ("B"), zone ("deep_third"), man (the offensive letter he covers), technique ("5") */
   def: z

@@ -79,7 +79,7 @@ export default async function Settings({ params, searchParams }: PageProps<"/t/[
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" name="shareAnswers" defaultChecked={team.shareAnswers} className="mt-0.5 h-5 w-5" />
           <span>
-            Let my approved answers help Reps suggest better answers to other coaches. Reps learns the football (how a concept is run), never your team&apos;s name,
+            Let my approved answers help RepWon suggest better answers to other coaches. RepWon learns the football (how a concept is run), never your team&apos;s name,
             players or results, and suggestions never say where they came from.
           </span>
         </label>
@@ -134,7 +134,7 @@ export default async function Settings({ params, searchParams }: PageProps<"/t/[
       <section id="players" className="card flex flex-col gap-3 p-4">
         <h2 className="font-semibold">Player data</h2>
         <p className="text-sm">
-          For each player Reps keeps only what coaching needs: the name and positions you enter (first name and last initial is enough), their answers and practice
+          For each player RepWon keeps only what coaching needs: the name and positions you enter (first name and last initial is enough), their answers and practice
           schedule, lessons they&apos;ve read, questions they ask the playbook and questions they flag. No email, password, birthday or contact information.{" "}
           <Link className="underline" href="/privacy">
             What players and parents see
@@ -170,7 +170,7 @@ export default async function Settings({ params, searchParams }: PageProps<"/t/[
         </p>
         {routes === "saved" && <p className="bg-ok-bg px-3 py-2 text-sm text-ok">Saved. Football basics now teaches this tree.</p>}
         {treeSource === "playbook" && (
-          <p className="bg-suggest-bg px-3 py-2 text-sm text-suggest">Reps found this route tree in your playbook. Check it and save it to use it.</p>
+          <p className="bg-suggest-bg px-3 py-2 text-sm text-suggest">RepWon found this route tree in your playbook. Check it and save it to use it.</p>
         )}
         {treeSource === "common" && <p className="bg-warn-bg px-3 py-2 text-sm text-warn">Not set yet. This is a common tree to start from: change what&apos;s different, then save.</p>}
         <form action={saveRouteTreeAction.bind(null, teamId)} className="flex flex-col gap-3">

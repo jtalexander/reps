@@ -16,7 +16,7 @@ const trustedOrigins = [process.env.URL, process.env.DEPLOY_PRIME_URL, process.e
 );
 
 export const auth = betterAuth({
-  appName: "Reps",
+  appName: "RepWon Install",
   baseURL: appBaseUrl(),
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins,

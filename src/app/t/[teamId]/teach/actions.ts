@@ -112,7 +112,7 @@ export async function findGapsAction(teamId: string, topicId: string) {
 export async function writeTopicAction(teamId: string, topicId: string) {
   return startJob(teamId, "write_topic", topicId);
 }
-/** Draft the team's naming rules from everything Reps read (one AI call). */
+/** Draft the team's naming rules from everything RepWon read (one AI call). */
 export async function draftNamingAction(teamId: string) {
   return startJob(teamId, "naming", teamId);
 }
@@ -369,7 +369,7 @@ export async function confirmNamingAction(teamId: string, naming: Naming, tree: 
   try {
     const { user, team } = await requireCoach(teamId);
     await saveNaming(teamId, naming, true);
-    // now Reps can read every drawing behind the scenes, so plays are ready before the coach needs them
+    // now RepWon can read every drawing behind the scenes, so plays are ready before the coach needs them
     await ensureBatchRead(teamId, await origin()).catch((err) => console.error("read batch", teamId, err));
     const saveTree = Boolean(tree && !team.routeTree && tree.routes.length);
     if (saveTree) await saveRouteTree(teamId, tree!, user.id);
@@ -410,7 +410,7 @@ export async function approveConvertedTopicAction(teamId: string, topicId: strin
   }
 }
 
-/** Throw away one converted play and have Reps read its drawing again. */
+/** Throw away one converted play and have RepWon read its drawing again. */
 export async function retryConversionAction(teamId: string, playId: string): Promise<R<object>> {
   try {
     await requireCoach(teamId);

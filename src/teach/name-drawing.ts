@@ -2,7 +2,7 @@
  * Naming a play the coach drew by hand, in the team's own words: the
  * formation from where the players stand (matched to the playbook's
  * plays), the motion word from plays with the same motion, and the play
- * word from a playbook play drawn the same way, or the concept Reps
+ * word from a playbook play drawn the same way, or the concept RepWon
  * recognizes (smash, power...). No AI: it's all matching drawings.
  */
 import { and, eq } from "drizzle-orm";
@@ -27,7 +27,7 @@ export interface NameParts {
 }
 
 export interface NameGuess {
-  /** only the parts Reps could tell; the rest are left out */
+  /** only the parts RepWon could tell; the rest are left out */
   parts: Partial<NameParts>;
   notes: string[];
   /** a playbook play drawn the same way */
@@ -123,7 +123,7 @@ export function readPlay(label: string, n: Naming | null): { play: string; side:
   return { play: [...new Set(playWords)].join(" "), side };
 }
 
-/** Run plays Reps can tell from the blocks: pullers, or the whole line stepping one way. */
+/** Run plays RepWon can tell from the blocks: pullers, or the whole line stepping one way. */
 export function runConcept(play: PlayData): string | null {
   const carrier = play.players.find((p) => p.assignment_type === "carry" && p.path && p.path.length > 1);
   if (!carrier) return null;
@@ -206,7 +206,7 @@ export async function nameDrawnPlay(teamId: string, drawn: PlayData, database: D
       notes.push(`Formation: lined up like ${lineupMatch.tp.label}${lineupMatch.tp.page ? ` (p${lineupMatch.tp.page})` : ""}${lineupMatch.mirror ? ", flipped" : ""}.`);
     }
   }
-  if (!parts.formation) notes.push(book.length ? "Reps couldn't match this lineup to a formation in your playbook. Pick the formation." : "Pick the formation.");
+  if (!parts.formation) notes.push(book.length ? "RepWon couldn't match this lineup to a formation in your playbook. Pick the formation." : "Pick the formation.");
 
   // 2. the motion: a playbook play with the same motion from the same spot
   const m = drawn.motion;
@@ -237,7 +237,7 @@ export async function nameDrawnPlay(teamId: string, drawn: PlayData, database: D
     } else notes.push(`Pick the word for ${m.player}'s motion.`);
   }
 
-  // 3. the play: a playbook play drawn the same way, else a concept Reps knows
+  // 3. the play: a playbook play drawn the same way, else a concept RepWon knows
   let same: NameGuess["same"] = null;
   let playMatch: { tp: TeamPlay; score: number } | null = null;
   for (const tp of book) {
@@ -268,9 +268,9 @@ export async function nameDrawnPlay(teamId: string, drawn: PlayData, database: D
       notes.push(
         word
           ? `Play: a new ${concept.name} (your playbook calls it ${word}).`
-          : `Play: looks like ${concept.name}. Your naming rules don't have a word for it, so Reps called it ${concept.name.toUpperCase()}. Change it if you call it something else.`,
+          : `Play: looks like ${concept.name}. Your naming rules don't have a word for it, so RepWon called it ${concept.name.toUpperCase()}. Change it if you call it something else.`,
       );
-    } else notes.push("New play: Reps couldn't tell which concept this is. Type the play's name.");
+    } else notes.push("New play: RepWon couldn't tell which concept this is. Type the play's name.");
   }
 
   return { parts, notes, same };

@@ -5,7 +5,7 @@ import { safeCall } from "@/lib/safe-call";
 import { addPlayLookAction, keepSuggestedLooksAction, setPlayLookAction } from "../../actions";
 
 /**
- * What this play is good against. Reps suggests tags from the play's concept
+ * What this play is good against. RepWon suggests tags from the play's concept
  * and from what the playbook says; the coach keeps or drops each one and can
  * add his own. Only kept tags count in the game plan and quizzes.
  */
@@ -56,7 +56,7 @@ export function GoodVs({ teamId, playId, initial }: { teamId: string; playId: st
       {looks.suggested.length > 0 && (
         <div className="flex flex-col gap-2 border-t border-line pt-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm font-semibold">Reps suggests</span>
+            <span className="text-sm font-semibold">RepWon suggests</span>
             <button className="btn btn-outline min-h-9 px-3 text-sm" disabled={!!busy} onClick={() => run("all", () => keepSuggestedLooksAction(teamId, playId))}>
               {busy === "all" ? "Keeping…" : `Keep all ${looks.suggested.length}`}
             </button>

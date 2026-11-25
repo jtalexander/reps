@@ -7,7 +7,8 @@ Rulings made while building v1 (2026-11-17). Source brief: Jeremy's "Football Pl
 - **Standalone app, not part of Chalk.** Jeremy, 2026-11-17: "separate from Chalk. We may add it in later." No shared code or database. Low-level PDF rendering ideas were borrowed; nothing imports Chalk. The Hawks and Spartans PDFs in `../chalk/reference/` are used as test fixtures only.
 - **Players join with team code + name, no account** (Jeremy's pick). A signed httpOnly cookie names the player; resetting the team code bumps `join_code_version` and signs everyone out. Nothing is collected from players beyond first name, last initial, jersey and positions, which the coach enters.
 - **Coaches sign in with email + password** (Better Auth). Magic links and Google can be added when an email provider / OAuth client exists.
-- **Working name "Reps".** Change it in `src/app/layout.tsx` and `src/lib/auth.ts`.
+- **Named "RepWon Install"** (Jeremy, 2026-11-25; was the working name "Reps"). One of three initial modules under the RepWon product name. UI copy says "RepWon"; titles and headers say "RepWon Install".
+- **Internal `reps` identifiers kept on purpose:** auth cookie prefix `reps`, player cookie `reps_player`, Netlify Blobs store `reps-media`, local database name `reps`. Renaming the cookies signs every coach and player out; renaming the blob store orphans every stored page image. Change them once, together, when auth moves to a shared RepWon login (cookies would then be set on the parent domain anyway).
 
 ## The play model
 

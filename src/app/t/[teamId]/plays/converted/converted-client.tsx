@@ -92,7 +92,7 @@ export interface Version {
   extraction: string;
 }
 
-/** One play (or one play with a version per front): the page on the left, Reps' play on the right. */
+/** One play (or one play with a version per front): the page on the left, RepWon's play on the right. */
 export function PlayCompare({ teamId, title, page, versions }: { teamId: string; title: string; page?: number | null; versions: Version[] }) {
   const router = useRouter();
   const [i, setI] = useState(0);
@@ -185,7 +185,7 @@ export function PlayCompare({ teamId, title, page, versions }: { teamId: string;
             router.refresh();
           }}
         >
-          Have Reps read it again
+          Have RepWon read it again
         </button>
       </div>
     </div>

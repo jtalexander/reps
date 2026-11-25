@@ -1,7 +1,7 @@
 /**
- * Shared learning: when Reps drafts its questions for a topic, it also looks
+ * Shared learning: when RepWon drafts its questions for a topic, it also looks
  * at how coaches on OTHER teams answered questions about the same concept, so
- * its suggested answers get better as more coaches use Reps. The coach still
+ * its suggested answers get better as more coaches use RepWon. The coach still
  * approves every answer. Only teams that share (the default, a Settings
  * switch) contribute, and suggestions never say where they came from: the
  * model is told to use them as football knowledge in this team's own words.

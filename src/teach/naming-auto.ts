@@ -1,6 +1,6 @@
 /**
- * Naming rules without a button: as soon as Reps has read playbook pages and
- * the team has no naming draft, Reps drafts one in the background. The coach
+ * Naming rules without a button: as soon as RepWon has read playbook pages and
+ * the team has no naming draft, RepWon drafts one in the background. The coach
  * only checks it (the guided check on Teach). A failed draft isn't retried
  * for a day, so a broken playbook can't burn AI over and over.
  */

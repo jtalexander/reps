@@ -71,7 +71,7 @@ export function frontLineup(front: DefFront): Player[] {
 /**
  * The front lined up by technique against this offense ("4-3 Over" against
  * Trips puts the 3 technique on the strong guard's outside shoulder), when
- * the words name a front Reps knows. Null otherwise.
+ * the words name a front RepWon knows. Null otherwise.
  */
 export function frontAgainst(words: string, vs: Player[]): Player[] | null {
   const w = words.trim().toLowerCase();

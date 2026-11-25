@@ -15,7 +15,7 @@ const SIDES: Side[] = ["general", "offense", "defense", "special"];
 /**
  * The built-in library: general football, offense, defense and special teams
  * concepts and technique. Adding a topic puts it in front of players as an
- * approved topic, like one Reps wrote from the playbook.
+ * approved topic, like one RepWon wrote from the playbook.
  */
 export default async function Basics({ params }: PageProps<"/t/[teamId]/basics">) {
   const { teamId } = await params;
@@ -42,7 +42,7 @@ export default async function Basics({ params }: PageProps<"/t/[teamId]/basics">
       {styles.length > 0 && (
         <section className="card flex flex-col gap-3 p-4">
           <h2 className="font-semibold">How you teach it</h2>
-          <p className="text-sm text-muted">Coaches teach some things differently. Pick yours and Reps teaches your players your way.</p>
+          <p className="text-sm text-muted">Coaches teach some things differently. Pick yours and RepWon teaches your players your way.</p>
           {styles.map((s) => {
             const current = styleChoice(s, picks);
             return (

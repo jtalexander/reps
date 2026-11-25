@@ -98,8 +98,8 @@ export async function claimNextJob(teamId: string, database: Db = db) {
  * Every job after one of these fails the same way, so a whole-playbook run
  * stops instead of burning through its queue. Returns what to tell the coach.
  */
-export const OUT_OF_CREDITS = "Reps' Anthropic account ran out of credits. Add credits at console.anthropic.com (Plans & Billing), then pick up where it stopped.";
-export const KEY_TURNED_DOWN = "Anthropic turned down Reps' API key. Check ANTHROPIC_API_KEY on Netlify, then pick up where it stopped.";
+export const OUT_OF_CREDITS = "RepWon's Anthropic account ran out of credits. Add credits at console.anthropic.com (Plans & Billing), then pick up where it stopped.";
+export const KEY_TURNED_DOWN = "Anthropic turned down RepWon's API key. Check ANTHROPIC_API_KEY on Netlify, then pick up where it stopped.";
 
 export function accountProblem(message: string | null | undefined): string | null {
   if (!message) return null;
@@ -855,7 +855,7 @@ export async function ask(teamId: string, playerId: string, group: Audience, pos
       out = await withAi(teamId, "ask", () => askPlaybook(question.slice(0, 500), position, material));
     } catch (err) {
       if (!(err instanceof AiBlocked)) throw err;
-      out = { answered: false, answer: "Reps can't answer questions right now. Ask your coach.", source_pages: [] };
+      out = { answered: false, answer: "RepWon can't answer questions right now. Ask your coach.", source_pages: [] };
     }
   }
   await database.insert(askLog).values({ teamId, playerId, question: question.slice(0, 500), answer: out.answer, sourcePages: out.source_pages, answered: out.answered });

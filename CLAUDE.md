@@ -1,8 +1,8 @@
 @AGENTS.md
 
-# Reps
+# RepWon Install
 
-Football playbook study and quiz app (working name; change in `src/app/layout.tsx` metadata and `src/lib/auth.ts` appName). A coach uploads a playbook PDF; the app splits it into plays, Claude drafts each play as structured data, the coach confirms it, and players are quizzed only on confirmed plays. Separate from Chalk on purpose (Jeremy, 2026-11-17).
+Football playbook study and quiz app. **RepWon Install** is one of three initial modules under the RepWon product name; in UI copy the product speaks as "RepWon" ("RepWon read your playbook"), and the full module name goes in titles and headers (`src/app/layout.tsx` metadata, `src/lib/auth.ts` appName, team header, home page). Internal identifiers still say `reps` on purpose (see `docs/DECISIONS.md`). A coach uploads a playbook PDF; the app splits it into plays, Claude drafts each play as structured data, the coach confirms it, and players are quizzed only on confirmed plays. Separate from Chalk on purpose (Jeremy, 2026-11-17).
 
 Read `docs/DECISIONS.md` before changing the play schema, the approval gate or the quiz rules.
 

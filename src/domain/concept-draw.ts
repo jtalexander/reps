@@ -1,5 +1,5 @@
 /**
- * Reps' built-in concepts drawn onto any lineup: who runs what, counted the
+ * RepWon's built-in concepts drawn onto any lineup: who runs what, counted the
  * way coaches count (#1 is the widest receiver on a side, #2 the next one in),
  * blocks for the line and the back's path for runs. Used when the team's own
  * playbook doesn't draw the play. A starting point the coach adjusts.
@@ -8,7 +8,7 @@ import { isLineman, type AssignmentType, type Player, type Point, type Route } f
 
 export type Job = Pick<Player, "id" | "assignment_type" | "route" | "block" | "path">;
 
-/** Concepts Reps can draw. */
+/** Concepts RepWon can draw. */
 export const DRAWABLE = ["smash", "slant_flat", "curl_flat", "stick", "flood", "mesh", "four_verts", "inside_zone", "outside_zone", "power", "counter"] as const;
 
 const route = (name: string): Pick<Player, "assignment_type" | "route" | "block" | "path"> => ({
@@ -38,7 +38,7 @@ export function roles(players: Player[]) {
 
 /**
  * Jobs for each player in a concept, toward `side` (the play side for runs,
- * the call side for one-sided pass concepts). Null when Reps can't draw it.
+ * the call side for one-sided pass concepts). Null when RepWon can't draw it.
  */
 export function drawConcept(key: string, players: Player[], side: "left" | "right"): Job[] | null {
   if (!(DRAWABLE as readonly string[]).includes(key)) return null;

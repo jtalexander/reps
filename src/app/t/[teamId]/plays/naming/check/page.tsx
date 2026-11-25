@@ -27,7 +27,7 @@ export default async function CheckNaming({ params }: PageProps<"/t/[teamId]/pla
           Teach
         </Link>
         <h1 className="text-4xl">Your naming rules</h1>
-        <p className="text-sm text-muted">Reps read these out of your playbook. Tap Yes when a section is right; tap Fix to change it.</p>
+        <p className="text-sm text-muted">RepWon read these out of your playbook. Tap Yes when a section is right; tap Fix to change it.</p>
       </div>
       <NamingCheck teamId={teamId} initial={naming} pages={await pageRefs(teamId)} routes={routes} hasRouteTree={Boolean(team.routeTree)} />
     </div>

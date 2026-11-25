@@ -7,7 +7,7 @@ import { NamingSchema, type Naming } from "@/domain/naming";
 import { draftNaming } from "./ai";
 import { playbookPages } from "./drawings";
 
-/** Everything Reps read, by topic, plus every drawing label: the material for the draft. */
+/** Everything RepWon read, by topic, plus every drawing label: the material for the draft. */
 export async function namingMaterial(teamId: string, database: Db = db) {
   const pages = await playbookPages(teamId, database);
   const ts = await database.select().from(topics).where(and(eq(topics.teamId, teamId), eq(topics.archived, false))).orderBy(asc(topics.sort));
@@ -29,7 +29,7 @@ export async function namingMaterial(teamId: string, database: Db = db) {
 
 export async function runNaming(teamId: string, database: Db = db) {
   const material = await namingMaterial(teamId, database);
-  if (!material) throw new Error("Reps hasn't read any pages yet.");
+  if (!material) throw new Error("RepWon hasn't read any pages yet.");
   const naming = await draftNaming(material);
   await database.update(teams).set({ naming, namingApprovedAt: null }).where(eq(teams.id, teamId));
   return { positions: naming.positions.length, formations: naming.formations.length, plays: naming.plays.length };

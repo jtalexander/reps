@@ -39,7 +39,7 @@ export function BlockingView({ teamId, playId, data, fronts }: { teamId: string;
       <PlaySvg data={data} blockFront={front === "drawn" ? null : front} fit className="block w-full" />
       {front === "drawn" ? (
         <p className="text-sm text-muted">
-          The blocks as your playbook draws them. Reps matched this play to {b.name} from its name: tap a front to see {b.name}&apos;s rules against it, and check the fronts that are right in the builder so linemen are quizzed on them.
+          The blocks as your playbook draws them. RepWon matched this play to {b.name} from its name: tap a front to see {b.name}&apos;s rules against it, and check the fronts that are right in the builder so linemen are quizzed on them.
         </p>
       ) : (
       <ul className="grid gap-1 text-sm sm:grid-cols-2">

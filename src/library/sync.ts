@@ -141,7 +141,7 @@ export async function addLibraryTopics(teamId: string, keys: string[], userId: s
         nameKey: topicKey(name),
         summary: t.summary,
         sort: 10_000 + LIBRARY.indexOf(t),
-        // nothing for Reps' playbook reading to do here: no gaps to find, nothing to write
+        // nothing for RepWon's playbook reading to do here: no gaps to find, nothing to write
         gapsFoundAt: now,
         generatedAt: now,
         libraryKey: t.key,

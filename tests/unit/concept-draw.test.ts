@@ -1,4 +1,4 @@
-/** Reps' built-in concepts drawn onto a lineup: who gets which job. */
+/** RepWon's built-in concepts drawn onto a lineup: who gets which job. */
 import { describe, expect, it } from "vitest";
 import { drawConcept, roles } from "@/domain/concept-draw";
 import type { Player } from "@/domain/play";
@@ -23,7 +23,7 @@ const spread = [p("X", -14, 0), p("H", -7, -1), p("LT", -2.6, 0), p("LG", -1.3, 
 const iForm = [p("X", -14, 0), p("LT", -2.6, 0), p("LG", -1.3, 0), p("C", 0, 0), p("RG", 1.3, 0), p("RT", 2.6, 0), p("Y", 4, 0), p("Z", 11, -1), p("QB", 0, -1.5), p("FB", 0, -4), p("TB", 0, -6.5)];
 const jobOf = (jobs: ReturnType<typeof drawConcept>, id: string) => jobs!.find((j) => j.id === id);
 
-describe("drawing Reps' concepts onto a lineup", () => {
+describe("drawing RepWon's concepts onto a lineup", () => {
   it("counts receivers from the outside in on each side", () => {
     const r = roles(spread);
     expect(r.left.map((x) => x.id)).toEqual(["X", "H"]);

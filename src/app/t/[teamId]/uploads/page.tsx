@@ -21,10 +21,10 @@ export default async function Uploads({ params }: PageProps<"/t/[teamId]/uploads
       <div>
         <h1 className="text-4xl">Upload a playbook</h1>
         <p className="mt-1 text-sm text-muted">
-          A PDF of your playbook, from Hudl or anywhere. Reps splits it into pages, then on Teach it reads every page: rules, terms, every formation and play.
+          A PDF of your playbook, from Hudl or anywhere. RepWon splits it into pages, then on Teach it reads every page: rules, terms, every formation and play.
         </p>
       </div>
-      {!hasApiKey() && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">The server has no Anthropic API key yet, so Reps can&apos;t read the pages.</p>}
+      {!hasApiKey() && <p className="rounded-lg bg-warn-bg px-3 py-2 text-sm text-warn">The server has no Anthropic API key yet, so RepWon can&apos;t read the pages.</p>}
       <UploadForm teamId={teamId} />
       {list.length > 0 && (
         <section>

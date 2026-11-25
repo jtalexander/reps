@@ -23,7 +23,7 @@ export interface PlayTags {
   formation: string | null;
   /** the team's motion word, or the kind of motion drawn ("Jet"); null = no motion */
   motion: string | null;
-  /** concept key (or "w:WORD" for a team play word Reps can't tie to a concept) */
+  /** concept key (or "w:WORD" for a team play word RepWon can't tie to a concept) */
   concept: string | null;
   conceptLabel: string | null;
   type: string;
@@ -42,7 +42,7 @@ export const TYPE_LABEL: Record<string, string> = {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
 
-/** How a concept reads to this coach: their word first, Reps' name after when they differ. */
+/** How a concept reads to this coach: their word first, RepWon's name after when they differ. */
 function conceptLabel(c: Concept, n: Naming | null, concepts: Concept[]) {
   const w = teamWord(c, n, concepts);
   return w && w.toLowerCase() !== c.name.toLowerCase() ? `${w} (${c.name})` : c.name;
@@ -72,7 +72,7 @@ export function playTags(label: string, data: PlayData, n: Naming | null, concep
         ? cap(data.motion.type)
         : "Motion"
       : null;
-  // concept: what the play says it is, the team's play word, or what Reps sees in the drawing
+  // concept: what the play says it is, the team's play word, or what RepWon sees in the drawing
   const byKey = data.concept_key ? concepts.find((c) => c.key === data.concept_key) : undefined;
   const pWord = (n?.plays ?? []).find((p) => has(label, p.word));
   const byWord = pWord ? (conceptByName(pWord.word, concepts) ?? conceptByName(pWord.means, concepts)) : undefined;
@@ -106,7 +106,7 @@ export interface InstallPlay {
   goodVs: string[];
 }
 
-/** Every play with a drawing Reps can show (converted or drawn), with its tags and install state. */
+/** Every play with a drawing RepWon can show (converted or drawn), with its tags and install state. */
 export async function installPlays(teamId: string, database: Db = db): Promise<InstallPlay[]> {
   const rows = await database
     .select()
