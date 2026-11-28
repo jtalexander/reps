@@ -7,7 +7,7 @@ import { applyCoverage, blankDefense, frontAgainst, callName, coverageOf, DEF_FR
 import type { Naming } from "@/domain/naming";
 import { DEF_ASSIGNMENT_TYPES, isLineman, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { simplify } from "@/domain/sketch";
-import { safeCall } from "@/lib/safe-call";
+import { safeCall, type ActionResult } from "@/lib/safe-call";
 import { addToPlanAction } from "../../gameplan/actions";
 import { saveBuiltPlayAction } from "../../actions";
 import { blankLineup, mk, PenGroup, Pick } from "./play-builder";
@@ -37,7 +37,7 @@ function offense(kind: string, n: Naming | null): Player[] {
  * the usual ones) and Reps lines the defenders up and gives them their jobs;
  * drag anyone, draw lines, tap a defender to change his job.
  */
-export function DefenseBuilder(props: { teamId: string; naming: Naming | null; start: PlayData | null; playId: string | null; formations?: Array<{ id: string; name: string; players: Player[] }>; planId?: string | null }) {
+export function DefenseBuilder(props: { teamId: string; naming: Naming | null; start: PlayData | null; playId: string | null; formations?: Array<{ id: string; name: string; players: Player[] }>; planId?: string | null; save?: (playId: string | null, data: PlayData) => Promise<ActionResult<{ playId: string }>>; doneHref?: string }) {
   const router = useRouter();
   const n = props.naming;
   const [against, setAgainst] = useState("2x2");
@@ -179,9 +179,10 @@ export function DefenseBuilder(props: { teamId: string; naming: Naming | null; s
       defense: { front: parts.front || null, coverage: parts.coverage || null, stunt: parts.stunt || null, pressure: parts.pressure || null },
       formation: { ...data.formation, name: parts.front || "unknown" },
     };
-    const r = await safeCall(() => saveBuiltPlayAction(props.teamId, props.playId, play), "Saving");
+    const r = await safeCall(() => (props.save ? props.save(props.playId, play) : saveBuiltPlayAction(props.teamId, props.playId, play)), "Saving");
     setBusy(false);
     if (!r.ok) return setMsg(r.error);
+    if (props.doneHref) return router.push(props.doneHref);
     // drawn for a game plan: it goes into the plan, and back to the plan
     if (props.planId) {
       await safeCall(() => addToPlanAction(props.teamId, props.planId!, r.playId), "Adding to the game plan");

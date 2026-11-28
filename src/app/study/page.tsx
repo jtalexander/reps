@@ -6,6 +6,7 @@ import { candidates, QUIZ_TYPE_LABEL, typesForPositions } from "@/domain/quiz";
 import { requirePlayer } from "@/server/player-session";
 import { contextFor, quizPlays } from "@/server/quiz";
 import { installPlayIds } from "@/teach/install";
+import { scoutInstall } from "@/breakdown/scout/service";
 import { leaveAction, startQuizAction, switchPositionAction } from "./actions";
 import { TeachSection } from "./teach-section";
 
@@ -17,6 +18,8 @@ export default async function StudyHome({ searchParams }: PageProps<"/study">) {
   const plays = await quizPlays(me.team.id);
   const thisWeek = await installPlayIds(me.team.id);
   const weekPlays = plays.filter((p) => thisWeek.has(p.id));
+  // the opponent's plays the scout team runs this week (cards only, never quizzed)
+  const scoutCards = (await scoutInstall(me.team.id)).length;
   const [due] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(srsItems)
@@ -78,6 +81,12 @@ export default async function StudyHome({ searchParams }: PageProps<"/study">) {
             <p className="text-sm text-muted">Your coach&apos;s install topics come first below.</p>
           )}
         </section>
+      )}
+
+      {scoutCards > 0 && (
+        <Link href="/study/scout" className="btn btn-ghost min-h-11">
+          Scout team cards ({scoutCards})
+        </Link>
       )}
 
       <TeachSection teamId={me.team.id} playerId={me.player.id} position={me.position} />

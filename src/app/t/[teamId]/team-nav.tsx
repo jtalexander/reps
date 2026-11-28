@@ -8,6 +8,8 @@ const ITEMS = [
   ["/install", "Install"],
   ["/gameplan", "Game plan"],
   ["/plays", "Playbook"],
+  ["/scout", "Scout"],
+  ["/schedule", "Schedule"],
   ["/basics", "Basics"],
   ["/uploads", "Upload"],
   ["/sets", "Study sets"],
