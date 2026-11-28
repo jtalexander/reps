@@ -533,6 +533,19 @@ Two existing statements will need a deliberate update when film arrives, not a s
 
 Nothing, until Jeremy approves. On approval of D1 to D4, the first work is milestone 0: `shared/field`, the formation rules with tests, the marking page, and the re-export files. No migration is needed for milestone 0.
 
+## 10. Jeremy's answers, 2026-11-28
+
+Recorded from Jeremy's reply. Where an answer was tentative it is marked so.
+
+- **D1, rules in the web app's code:** agreed, tentatively.
+- **D2, hash on the snap, not the play:** agreed in general. Jeremy has seen plays with a hash requirement but considers them rare or trick plays. So the play stays hash-free, with room for an optional hash tag later.
+- **D3, linked records:** agreed, with an addition. **A pre-snap penalty is not a snap but must be recorded.** Change to 4.3: the film's timeline holds two kinds of row, a snap and a dead-ball event (penalty, yardage, which side). Dead-ball events have no positions or tags, are left out of snap counts and tendencies, and keep the down-and-distance chain correct.
+- **D4, re-exports now and file moves later:** agreed, tentatively.
+- **D5, games and opponents built once and shared:** yes, tentatively, with a requirement. **The schedule must handle several teams at one level**, for example two freshman teams and two JV teams. Change to 4.2 and to the program plan in `TODO.md`: a team has a level and its own name within the program ("Freshman A", "JV Blue"), a game belongs to one team, and the roster's per-team ticks become a list of the program's teams instead of three fixed boxes (V / JV / F).
+- **D6, field rules:** answered "yes"; taken to mean NFHS 11-player. To confirm.
+- **Opponent formations.** A competing product names opponent formations with the home team's own formation names; they come out close but not exact. Adopt the same approach: an opponent's alignment is given the name of our nearest saved formation, and how close the match was is stored with it so loose matches can be shown as such. The formation shape in 4.1 is still computed underneath, because it costs nothing and does not depend on any team's names.
+- **Film storage.** Nothing moves off Netlify. Film goes to a separate private storage bucket that the browser uploads to directly; the app on Netlify only issues the signed links (6.1).
+
 ## Sources for the outside facts
 
 - GPU prices: [RunPod's 2026 provider comparison](https://www.runpod.io/articles/guides/top-serverless-gpu-clouds), [RunPod vs Modal listed prices, September 2026](https://www.glamdringresearch.com/post/runpod-vs-modal), [Modal per-second pricing summary](https://markaicode.com/pricing/modal-pricing/), [six providers compared](https://tech-insider.org/gpu-cloud-providers-serverless-gpu-pricing-modal-runpod-nebius-2026/)
