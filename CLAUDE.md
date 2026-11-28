@@ -34,7 +34,7 @@ pnpm tsx scripts/breakdown-report.ts marked-frames.json  # Breakdown: formation 
 - `src/server/` — services, all team-scoped by `teamId` arguments: `teams.ts` (auth guards `requireCoach`), `player-session.ts` (signed join cookie), `ingest.ts` (upload → render → crop → extract), `plays.ts` (save/approve/concept propagation), `quiz.ts` (sessions, server-side grading, diagram sanitizing), `results.ts`.
 - `src/app/t/[teamId]/` coach pages + `actions.ts` (every action calls `requireCoach` first). `src/app/join`, `src/app/study` player pages. `src/components/play-svg.tsx` the one renderer.
 - `src/shared/` — the layer every RepWon product may import: `field/` (the coordinate standard, field dimensions, picture-to-field mapping), `football/` and `teams/` (re-exports of Install's play record, formations and coach guards until those files move). Imports no product.
-- `src/breakdown/` — film breakdown (see `docs/BREAKDOWN-AUDIT.md`). Imports only `@/shared` and itself; ESLint enforces it. So far: `rules/` (formation read from anonymous pre-snap positions, team formation name match), `marking/` (hand-marking page at `/t/[teamId]/film/mark`, scoring, noise test). `scripts/breakdown-report.ts` prints per-field accuracy from a marked-frames export.
+- `src/breakdown/` — film breakdown (see `docs/BREAKDOWN-AUDIT.md`). Imports only `@/shared` and itself; ESLint enforces it. So far: `rules/` (formation read from anonymous pre-snap positions, team formation name match, lineup for the play builder), `marking/` (hand-marking page at `/t/[teamId]/film/mark`, scoring, noise test), `db/schema.ts` (`opponents`, `games`, `scout_plays`) and `scout/service.ts` (opponents by season and staff, schedule, scout playbooks, the week's scout install). Pages: `/t/[teamId]/scout`, `/t/[teamId]/schedule`, `/study/scout`. `scripts/breakdown-report.ts` prints per-field accuracy from a marked-frames export.
 - `src/prospect/` — reserved. Nothing is built there.
 - `tests/unit/domain.test.ts`, `tests/integration/flow.test.ts` (real PDFs from `../chalk/reference/`, canned model answers, tenancy, quiz flow), `tests/fixtures/sample-plays.ts` (also used by the seed).
 
@@ -45,6 +45,7 @@ pnpm tsx scripts/breakdown-report.ts marked-frames.json  # Breakdown: formation 
 - Every query on team data filters by `team_id`. Never look up a play/upload/session by id alone.
 - A coach edit to a field removes it from `suggested`, `from_concept` and `field_confidence` — concept edits must not overwrite what a coach typed.
 - Player data is first name + last initial, jersey, positions. Nothing else.
+- An opponent's plays live in `scout_plays`, never in `plays`: they must not reach our playbook, installs or quizzes. Players see scout cards only when a coach ticks them into the week's scout install, and are never quizzed on them.
 
 ## Gotchas
 

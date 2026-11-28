@@ -7,9 +7,11 @@
  * The film never leaves the browser. Only the clicks and answers are kept
  * (in this browser, and in the file you export).
  */
+import Link from "next/link";
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { LATERAL_LABEL, LATERAL_REFS, NFHS_11, type LateralRef, type PlayPoint } from "@/shared/field";
 import { BACK_SET_LABEL, BACK_SETS, QB_LABEL, type FormationRead, type Role } from "../rules/formation";
+import { lineupFromRead } from "../rules/lineup";
 import type { NamedLineup } from "../rules/match";
 import { answers, confidences, FIELD_LABEL, FIELDS, readPlayers, same, score, type Field } from "./evaluate";
 import { MarkFileSchema, MarkedFrameSchema, solveFrame, type Expected, type MarkedFrame } from "./types";
@@ -81,7 +83,7 @@ function TopDown({ read, defense }: { read: FormationRead; defense: PlayPoint[] 
   );
 }
 
-export function MarkClient({ teamId, formations }: { teamId: string; formations: NamedLineup[] }) {
+export function MarkClient({ teamId, formations, opponents = [] }: { teamId: string; formations: NamedLineup[]; opponents?: Array<{ id: string; label: string }> }) {
   const storeKey = `breakdown-marks-${teamId}`;
   const mounted = useSyncExternalStore(
     noop,
@@ -97,6 +99,7 @@ export function MarkClient({ teamId, formations }: { teamId: string; formations:
   const [ref, setRef] = useState<LateralRef>("near_hash");
   const [clock, setClock] = useState({ at: 0, length: 0 });
   const [message, setMessage] = useState("");
+  const [opponentId, setOpponentId] = useState(opponents[0]?.id ?? "");
   const videoRef = useRef<HTMLVideoElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -489,6 +492,35 @@ export function MarkClient({ teamId, formations }: { teamId: string; formations:
                 >
                   The rules got all of it right
                 </button>
+                <div className="flex flex-col gap-2 border-t border-line pt-3">
+                  <span className="font-semibold">Make this snap a scout play</span>
+                  {opponents.length === 0 ? (
+                    <p className="text-muted">
+                      Add the opponent on the{" "}
+                      <Link href={`/t/${teamId}/scout`} className="underline">
+                        Scout page
+                      </Link>{" "}
+                      first.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select className="input w-auto py-2" value={opponentId} aria-label="Whose play this is" onChange={(e) => setOpponentId(e.target.value)}>
+                        {opponents.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      <Link
+                        className="btn btn-primary min-h-9 px-3 text-sm"
+                        href={`/t/${teamId}/scout/${opponentId}/draw?lineup=${encodeURIComponent(JSON.stringify(lineupFromRead(result.read).map((p) => [p.id, p.x, p.y, p.on_ball])))}`}
+                      >
+                        Draw their play from this lineup
+                      </Link>
+                    </div>
+                  )}
+                  <p className="text-muted">Opens the play builder with these eleven lined up where you marked them. You draw what each one did.</p>
+                </div>
                 <p className="text-muted">
                   Receivers count tight ends and wings. Strength is the side with more receivers; a tie goes to the tight end&rsquo;s side. Circles above: L line, TE tight end, W wing, X on the line, S off the line, Q quarterback, B back.
                 </p>

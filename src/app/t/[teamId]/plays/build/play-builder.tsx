@@ -9,7 +9,7 @@ import type { RouteTree } from "@/domain/route-tree";
 import { emptyPlay, flipPlay, isLineman, isPassFamily, PLAY_TYPES, type Line, type PlayData, type Player, type Point } from "@/domain/play";
 import { ROUTES } from "@/domain/routes";
 import { applyStroke, matchRoute, simplify } from "@/domain/sketch";
-import { safeCall } from "@/lib/safe-call";
+import { safeCall, type ActionResult } from "@/lib/safe-call";
 import { addToPlanAction } from "../../gameplan/actions";
 import { saveFormationAction } from "../../actions";
 import { drawPlayAction, lineupForAction, nameDrawingAction, readAheadAction, saveBuiltPlayAction } from "../../actions";
@@ -79,6 +79,9 @@ export function PlayBuilder(props: {
   formationMode?: { id?: string; name: string } | null;
   /** drawn for this game plan: saving adds it there */
   planId?: string | null;
+  /** save somewhere other than the team's playbook (an opponent's scout playbook), then go to `doneHref` */
+  save?: (playId: string | null, data: PlayData) => Promise<ActionResult<{ playId: string }>>;
+  doneHref?: string;
 }) {
   const router = useRouter();
   const [data, setData] = useState<PlayData>(() => props.start ?? { ...emptyPlay(), players: blankLineup(props.naming) });
@@ -484,9 +487,10 @@ export function PlayBuilder(props: {
       play.blocking = { ...play.blocking, front: main, drawn: false };
       play.players = applyBlocking(play, play.blocking, main);
     }
-    const r = await safeCall(() => saveBuiltPlayAction(props.teamId, props.playId, play), "Saving");
+    const r = await safeCall(() => (props.save ? props.save(props.playId, play) : saveBuiltPlayAction(props.teamId, props.playId, play)), "Saving");
     setBusy(false);
     if (!r.ok) return setMsg(r.error);
+    if (props.doneHref) return router.push(props.doneHref);
     // drawn for a game plan: it goes into the plan, and back to the plan
     if (props.planId) {
       await safeCall(() => addToPlanAction(props.teamId, props.planId!, r.playId), "Adding to the game plan");

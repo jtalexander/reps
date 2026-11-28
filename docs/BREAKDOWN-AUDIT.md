@@ -603,6 +603,33 @@ Placement: Jeremy wants practice plans in Breakdown. They use nothing from the v
 - Both need `opponents` and `games` (4.2) earlier than milestone 2.
 - Open questions: what a current practice plan looks like (a real Excel file would settle the grid's columns); whether scripts are part of the first version; and whether these come before or alongside the one-game test.
 
+## 13. Schedule and opponent playbook, as built (2026-11-28)
+
+Jeremy's answers: opponents and games, yes; practice plans, not yet; the opponent playbook is kept **by opponent, season, head coach, OC and DC**; plays should come from film and flow into the scout playbook for the week's install; new tables, an Excel dependency and menu entries approved (no Excel dependency was needed yet).
+
+Built:
+
+- **Migration `0026_breakdown_scout`**: three new tables, `opponents`, `games`, `scout_plays`. It only adds tables; nothing existing changes. Every row has a team, and a game or scout play can only point at an opponent of the same team.
+- **Scout** (`/t/<team>/scout`, in the coach menu): opponents grouped by season, each with head coach, OC and DC. The same school in the same season can be added once; next season is a new entry with its own staff and playbook.
+- **An opponent's page**: their offense and defense as cards, a tick per play for this week's scout install, edit, remove, print.
+- **Drawing their plays**: the existing play builder and defense builder, saving into the opponent's playbook instead of ours.
+- **From film**: on the film marking page, a marked snap has "Draw their play from this lineup". It opens the builder with the eleven lined up where they were marked, with the usual letters; the coach draws what each one did. This is the part of "build the plays from film" that works today. Lines from tracked paths wait for the vision engine.
+- **Players**: when scout cards are in the week's install, the Study page shows "Scout team cards", a page of the opponent's plays to look at. They are never quizzed.
+- **Schedule** (`/t/<team>/schedule`, in the coach menu): this team's games, with each opponent linked to their playbook, and below it the games of every other team the coach is on. A school with two freshman teams and two JV teams makes a team for each.
+
+Two things differ from what sections 4 and 12 proposed:
+
+- **Scout plays have their own table**, not an opponent column on `plays`. About 40 queries across Install read `plays`; one missed filter would put an opponent's play in front of a player as ours. A separate table makes that impossible. The play document, the yards and the renderer are the same, so nothing is lost.
+- **Levels are not modeled yet.** Several teams per level works because each is its own team with its own name. A level field and the shared program roster and playbook remain the plan in `TODO.md`.
+
+Install files touched, all small: the two builders take an optional "save somewhere else" setting; the coach menu has two new entries; the player Study page has one new link.
+
+Checked in a browser against a stand-in database (all 27 migrations applied to it): add opponent with staff, duplicate refused, add games including a new opponent, other teams listed, draw from a film lineup, save, card appears, not in our playbook, install tick, edit, player joins and sees the scout cards. That run caught and fixed one bug (the install tick could send the wrong value).
+
+Not checked: the integration test suite, which needs the real test database and will not start in the cloud session. The stand-in database is Postgres-compatible but is not the production engine.
+
+Worth knowing: in the scout builder, "Save this lineup as a formation" saves to **our** formations, as it does everywhere. That may be what a coach wants (a name for their look) or not; say if it should be hidden there.
+
 ## Sources for the outside facts
 
 - GPU prices: [RunPod's 2026 provider comparison](https://www.runpod.io/articles/guides/top-serverless-gpu-clouds), [RunPod vs Modal listed prices, September 2026](https://www.glamdringresearch.com/post/runpod-vs-modal), [Modal per-second pricing summary](https://markaicode.com/pricing/modal-pricing/), [six providers compared](https://tech-insider.org/gpu-cloud-providers-serverless-gpu-pricing-modal-runpod-nebius-2026/)

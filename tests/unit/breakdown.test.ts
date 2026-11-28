@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { score, sensitivity, readPlayers } from "@/breakdown/marking/evaluate";
 import { MarkedFrameSchema, solveFrame, type Landmark } from "@/breakdown/marking/types";
 import { readFormation } from "@/breakdown/rules/formation";
+import { lineupFromRead } from "@/breakdown/rules/lineup";
 import { lineupDistance, matchFormation } from "@/breakdown/rules/match";
 import { applyHomography, fromPlayFrame, lateralYards, NFHS_11, solveHomography, spotOf, toPlayFrame, type Homography, type LateralRef, type PlayPoint } from "@/shared/field";
 
@@ -207,5 +208,28 @@ describe("the team's name for it", () => {
     expect(clean!.held.backs).toBe(1);
     expect(rough!.held.backs).toBeLessThan(1);
     expect(readPlayers(gunDoubles, saved).match?.name).toBe("Doubles");
+  });
+});
+
+describe("a lineup for the play builder", () => {
+  it("gives the eleven their usual letters, once each, on builder half yards", () => {
+    const lineup = lineupFromRead(readFormation(proIRight));
+    const ids = lineup.map((p) => p.id);
+    expect(new Set(ids).size).toBe(11);
+    expect(ids).toEqual(expect.arrayContaining(["LT", "LG", "C", "RG", "RT", "QB", "RB", "FB", "Y", "X", "Z"]));
+    const by = Object.fromEntries(lineup.map((p) => [p.id, p]));
+    expect(by.Y).toMatchObject({ on_ball: true, y: 0, side: "right" });
+    expect(by.X!.x).toBeLessThan(0);
+    expect(by.RB!.y).toBeLessThan(by.FB!.y);
+    for (const p of lineup) {
+      expect(p.x * 2).toBe(Math.round(p.x * 2));
+      expect(p.route).toBeNull();
+    }
+  });
+
+  it("spread: spare letters for the slots, the back is the running back", () => {
+    const ids = lineupFromRead(readFormation(tripsRight)).map((p) => p.id);
+    expect(new Set(ids).size).toBe(11);
+    expect(ids).toEqual(expect.arrayContaining(["X", "Z", "H", "F", "QB", "RB"]));
   });
 });

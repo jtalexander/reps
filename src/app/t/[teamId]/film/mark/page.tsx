@@ -1,4 +1,5 @@
 import { MarkClient } from "@/breakdown/marking/mark-client";
+import { listOpponents } from "@/breakdown/scout/service";
 import { listFormations, requireCoach } from "@/shared/teams";
 
 export const metadata = { title: "Mark a snap" };
@@ -11,7 +12,7 @@ export const metadata = { title: "Mark a snap" };
 export default async function MarkSnaps({ params }: PageProps<"/t/[teamId]/film/mark">) {
   const { teamId } = await params;
   await requireCoach(teamId);
-  const formations = await listFormations(teamId);
+  const [formations, opponents] = await Promise.all([listFormations(teamId), listOpponents(teamId)]);
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -20,7 +21,7 @@ export default async function MarkSnaps({ params }: PageProps<"/t/[teamId]/film/
           A test of the formation rules. Open a game video from this computer, stop just before the snap, mark a few painted spots on the field, the ball and the eleven on offense, then say what the formation really was. The video is never uploaded.
         </p>
       </div>
-      <MarkClient teamId={teamId} formations={formations.map((f) => ({ name: f.name, players: f.players.map(({ id, x, y }) => ({ id, x, y })) }))} />
+      <MarkClient teamId={teamId} opponents={opponents.map((o) => ({ id: o.id, label: `${o.name} ${o.season}` }))} formations={formations.map((f) => ({ name: f.name, players: f.players.map(({ id, x, y }) => ({ id, x, y })) }))} />
     </div>
   );
 }

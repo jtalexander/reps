@@ -5,5 +5,8 @@
  */
 import "server-only";
 
-export { requireCoach } from "@/server/teams";
+export { requireCoach, teamsForUser } from "@/server/teams";
+export { requirePlayer } from "@/server/player-session";
+export { getBlocking } from "@/server/blocking";
+export { getNaming } from "@/teach/naming";
 export { listFormations } from "@/server/formations";

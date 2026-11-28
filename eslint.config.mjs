@@ -8,7 +8,7 @@ const eslintConfig = defineConfig([
   // RepWon product boundaries (docs/BREAKDOWN-AUDIT.md section 3): Breakdown reaches
   // Install's data only through src/shared, and the shared layer imports no product.
   {
-    files: ["src/breakdown/**", "src/app/t/*/film/**"],
+    files: ["src/breakdown/**", "src/app/t/*/film/**", "src/app/t/*/scout/**", "src/app/t/*/schedule/**", "src/app/study/scout/**"],
     rules: {
       "no-restricted-imports": [
         "error",
