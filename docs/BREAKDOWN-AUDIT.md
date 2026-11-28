@@ -546,6 +546,30 @@ Recorded from Jeremy's reply. Where an answer was tentative it is marked so.
 - **Opponent formations.** A competing product names opponent formations with the home team's own formation names; they come out close but not exact. Adopt the same approach: an opponent's alignment is given the name of our nearest saved formation, and how close the match was is stored with it so loose matches can be shown as such. The formation shape in 4.1 is still computed underneath, because it costs nothing and does not depend on any team's names.
 - **Film storage.** Nothing moves off Netlify. Film goes to a separate private storage bucket that the browser uploads to directly; the app on Netlify only issues the signed links (6.1).
 
+## 11. Milestone 0, as built (2026-11-28)
+
+Approved by Jeremy: NFHS 11-player field, and go ahead with the hand-marked drive. Built, with no migration and no change to Install's files:
+
+- `src/shared/field`: the field spec (NFHS 11-player preset), the play frame and camera field frame with conversions, the ball's spot (yard line, hash), and the picture-to-field mapping from four or more known spots.
+- `src/shared/football`, `src/shared/teams`: re-exports only (step A of 3.2).
+- `src/breakdown/rules`: formation read from anonymous positions (receivers per side, strength, quarterback spot, backs, personnel, each with a confidence), and the nearest saved team formation with how close it was.
+- `src/breakdown/marking`: the marking page at `/t/<team>/film/mark` (not in the coach menu), scoring per field, and the noise test. The video or picture is opened from the marker's computer and never uploaded; only clicks and answers are kept, in the browser and in an exported file.
+- `scripts/breakdown-report.ts`: per-field accuracy, every miss, and the noise table from an exported file.
+- ESLint: `src/breakdown` may import only `@/shared` and itself; `src/shared` imports no product.
+
+Not built: `assignmentPaths()` (2.2), which nothing needs until grading.
+
+How it was checked: unit tests for the field math and rules, and one synthetic frame clicked through the page in a browser. No real film has been through it yet.
+
+Things to know before reading results:
+
+- **Strength** is the side with more receivers (tight ends and wings count); a tie goes to the tight end's side, then the wing's, else balanced. If the staff calls strength differently, this is one rule to change.
+- **An unbalanced line cannot be told from a tight end** without jersey numbers. The rules take the five in a row centered on the ball as the interior line.
+- **Tight end versus wing** depends on a mark being within about a yard of the line. Both count the same for shape and personnel.
+- **First noise numbers, from one made-up trips formation only:** with every player off by about a quarter yard, every field held at least 95% of the time. At half a yard, shape held 86%, backs 71%, personnel 69%. At one yard side to side, shape held 62%. Strength was the sturdiest field throughout. Real frames will replace these; if they look similar, the engine's positions need to be good to about half a yard, or the rules need to lean on more than single-player cut-offs.
+
+What is needed from Jeremy: mark one drive from the gold-set game on the page, answer each field, save the file, and share it.
+
 ## Sources for the outside facts
 
 - GPU prices: [RunPod's 2026 provider comparison](https://www.runpod.io/articles/guides/top-serverless-gpu-clouds), [RunPod vs Modal listed prices, September 2026](https://www.glamdringresearch.com/post/runpod-vs-modal), [Modal per-second pricing summary](https://markaicode.com/pricing/modal-pricing/), [six providers compared](https://tech-insider.org/gpu-cloud-providers-serverless-gpu-pricing-modal-runpod-nebius-2026/)

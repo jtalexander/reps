@@ -22,6 +22,7 @@ pnpm typecheck && pnpm lint && pnpm build
 NODE_OPTIONS=--conditions=react-server pnpm tsx scripts/dev-upload.ts DEMO42 file.pdf 6   # load a PDF as if uploaded
 pnpm tsx scripts/render-pages.ts file.pdf outDir 1-5      # print detected boxes per page
 pnpm tsx scripts/check-calibration.ts file.pdf 6 outDir   # crop + yard calibration check
+pnpm tsx scripts/breakdown-report.ts marked-frames.json  # Breakdown: formation rules vs hand-marked frames
 ```
 
 ## Layout
@@ -32,6 +33,9 @@ pnpm tsx scripts/check-calibration.ts file.pdf 6 outDir   # crop + yard calibrat
 - `src/ingest/` — `pdf.ts` (render, text layer), `boxes.ts` (play box detection: bordered frames first, XY-cut fallback, grid presets), `calibrate.ts` (LOS + yard scale from the crop), `extract.ts` (Claude call, retries, refusal handling).
 - `src/server/` — services, all team-scoped by `teamId` arguments: `teams.ts` (auth guards `requireCoach`), `player-session.ts` (signed join cookie), `ingest.ts` (upload → render → crop → extract), `plays.ts` (save/approve/concept propagation), `quiz.ts` (sessions, server-side grading, diagram sanitizing), `results.ts`.
 - `src/app/t/[teamId]/` coach pages + `actions.ts` (every action calls `requireCoach` first). `src/app/join`, `src/app/study` player pages. `src/components/play-svg.tsx` the one renderer.
+- `src/shared/` — the layer every RepWon product may import: `field/` (the coordinate standard, field dimensions, picture-to-field mapping), `football/` and `teams/` (re-exports of Install's play record, formations and coach guards until those files move). Imports no product.
+- `src/breakdown/` — film breakdown (see `docs/BREAKDOWN-AUDIT.md`). Imports only `@/shared` and itself; ESLint enforces it. So far: `rules/` (formation read from anonymous pre-snap positions, team formation name match), `marking/` (hand-marking page at `/t/[teamId]/film/mark`, scoring, noise test). `scripts/breakdown-report.ts` prints per-field accuracy from a marked-frames export.
+- `src/prospect/` — reserved. Nothing is built there.
 - `tests/unit/domain.test.ts`, `tests/integration/flow.test.ts` (real PDFs from `../chalk/reference/`, canned model answers, tenancy, quiz flow), `tests/fixtures/sample-plays.ts` (also used by the seed).
 
 ## Rules that are easy to break
@@ -44,6 +48,7 @@ pnpm tsx scripts/check-calibration.ts file.pdf 6 outDir   # crop + yard calibrat
 
 ## Gotchas
 
+- The test Postgres will not start as root (cloud sessions): unit tests still run with a config that has no `globalSetup`; integration tests need a non-root user.
 - Scripts importing `src/server/*` need `NODE_OPTIONS=--conditions=react-server` (the `server-only` package).
 - Long bash heredocs mangle backslashes; write files with the Write tool.
 - Test Postgres runs with `io_method=sync`: PG18 io workers outlive the postmaster on Windows and hold the port.
