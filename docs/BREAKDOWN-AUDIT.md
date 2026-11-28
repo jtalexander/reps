@@ -570,6 +570,39 @@ Things to know before reading results:
 
 What is needed from Jeremy: mark one drive from the gold-set game on the page, answer each field, save the file, and share it.
 
+## 12. Added scope, 2026-11-28: opponent playbook and practice plans
+
+Requested by Jeremy. Recorded here as proposals; neither is built and neither is scheduled yet.
+
+### 12.1 Opponent playbook for the scout team
+
+Goal: turn an opponent's film into the plays the scout team runs in practice.
+
+- **One play record, with an owner.** A scout play is a row in `plays` like any other, in the same yards, drawn by the same renderer and printed by the same print page. Proposed change: `plays.opponent_id`, null for our own plays. This replaces the "make a scout card from this snap" idea in 4.4 with a first-class feature.
+- **Kept apart from our playbook.** Opponent plays never appear in our Playbook tab, our installs or our players' quizzes on our own plays. The rule that players are only quizzed on approved plays stays; a scout play is shown to the scout team only when a coach puts it in a scout install.
+- **Three ways in, cheapest first.** (1) A coach draws it in the existing play builder while watching film: needs no vision at all. (2) From a tagged snap: pre-snap positions become the lineup, and the coach draws the paths. (3) From tracks: each player's tracked path becomes his drawn line, for the coach to clean up. Only (2) and (3) need the vision engine.
+- **Grouped the way a scout report is.** Snaps of the same formation and play collapse into one card with a count and when they ran it ("7 times, 4 on third down"). The counts come from the snap record, so this needs no tendency engine.
+- **Names.** Opponent formations take our nearest formation name, as decided in section 10. Opponent plays are named by the coach, with Claude offering a name from our terminology.
+- **Defense too.** An opponent's fronts and coverages for our offense to practice against use the existing defensive-call play type.
+
+### 12.2 Practice plans
+
+Goal: Breakdown holds the practice plan, in a form a coach who plans in Excel will accept.
+
+- **It is a grid, so make it a grid.** Rows are periods (start time, minutes, name); columns are groups or fields (offense, defense, each position group, scout). Editing should feel like a spreadsheet: type in a cell, tab across, drag to reorder, times recalculate.
+- **Meet Excel where it is.** Paste a block of cells from Excel straight into the grid. Import an existing `.xlsx` plan. Export to Excel and print on one page. A coach can keep a spreadsheet habit and still have the plan in RepWon.
+- **Templates.** Save a plan as a template (Monday, Tuesday, walk-through) and start each day from one.
+- **Where it stops being a spreadsheet.** A team or scout period can hold a script: an ordered list of our plays against a scout look, picked from the playbook, the game plan and the opponent playbook. The script prints as cards for the scout team and can be sent to players as the day's install.
+- **Links it gains for free.** A plan belongs to a team and a date, and to a game week through `games`. Practice film (already a film subject in 4.3) can later be matched to the periods it covers.
+
+Placement: Jeremy wants practice plans in Breakdown. They use nothing from the vision engine, so inside `src/breakdown` they are their own area with their own tables (`practice_plans`, `practice_periods`, `period_scripts`), reading plays and games through `src/shared`.
+
+### 12.3 What this changes in the plan
+
+- Neither feature depends on the one-game test passing. Hand-drawn scout plays and practice plans work with no vision at all, so they can ship to coaches while the engine is still being proven. That fits the brief's rule of getting useful work to coaches sooner.
+- Both need `opponents` and `games` (4.2) earlier than milestone 2.
+- Open questions: what a current practice plan looks like (a real Excel file would settle the grid's columns); whether scripts are part of the first version; and whether these come before or alongside the one-game test.
+
 ## Sources for the outside facts
 
 - GPU prices: [RunPod's 2026 provider comparison](https://www.runpod.io/articles/guides/top-serverless-gpu-clouds), [RunPod vs Modal listed prices, September 2026](https://www.glamdringresearch.com/post/runpod-vs-modal), [Modal per-second pricing summary](https://markaicode.com/pricing/modal-pricing/), [six providers compared](https://tech-insider.org/gpu-cloud-providers-serverless-gpu-pricing-modal-runpod-nebius-2026/)
